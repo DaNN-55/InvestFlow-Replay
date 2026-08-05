@@ -108,6 +108,22 @@ class TdxMarketCacheTransformTest(unittest.TestCase):
         self.assertEqual(calendar_rows[1]["pretrade_date"].isoformat(), "2024-01-02")
         self.assertTrue(all(row["is_open"] == 1 for row in calendar_rows))
 
+    def test_index_history_ignores_rows_without_a_valid_trade_date(self) -> None:
+        bars = make_daily_frame("2024-01-02", 2, 3000)
+        bars.loc[len(bars)] = bars.iloc[0]
+        bars.loc[len(bars) - 1, "datetime"] = None
+
+        index_rows, calendar_rows = build_index_history(
+            "000001.SH",
+            "SSE",
+            bars,
+            updated_at=datetime(2024, 1, 4, 16, 0),
+        )
+
+        self.assertEqual(len(index_rows), 2)
+        self.assertEqual(len(calendar_rows), 2)
+        self.assertTrue(all(row["trade_date"] is not None for row in index_rows))
+
 
 class TdxMarketCacheSchemaTest(unittest.TestCase):
     def test_empty_cache_creates_replay_tables_and_incremental_upsert_preserves_other_rows(self) -> None:

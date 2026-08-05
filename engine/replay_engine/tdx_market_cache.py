@@ -123,7 +123,7 @@ def _normalize_bars(rows: pd.DataFrame) -> pd.DataFrame:
     missing = sorted(required - set(frame.columns))
     if missing:
         raise ValueError("通达信行情缺少字段：" + "、".join(missing))
-    frame["datetime"] = pd.to_datetime(frame["datetime"])
+    frame["datetime"] = pd.to_datetime(frame["datetime"], errors="coerce")
     frame = frame.sort_values("datetime").drop_duplicates("datetime", keep="last")
     for column in ("open", "high", "low", "close"):
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
@@ -139,7 +139,8 @@ def _normalize_bars(rows: pd.DataFrame) -> pd.DataFrame:
         else 0.0
     )
     valid = (
-        frame[["open", "high", "low", "close"]].apply(
+        frame["datetime"].notna()
+        & frame[["open", "high", "low", "close"]].apply(
             lambda values: values.map(lambda value: math.isfinite(float(value)) and float(value) > 0)
         ).all(axis=1)
         & (frame["high"] >= frame[["open", "close"]].max(axis=1))
