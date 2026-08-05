@@ -5320,6 +5320,14 @@ export function createApp(options = {}) {
     }
   });
 
+  app.get("/api/quant/replay/cache/status", async (_req, res, next) => {
+    try {
+      res.json(await engine.getReplayCacheStatus());
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/api/quant/replay/playbooks", (_req, res, next) => {
     try {
       res.json({

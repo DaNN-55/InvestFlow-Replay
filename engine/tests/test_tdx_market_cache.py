@@ -304,6 +304,36 @@ def make_daily_frame(start: str, count: int, base: float) -> pd.DataFrame:
 
 
 class TdxMarketDataProviderTest(unittest.TestCase):
+    def test_reports_market_cache_volume_and_pool_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cache = TdxMarketCache(Path(directory) / "market.duckdb")
+            client = FakeTdxClient(
+                {
+                    "600000": make_daily_frame("2020-01-02", 400, 10),
+                    "000001": make_daily_frame("2020-01-02", 400, 3000),
+                }
+            )
+            provider = TdxMarketDataProvider(
+                cache,
+                initial_stock_count=1,
+                minimum_replay_bars=3,
+                benchmark_codes=("000001.SH",),
+            )
+            provider.sync_with_client(client)
+
+            stats = cache.statistics()
+            status = provider.pool_status()
+
+            self.assertEqual(stats["instrumentCount"], 2)
+            self.assertEqual(stats["stockCount"], 1)
+            self.assertEqual(stats["stockDailyBarCount"], 400)
+            self.assertEqual(stats["adjustFactorCount"], 400)
+            self.assertEqual(stats["indexCount"], 1)
+            self.assertEqual(stats["indexDailyBarCount"], 400)
+            self.assertEqual(stats["tradeDateCount"], 400)
+            self.assertIsNotNone(stats["lastSuccessAt"])
+            self.assertEqual(status["state"], "idle")
+
     def test_expands_daily_pool_when_every_cached_symbol_was_already_trained(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             cache = TdxMarketCache(Path(directory) / "market.duckdb")

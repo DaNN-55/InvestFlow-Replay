@@ -405,6 +405,45 @@ class MinuteReplayStore:
             for row in rows
         ]
 
+    def statistics(self) -> dict[str, int]:
+        empty = {
+            "oneMinuteInstrumentCount": 0,
+            "oneMinuteBarCount": 0,
+            "fiveMinuteInstrumentCount": 0,
+            "fiveMinuteBarCount": 0,
+        }
+        if not self.path.exists():
+            return empty
+        connection = duckdb.connect(str(self.path), read_only=True)
+        try:
+            table_exists = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_name = 'minute_bars'
+                """
+            ).fetchone()[0]
+            if not table_exists:
+                return empty
+            rows = connection.execute(
+                """
+                SELECT
+                    CASE WHEN instrument_type LIKE '%-5m' THEN '5m' ELSE '1m' END AS granularity,
+                    COUNT(DISTINCT instrument_code),
+                    COUNT(*)
+                FROM minute_bars
+                GROUP BY granularity
+                """
+            ).fetchall()
+        finally:
+            connection.close()
+        result = dict(empty)
+        for granularity, instrument_count, bar_count in rows:
+            prefix = "fiveMinute" if granularity == "5m" else "oneMinute"
+            result[f"{prefix}InstrumentCount"] = int(instrument_count)
+            result[f"{prefix}BarCount"] = int(bar_count)
+        return result
+
 
 class TdxMinuteReplayProvider:
     def __init__(self, cache_path: Path):

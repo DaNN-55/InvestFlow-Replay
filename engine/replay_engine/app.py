@@ -43,6 +43,11 @@ def benchmarks(retry: bool = False):
     return service.benchmarks(retry_failed=retry)
 
 
+@app.get("/internal/replay/cache/status")
+def cache_status():
+    return service.cache_status()
+
+
 @app.post("/internal/replay/scenarios")
 def create_scenario(request: ReplayScenarioRequest):
     return service.create_scenario(

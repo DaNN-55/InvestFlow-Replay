@@ -174,6 +174,30 @@ class MinuteReplayScenarioTest(unittest.TestCase):
             rows = store.load("600000.SH", "stock-5m")
             self.assertEqual([row["close"] for row in rows], [10, 11])
 
+    def test_reports_minute_cache_volume_by_granularity(self):
+        with TemporaryDirectory() as directory:
+            store = MinuteReplayStore(Path(directory) / "minute.duckdb")
+            first = datetime(2026, 8, 4, 9, 35)
+            row = {
+                "datetime": first,
+                "open": 10,
+                "high": 11,
+                "low": 9,
+                "close": 10.5,
+                "vol": 100,
+                "amount": 1000,
+            }
+            store.save("600000.SH", "stock", [row])
+            store.save("600000.SH", "stock-5m", [row])
+            store.save("000001.SH", "index-5m", [row])
+
+            stats = store.statistics()
+
+            self.assertEqual(stats["oneMinuteInstrumentCount"], 1)
+            self.assertEqual(stats["oneMinuteBarCount"], 1)
+            self.assertEqual(stats["fiveMinuteInstrumentCount"], 2)
+            self.assertEqual(stats["fiveMinuteBarCount"], 2)
+
     def test_replaces_an_existing_cached_instrument_partition(self):
         with TemporaryDirectory() as directory:
             store = MinuteReplayStore(Path(directory) / "minute.duckdb")

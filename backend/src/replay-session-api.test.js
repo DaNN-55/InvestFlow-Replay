@@ -240,6 +240,16 @@ describe("replay session API", () => {
     engineServer = createServer((req, res) => {
       const url = new URL(req.url, "http://127.0.0.1");
       res.setHeader("content-type", "application/json");
+      if (req.method === "GET" && url.pathname === "/internal/replay/cache/status") {
+        res.end(JSON.stringify({
+          state: "running",
+          activeTask: { state: "running", completed: 3, total: 12, message: "正在预热新的日线标的" },
+          market: { instrumentCount: 5200, stockCount: 12, stockDailyBarCount: 9600 },
+          minute: { oneMinuteInstrumentCount: 1, oneMinuteBarCount: 1200 },
+          storage: { marketBytes: 1024, minuteBytes: 2048, totalBytes: 3072 },
+        }));
+        return;
+      }
       if (req.method === "POST" && url.pathname === "/internal/replay/scenarios") {
         let body = "";
         req.on("data", (chunk) => {
@@ -290,6 +300,22 @@ describe("replay session API", () => {
       .expect(201);
 
     assert.equal(lastScenarioPayload.benchmarkCode, "000001.SH");
+  });
+
+  it("proxies replay cache progress and volume without reshaping it", async () => {
+    const response = await request(app)
+      .get("/api/quant/replay/cache/status")
+      .expect(200);
+
+    assert.equal(response.body.state, "running");
+    assert.deepEqual(response.body.activeTask, {
+      state: "running",
+      completed: 3,
+      total: 12,
+      message: "正在预热新的日线标的",
+    });
+    assert.equal(response.body.market.stockDailyBarCount, 9600);
+    assert.equal(response.body.storage.totalBytes, 3072);
   });
 
   it("creates and reads a persisted blind daily session without private data", async () => {

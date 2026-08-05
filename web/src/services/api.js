@@ -31,6 +31,7 @@ const json = (method, payload = undefined) => ({
 export const api = {
   listReplayBenchmarks: ({ retry = false } = {}) =>
     request(`/api/quant/replay/benchmarks${retry ? "?retry=true" : ""}`),
+  getReplayCacheStatus: () => request("/api/quant/replay/cache/status"),
   createReplaySession: (payload = {}) => request("/api/quant/replay/sessions", json("POST", payload)),
   listReplaySessions(params = {}) {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== ""));

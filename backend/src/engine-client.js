@@ -118,6 +118,10 @@ export function createEngineClient(baseUrl = DEFAULT_ENGINE_URL) {
       return requestJson(`${baseUrl}/internal/replay/benchmarks${query}`);
     },
 
+    async getReplayCacheStatus() {
+      return requestJson(`${baseUrl}/internal/replay/cache/status`);
+    },
+
     async createReplayScenario({
       gameLength = 60,
       benchmarkCode,

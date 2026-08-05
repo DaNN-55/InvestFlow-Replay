@@ -587,6 +587,36 @@ class TdxMarketCache:
             connection.close()
         return row is not None
 
+    def statistics(self) -> dict[str, Any]:
+        self.ensure_schema()
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM stock_instruments),
+                    (SELECT COUNT(DISTINCT ts_code) FROM stock_daily_bars),
+                    (SELECT COUNT(*) FROM stock_daily_bars),
+                    (SELECT COUNT(*) FROM stock_adj_factors),
+                    (SELECT COUNT(DISTINCT ts_code) FROM index_daily_bars),
+                    (SELECT COUNT(*) FROM index_daily_bars),
+                    (SELECT COUNT(DISTINCT cal_date) FROM trade_calendar WHERE is_open = 1),
+                    (SELECT MAX(last_success_at) FROM tdx_cache_sync_state)
+                """
+            ).fetchone()
+        finally:
+            connection.close()
+        return {
+            "instrumentCount": int(row[0]),
+            "stockCount": int(row[1]),
+            "stockDailyBarCount": int(row[2]),
+            "adjustFactorCount": int(row[3]),
+            "indexCount": int(row[4]),
+            "indexDailyBarCount": int(row[5]),
+            "tradeDateCount": int(row[6]),
+            "lastSuccessAt": row[7].isoformat() if row[7] is not None else None,
+        }
+
     def is_replay_ready(
         self,
         benchmark_codes: tuple[str, ...],
@@ -650,6 +680,13 @@ class TdxMarketDataProvider:
         self.benchmark_codes = tuple(str(code).upper() for code in benchmark_codes)
         self._status_lock = Lock()
         self._pool_lock = Lock()
+        self._pool_status: dict[str, Any] = {
+            "state": "idle",
+            "completed": 0,
+            "total": 0,
+            "message": "未运行股票池预热",
+            "error": "",
+        }
         self._sync_thread: Thread | None = None
         self._sync_status: dict[str, Any] = {
             "state": "idle",
@@ -1010,6 +1047,13 @@ class TdxMarketDataProvider:
                 }
                 unseen_count = len(eligible_cached_codes - excluded)
                 if unseen_count >= desired:
+                    self._pool_status = {
+                        "state": "ready",
+                        "completed": desired,
+                        "total": desired,
+                        "message": f"未训练标的储备已有 {unseen_count} 只",
+                        "error": "",
+                    }
                     return True
                 candidates = self._balanced_instruments([
                     {
@@ -1038,6 +1082,13 @@ class TdxMarketDataProvider:
             finally:
                 connection.close()
             if not candidates:
+                self._pool_status = {
+                    "state": "failed" if unseen_count == 0 else "ready",
+                    "completed": unseen_count,
+                    "total": desired,
+                    "message": "没有更多可预热的通达信股票",
+                    "error": "证券名单中没有满足条件的新标的" if unseen_count == 0 else "",
+                }
                 return unseen_count > 0
 
             resolved_client = client or _FailoverTdxClient(
@@ -1045,6 +1096,15 @@ class TdxMarketDataProvider:
                 self._connection_hosts(),
             )
             updated_at = datetime.now().replace(microsecond=0)
+            initial_unseen_count = unseen_count
+            self._pool_status = {
+                "state": "running",
+                "completed": 0,
+                "total": max(desired - unseen_count, 0),
+                "message": "正在预热新的日线标的",
+                "error": "",
+            }
+            last_error: Exception | None = None
             for metadata in candidates:
                 ts_code = metadata["ts_code"]
                 try:
@@ -1073,11 +1133,31 @@ class TdxMarketDataProvider:
                     metadata["updated_at"] = updated_at
                     self.cache.upsert_instruments([metadata])
                     unseen_count += 1
+                    self._pool_status = {
+                        **self._pool_status,
+                        "completed": unseen_count - initial_unseen_count,
+                        "message": f"已缓存新标的 {ts_code}",
+                    }
                     if unseen_count >= desired:
+                        self._pool_status = {
+                            **self._pool_status,
+                            "state": "ready",
+                            "message": f"未训练标的储备已补足至 {desired} 只",
+                        }
                         return True
-                except Exception:
+                except Exception as exc:
+                    last_error = exc
                     continue
+            self._pool_status = {
+                **self._pool_status,
+                "state": "ready" if unseen_count > 0 else "failed",
+                "message": "股票池预热部分完成" if unseen_count > 0 else "股票池预热失败",
+                "error": str(last_error or "通达信未返回可用的新标的") if unseen_count == 0 else "",
+            }
             return unseen_count > 0
+
+    def pool_status(self) -> dict[str, Any]:
+        return dict(self._pool_status)
 
     def _update_sync_status(self, payload: dict[str, Any]) -> None:
         with self._status_lock:

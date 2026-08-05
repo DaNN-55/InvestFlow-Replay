@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 from .config import MARKET_DB_PATH, MINUTE_REPLAY_DB_PATH
@@ -60,6 +61,41 @@ class ReplayService:
 
     def get_replay_benchmarks(self) -> dict[str, Any]:
         return self.benchmarks()
+
+    @staticmethod
+    def _file_size(path: Path) -> int:
+        try:
+            return int(path.stat().st_size)
+        except FileNotFoundError:
+            return 0
+
+    def cache_status(self) -> dict[str, Any]:
+        market_stats = self.market_provider.cache.statistics()
+        minute_stats = self.minute_provider.store.statistics()
+        initialization = self.market_provider.replay_cache_status()
+        pool = self.market_provider.pool_status()
+        market_bytes = self._file_size(self.market_provider.cache.path)
+        minute_bytes = self._file_size(self.minute_provider.store.path)
+        active = pool if pool.get("state") == "running" else initialization
+        if initialization.get("state") == "running":
+            active = initialization
+        state = "running" if active.get("state") == "running" else "ready"
+        if initialization.get("state") == "failed" or pool.get("state") == "failed":
+            state = "failed"
+        return {
+            "state": state,
+            "activeTask": active,
+            "initialization": initialization,
+            "stockPool": pool,
+            "market": market_stats,
+            "minute": minute_stats,
+            "storage": {
+                "marketBytes": market_bytes,
+                "minuteBytes": minute_bytes,
+                "totalBytes": market_bytes + minute_bytes,
+            },
+            "lastSuccessAt": market_stats.get("lastSuccessAt"),
+        }
 
     def prefetch_replay_stocks(
         self,
