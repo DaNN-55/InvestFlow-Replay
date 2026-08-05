@@ -465,6 +465,32 @@ class TdxMarketDataProviderTest(unittest.TestCase):
             self.assertEqual(calls, ["sync", "sync"])
             self.assertEqual(status["state"], "failed")
 
+    def test_cached_fallback_does_not_restart_background_sync(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            provider = TdxMarketDataProvider(
+                TdxMarketCache(Path(directory) / "market.duckdb"),
+                minimum_replay_bars=3,
+                benchmark_codes=("000001.SH",),
+            )
+            calls = []
+            provider._cache_ready = lambda: True
+
+            def use_cache(**_kwargs):
+                calls.append("sync")
+                return {"mode": "cache", "message": "连接失败，继续使用本地缓存"}
+
+            provider.ensure_ready = use_cache
+            provider.prepare_replay_cache()
+            for _ in range(50):
+                status = provider.replay_cache_status()
+                if status["state"] == "ready":
+                    break
+                time.sleep(0.01)
+
+            repeated = provider.prepare_replay_cache()
+            self.assertEqual(repeated["state"], "ready")
+            self.assertEqual(calls, ["sync"])
+
     def test_failed_benchmark_switches_host_without_restarting_successful_benchmarks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             bars_by_code = {

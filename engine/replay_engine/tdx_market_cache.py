@@ -1030,7 +1030,7 @@ class TdxMarketDataProvider:
         with self._status_lock:
             if self._sync_thread is not None and self._sync_thread.is_alive():
                 return dict(self._sync_status)
-            if self._sync_status["state"] == "failed" and not retry_failed:
+            if self._sync_status["state"] in {"failed", "ready"} and not retry_failed:
                 return dict(self._sync_status)
             self._sync_status = {
                 **self._sync_status,
