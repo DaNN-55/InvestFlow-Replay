@@ -144,4 +144,7 @@ function close() {
 .replay-cache-status__spin { animation: replay-cache-spin 1s linear infinite; }
 @keyframes replay-cache-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .replay-cache-status__spin { animation: none; } }
+@media (max-width: 720px) {
+  .replay-cache-status__panel { position: fixed; top: 52px; right: 12px; left: 12px; width: auto; }
+}
 </style>

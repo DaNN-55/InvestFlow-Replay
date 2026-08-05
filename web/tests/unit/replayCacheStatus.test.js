@@ -27,4 +27,5 @@ test("renders an accessible hover cache status surface in the app shell", async 
   assert.match(component, /存储占用/u);
   assert.match(component, /:hover/u);
   assert.match(component, /:focus-within/u);
+  assert.match(component, /@media \(max-width: 720px\)[\s\S]*position: fixed/u);
 });
