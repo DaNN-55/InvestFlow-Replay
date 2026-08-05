@@ -40,8 +40,12 @@ class ReplayService:
         except TdxMarketUnavailableError as exc:
             raise QuantWorkbenchError(str(exc), 409) from exc
 
-    def benchmarks(self) -> dict[str, Any]:
-        initialization = self.market_provider.prepare_replay_cache()
+    def benchmarks(self, *, retry_failed: bool = False) -> dict[str, Any]:
+        initialization = (
+            self.market_provider.prepare_replay_cache(retry_failed=True)
+            if retry_failed
+            else self.market_provider.prepare_replay_cache()
+        )
         if not initialization.get("ready"):
             return {"sourceDataVersion": None, "items": [], "initialization": initialization}
         try:

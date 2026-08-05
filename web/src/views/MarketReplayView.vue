@@ -131,7 +131,7 @@ async function loadReplayPlaybooks() {
   }
 }
 
-async function loadReplayBenchmarks() {
+async function loadReplayBenchmarks({ retry = false } = {}) {
   if (benchmarkPollTimer) {
     window.clearTimeout(benchmarkPollTimer);
     benchmarkPollTimer = null;
@@ -140,7 +140,7 @@ async function loadReplayBenchmarks() {
   benchmarksLoading.value = true;
   benchmarksError.value = "";
   try {
-    const result = await api.listReplayBenchmarks();
+    const result = await api.listReplayBenchmarks({ retry });
     if (sequence !== benchmarkRequestSequence) {
       return;
     }
@@ -170,6 +170,10 @@ async function loadReplayBenchmarks() {
       benchmarksLoading.value = false;
     }
   }
+}
+
+function retryReplayBenchmarks() {
+  return loadReplayBenchmarks({ retry: true });
 }
 
 function stopBenchmarkPolling() {
@@ -313,7 +317,7 @@ onBeforeUnmount(() => {
         :benchmark-initialization="benchmarkInitialization"
         @create="createSession"
         @retry-playbooks="loadReplayPlaybooks"
-        @retry-benchmarks="loadReplayBenchmarks"
+        @retry-benchmarks="retryReplayBenchmarks"
       />
 
       <template v-else>

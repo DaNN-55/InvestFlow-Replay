@@ -571,6 +571,21 @@ class TdxMarketCache:
             connection.close()
         return bool(row and row[0])
 
+    def has_successful_sync(self) -> bool:
+        self.ensure_schema()
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM tdx_cache_sync_state
+                WHERE dataset = 'replay-market'
+                """
+            ).fetchone()
+        finally:
+            connection.close()
+        return row is not None
+
     def is_replay_ready(
         self,
         benchmark_codes: tuple[str, ...],
@@ -759,6 +774,7 @@ class TdxMarketDataProvider:
         self.cache.ensure_schema()
         total = 1 + len(self.benchmark_codes) + self.initial_stock_count
         completed = 0
+        needs_full_backfill = not self.cache.has_successful_sync()
 
         def report(message: str, *, ready: bool = False) -> None:
             if progress_callback is not None:
@@ -781,7 +797,7 @@ class TdxMarketDataProvider:
         completed += 1
         report(f"证券名单已缓存，共 {len(instruments)} 只")
 
-        bootstrap_benchmarks: list[str] = []
+        backfill_benchmarks: list[str] = []
         for benchmark_code in self.benchmark_codes:
             latest = self.cache.latest_trade_date("index_daily_bars", benchmark_code)
             bootstrap = latest is None
@@ -809,8 +825,8 @@ class TdxMarketDataProvider:
                     else None
                 ),
             )
-            if bootstrap:
-                bootstrap_benchmarks.append(benchmark_code)
+            if bootstrap or needs_full_backfill:
+                backfill_benchmarks.append(benchmark_code)
             completed += 1
             report(f"指数 {benchmark_code} 已缓存")
 
@@ -839,7 +855,7 @@ class TdxMarketDataProvider:
         total = 1 + len(self.benchmark_codes) + len(selected_codes)
 
         synced_codes: list[str] = []
-        bootstrap_stocks: list[str] = []
+        backfill_stocks: list[str] = []
         for ts_code in selected_codes:
             latest = self.cache.latest_trade_date("stock_daily_bars", ts_code)
             bootstrap = latest is None
@@ -865,8 +881,8 @@ class TdxMarketDataProvider:
             metadata["list_date"] = stock_rows[0]["trade_date"]
             self.cache.upsert_instruments([metadata])
             synced_codes.append(ts_code)
-            if bootstrap:
-                bootstrap_stocks.append(ts_code)
+            if bootstrap or needs_full_backfill:
+                backfill_stocks.append(ts_code)
             completed += 1
             report(f"股票 {ts_code} 已缓存")
 
@@ -876,8 +892,8 @@ class TdxMarketDataProvider:
         )
         report("演练所需行情已就绪，正在后台补齐完整历史", ready=ready)
 
-        total += len(bootstrap_benchmarks) + len(bootstrap_stocks)
-        for benchmark_code in bootstrap_benchmarks:
+        total += len(backfill_benchmarks) + len(backfill_stocks)
+        for benchmark_code in backfill_benchmarks:
             bars = self._fetch_daily_pages(
                 client,
                 benchmark_code,
@@ -900,7 +916,7 @@ class TdxMarketDataProvider:
             completed += 1
             report(f"指数 {benchmark_code} 完整历史已补齐", ready=ready)
 
-        for ts_code in bootstrap_stocks:
+        for ts_code in backfill_stocks:
             bars = self._fetch_daily_pages(
                 client,
                 ts_code,
@@ -998,7 +1014,7 @@ class TdxMarketDataProvider:
             }
         return status
 
-    def prepare_replay_cache(self) -> dict[str, Any]:
+    def prepare_replay_cache(self, *, retry_failed: bool = False) -> dict[str, Any]:
         if self._cache_ready() and self.cache.synced_today():
             self._update_sync_status(
                 {
@@ -1013,6 +1029,8 @@ class TdxMarketDataProvider:
 
         with self._status_lock:
             if self._sync_thread is not None and self._sync_thread.is_alive():
+                return dict(self._sync_status)
+            if self._sync_status["state"] == "failed" and not retry_failed:
                 return dict(self._sync_status)
             self._sync_status = {
                 **self._sync_status,
@@ -1032,7 +1050,10 @@ class TdxMarketDataProvider:
 
     def _run_background_sync(self) -> None:
         try:
-            result = self.ensure_ready(progress_callback=self._update_sync_status)
+            result = self.ensure_ready(
+                force_refresh=True,
+                progress_callback=self._update_sync_status,
+            )
         except Exception as exc:
             self._update_sync_status(
                 {

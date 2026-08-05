@@ -30,8 +30,8 @@ def health():
 
 
 @app.get("/internal/replay/benchmarks")
-def benchmarks():
-    return service.benchmarks()
+def benchmarks(retry: bool = False):
+    return service.benchmarks(retry_failed=retry)
 
 
 @app.post("/internal/replay/scenarios")

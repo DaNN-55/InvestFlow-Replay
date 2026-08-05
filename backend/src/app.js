@@ -5312,9 +5312,9 @@ export function createApp(options = {}) {
     }
   });
 
-  app.get("/api/quant/replay/benchmarks", async (_req, res, next) => {
+  app.get("/api/quant/replay/benchmarks", async (req, res, next) => {
     try {
-      res.json(await engine.getReplayBenchmarks());
+      res.json(await engine.getReplayBenchmarks({ retry: req.query.retry === "true" }));
     } catch (error) {
       next(error);
     }

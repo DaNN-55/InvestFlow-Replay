@@ -54,6 +54,6 @@ nav { display: flex; gap: 8px; }
 nav a { padding: 8px 14px; border-radius: 6px; color: var(--ql-muted); text-decoration: none; }
 nav a.router-link-active { background: var(--ql-color-primary-soft); color: var(--ql-color-primary); }
 .standalone-shell__theme { justify-self: end; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--ql-line-strong); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
-.standalone-shell__main { min-width: 0; }
-@media (max-width: 720px) { .standalone-shell__header { grid-template-columns: 1fr auto; padding: 0 12px; } nav { order: 3; grid-column: 1 / -1; justify-content: center; } .standalone-shell__header { height: auto; min-height: 56px; padding-block: 8px; } }
+.standalone-shell__main { width: min(100%, 1600px); min-width: 0; margin: 0 auto; padding: 0 clamp(16px, 2.5vw, 40px) 40px; box-sizing: border-box; }
+@media (max-width: 720px) { .standalone-shell__header { grid-template-columns: 1fr auto; padding: 0 12px; } nav { order: 3; grid-column: 1 / -1; justify-content: center; } .standalone-shell__header { height: auto; min-height: 56px; padding-block: 8px; } .standalone-shell__main { padding-right: 12px; padding-left: 12px; } }
 </style>

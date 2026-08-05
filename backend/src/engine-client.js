@@ -113,8 +113,9 @@ export function createEngineClient(baseUrl = DEFAULT_ENGINE_URL) {
       );
     },
 
-    async getReplayBenchmarks() {
-      return requestJson(`${baseUrl}/internal/replay/benchmarks`);
+    async getReplayBenchmarks({ retry = false } = {}) {
+      const query = retry ? "?retry=true" : "";
+      return requestJson(`${baseUrl}/internal/replay/benchmarks${query}`);
     },
 
     async createReplayScenario({
