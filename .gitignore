@@ -1,0 +1,12 @@
+.venv/
+.runtime/
+.playwright-cli/
+**/node_modules/
+**/dist/
+**/__pycache__/
+**/.pytest_cache/
+storage/**/*.duckdb
+storage/**/*.sqlite
+storage/**/*.sqlite-*
+storage/trade-records/*.json
+!.gitkeep

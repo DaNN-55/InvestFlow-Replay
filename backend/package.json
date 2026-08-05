@@ -1,0 +1,17 @@
+{
+  "name": "investflow-replay-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --no-warnings src/standalone-server.js",
+    "start": "node --no-warnings src/standalone-server.js",
+    "test": "node --no-warnings --test --test-concurrency=1 src/replay-*.test.js src/trade-license*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4"
+  }
+}

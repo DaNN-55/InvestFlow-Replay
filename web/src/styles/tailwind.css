@@ -1,0 +1,2269 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ql-color-bg-app: #f8fafc;
+  --ql-color-bg-stage: #f8fafc;
+  --ql-color-bg-surface: rgba(255, 255, 255, 0.96);
+  --ql-color-bg-surface-strong: #ffffff;
+  --ql-color-bg-muted: #f9fafb;
+  --ql-color-bg-muted-strong: #f1f5f9;
+  --ql-color-text-strong: #0f172a;
+  --ql-color-text-body: rgba(15, 23, 42, 0.82);
+  --ql-color-text-muted: #64748b;
+  --ql-color-text-subtle: #94a3b8;
+  --ql-color-border-soft: rgba(241, 245, 249, 0.95);
+  --ql-color-border-strong: rgba(226, 232, 240, 0.96);
+  --ql-color-primary: #0f52ba;
+  --ql-color-primary-strong: #0b4aa7;
+  --ql-color-primary-soft: #ebf2ff;
+  --ql-color-primary-ring: rgba(15, 82, 186, 0.12);
+  --ql-color-success: #10b981;
+  --ql-color-success-soft: rgba(16, 185, 129, 0.1);
+  --ql-color-warning: #f59e0b;
+  --ql-color-warning-soft: rgba(245, 158, 11, 0.12);
+  --ql-color-danger: #ef4444;
+  --ql-color-danger-soft: rgba(239, 68, 68, 0.1);
+  --ql-color-info: #0369a1;
+  --ql-color-info-soft: rgba(14, 165, 233, 0.12);
+  --ql-color-bg-glass: rgba(255, 255, 255, 0.76);
+  --ql-color-bg-glass-soft: rgba(255, 255, 255, 0.7);
+  --ql-color-bg-glass-strong: rgba(255, 255, 255, 0.92);
+  --ql-body-background:
+    radial-gradient(circle at top, rgba(15, 82, 186, 0.06), transparent 28%),
+    linear-gradient(180deg, #fbfcfe 0%, var(--ql-color-bg-app) 220px);
+  --ql-shadow-xs:
+    0 1px 3px rgba(15, 23, 42, 0.02), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+  --ql-shadow-sm: 0 8px 24px rgba(15, 23, 42, 0.04);
+  --ql-shadow-md: 0 18px 40px rgba(15, 23, 42, 0.05);
+  --ql-shadow-lg: 0 24px 52px rgba(15, 23, 42, 0.08);
+  --ql-radius-xs: 6px;
+  --ql-radius-sm: 8px;
+  --ql-radius-md: 10px;
+  --ql-radius-lg: 12px;
+  --ql-space-1: 4px;
+  --ql-space-2: 8px;
+  --ql-space-3: 12px;
+  --ql-space-4: 16px;
+  --ql-space-5: 20px;
+  --ql-space-6: 24px;
+  --ql-space-8: 32px;
+  --ql-space-10: 40px;
+  --ql-font-size-xs: 12px;
+  --ql-font-size-sm: 13px;
+  --ql-font-size-md: 14px;
+  --ql-font-size-lg: 16px;
+  --ql-font-size-xl: 20px;
+  --ql-line-height-tight: 1.2;
+  --ql-line-height-base: 1.5;
+  --ql-control-height-sm: 36px;
+  --ql-control-height-md: 40px;
+  --ql-control-height-lg: 44px;
+  --ql-paper: var(--ql-color-bg-app);
+  --ql-panel: var(--ql-color-bg-surface-strong);
+  --ql-paper-soft: var(--ql-color-bg-muted);
+  --ql-paper-pressed: var(--ql-color-bg-muted-strong);
+  --ql-surface: var(--ql-color-bg-surface);
+  --ql-ink: var(--ql-color-text-strong);
+  --ql-muted: var(--ql-color-text-body);
+  --ql-muted-soft: var(--ql-color-text-subtle);
+  --ql-line: var(--ql-color-border-soft);
+  --ql-line-strong: var(--ql-color-border-strong);
+  --ql-accent: var(--ql-color-primary);
+  --ql-accent-link: var(--ql-color-primary-strong);
+  --ql-accent-hover: var(--ql-color-primary-strong);
+  --ql-dark: #000000;
+  --ql-dark-card: #272729;
+  --ql-dark-card-elevated: #2a2a2d;
+  --ql-field-bg: var(--ql-color-bg-muted);
+  --ql-overlay: rgba(248, 250, 252, 0.42);
+  --ql-overlay-clear: rgba(247, 249, 251, 0.42);
+  --ql-shadow-card: var(--ql-shadow-sm);
+  --ql-shadow-soft: var(--ql-shadow-xs);
+  --ql-rise: var(--ql-color-danger);
+  --ql-fall: var(--ql-color-success);
+  --ql-radius-card: var(--ql-radius-md);
+  --ql-radius-field: 16px;
+  --ql-radius-button: 16px;
+  --ql-radius-pill: 980px;
+  --ql-max-stage: 1760px;
+  --ql-max-page: 1700px;
+  --ql-nav-height: 48px;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --ql-color-bg-app: #090f1d;
+  --ql-color-bg-stage: #0b1220;
+  --ql-color-bg-surface: rgba(17, 24, 39, 0.96);
+  --ql-color-bg-surface-strong: #111827;
+  --ql-color-bg-muted: #151f30;
+  --ql-color-bg-muted-strong: #1e293b;
+  --ql-color-text-strong: #f8fafc;
+  --ql-color-text-body: rgba(226, 232, 240, 0.88);
+  --ql-color-text-muted: #a6b3c5;
+  --ql-color-text-subtle: #7f8da3;
+  --ql-color-border-soft: rgba(71, 85, 105, 0.38);
+  --ql-color-border-strong: rgba(100, 116, 139, 0.5);
+  --ql-color-primary: #60a5fa;
+  --ql-color-primary-strong: #93c5fd;
+  --ql-color-primary-soft: rgba(96, 165, 250, 0.16);
+  --ql-color-primary-ring: rgba(96, 165, 250, 0.22);
+  --ql-color-success: #34d399;
+  --ql-color-success-soft: rgba(52, 211, 153, 0.14);
+  --ql-color-warning: #fbbf24;
+  --ql-color-warning-soft: rgba(251, 191, 36, 0.15);
+  --ql-color-danger: #fb7185;
+  --ql-color-danger-soft: rgba(251, 113, 133, 0.15);
+  --ql-color-info: #7dd3fc;
+  --ql-color-info-soft: rgba(125, 211, 252, 0.14);
+  --ql-color-bg-glass: rgba(15, 23, 42, 0.8);
+  --ql-color-bg-glass-soft: rgba(30, 41, 59, 0.72);
+  --ql-color-bg-glass-strong: rgba(30, 41, 59, 0.92);
+  --ql-body-background:
+    radial-gradient(circle at top, rgba(59, 130, 246, 0.12), transparent 30%),
+    linear-gradient(180deg, #0f172a 0%, var(--ql-color-bg-app) 260px);
+  --ql-shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.28);
+  --ql-shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.24);
+  --ql-shadow-md: 0 18px 40px rgba(0, 0, 0, 0.28);
+  --ql-shadow-lg: 0 24px 52px rgba(0, 0, 0, 0.34);
+  --ql-field-bg: var(--ql-color-bg-muted);
+  --ql-overlay: rgba(2, 6, 23, 0.7);
+  --ql-overlay-clear: rgba(2, 6, 23, 0.48);
+}
+
+html[data-theme="dark"] .ql-bg-white,
+html[data-theme="dark"] .ql-bg-white\/60,
+html[data-theme="dark"] .ql-bg-white\/80,
+html[data-theme="dark"] .ql-bg-white\/90,
+html[data-theme="dark"] .ql-bg-white\/95 {
+  background-color: var(--ql-color-bg-surface-strong) !important;
+}
+
+html[data-theme="dark"] .ql-bg-slate-50\/40,
+html[data-theme="dark"] .ql-bg-slate-50\/50,
+html[data-theme="dark"] .ql-bg-slate-50\/55,
+html[data-theme="dark"] .ql-bg-slate-50\/70,
+html[data-theme="dark"] .ql-bg-slate-50\/80 {
+  background-color: var(--ql-color-bg-muted) !important;
+}
+
+html[data-theme="dark"] .ql-bg-slate-100\/70 {
+  background-color: var(--ql-color-bg-muted-strong) !important;
+}
+
+html[data-theme="dark"] .ql-text-slate-900,
+html[data-theme="dark"] .ql-text-slate-800 {
+  color: var(--ql-color-text-strong) !important;
+}
+
+html[data-theme="dark"] .ql-text-slate-700,
+html[data-theme="dark"] .ql-text-slate-600 {
+  color: var(--ql-color-text-body) !important;
+}
+
+html[data-theme="dark"] .ql-text-slate-500 {
+  color: var(--ql-color-text-muted) !important;
+}
+
+html[data-theme="dark"] .ql-text-slate-400,
+html[data-theme="dark"] .ql-text-slate-300 {
+  color: var(--ql-color-text-subtle) !important;
+}
+
+html[data-theme="dark"] .ql-fill-slate-900,
+html[data-theme="dark"] .ql-fill-slate-800 {
+  fill: var(--ql-color-text-strong) !important;
+}
+
+html[data-theme="dark"] .ql-fill-slate-500,
+html[data-theme="dark"] .ql-fill-slate-400,
+html[data-theme="dark"] .ql-fill-slate-300 {
+  fill: var(--ql-color-text-muted) !important;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  color: var(--ql-ink);
+  font-family:
+    "SF Pro Text", "SF Pro Display", "-apple-system", BlinkMacSystemFont,
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: var(--ql-body-background);
+  line-height: 1.47;
+  letter-spacing: -0.374px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+*::selection {
+  background: rgba(15, 82, 186, 0.14);
+  color: var(--ql-ink);
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: var(--ql-accent-link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button,
+a {
+  min-height: 44px;
+}
+
+/* Toggle switch 不受 min-height 限制，由自身尺寸决定 */
+button[role="switch"] {
+  min-height: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ql-accent);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--ql-ink);
+  font-family:
+    "SF Pro Display", "SF Pro Text", "-apple-system", BlinkMacSystemFont,
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.ql-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.ql-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ql-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.ql-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.ql-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.ql-scrollbar:hover,
+.ql-scrollbar:focus-within,
+.ql-scrollbar:active {
+  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+}
+
+.ql-scrollbar:hover::-webkit-scrollbar-thumb,
+.ql-scrollbar:focus-within::-webkit-scrollbar-thumb,
+.ql-scrollbar:active::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+.ql-scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.ql-scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.ql-pane-title {
+  @apply ql-font-display ql-text-[22px] ql-font-semibold ql-leading-[1.15] ql-tracking-[-0.03em] ql-text-ink;
+}
+
+.ql-pane-label {
+  @apply ql-text-[11px] ql-font-semibold ql-uppercase ql-tracking-[0.18em] ql-text-slate-400;
+}
+
+.ql-page {
+  @apply ql-flex ql-flex-col ql-gap-6;
+}
+
+.ql-page-header {
+  @apply ql-flex ql-flex-col ql-gap-4 lg:ql-flex-row lg:ql-items-start lg:ql-justify-between;
+}
+
+.ql-page-heading {
+  @apply ql-space-y-2;
+}
+
+.ql-page-title {
+  @apply ql-font-display ql-text-[26px] ql-font-semibold ql-leading-[1.12] ql-tracking-[-0.04em] ql-text-ink;
+}
+
+.ql-page-description {
+  @apply ql-max-w-5xl ql-text-sm ql-leading-6 ql-text-slate-500;
+}
+
+.ql-page-actions {
+  @apply ql-flex ql-flex-wrap ql-items-center ql-gap-3;
+}
+
+.ql-app-shell {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  isolation: isolate;
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--ql-color-bg-app);
+  --ql-aurora-white: rgba(255, 255, 255, 0.94);
+  --ql-aurora-transparent: rgba(255, 255, 255, 0);
+  --ql-aurora-blue-500: rgba(59, 130, 246, 0.34);
+  --ql-aurora-indigo-300: rgba(165, 180, 252, 0.28);
+  --ql-aurora-blue-300: rgba(125, 211, 252, 0.34);
+  --ql-aurora-violet-200: rgba(221, 214, 254, 0.26);
+  --ql-aurora-blue-400: rgba(96, 165, 250, 0.28);
+}
+
+html[data-theme="dark"] .ql-app-shell {
+  --ql-aurora-white: rgba(15, 23, 42, 0.76);
+  --ql-aurora-transparent: rgba(15, 23, 42, 0);
+  --ql-aurora-blue-500: rgba(37, 99, 235, 0.24);
+  --ql-aurora-indigo-300: rgba(79, 70, 229, 0.18);
+  --ql-aurora-blue-300: rgba(14, 116, 144, 0.2);
+  --ql-aurora-violet-200: rgba(109, 40, 217, 0.14);
+  --ql-aurora-blue-400: rgba(29, 78, 216, 0.2);
+}
+
+.ql-app-shell::before,
+.ql-app-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ql-app-shell::before {
+  inset: -140px -220px -120px;
+  background-image:
+    repeating-linear-gradient(
+      100deg,
+      var(--ql-aurora-white) 0%,
+      var(--ql-aurora-white) 7%,
+      var(--ql-aurora-transparent) 10%,
+      var(--ql-aurora-transparent) 12%,
+      var(--ql-aurora-white) 16%
+    ),
+    repeating-linear-gradient(
+      100deg,
+      var(--ql-aurora-blue-500) 10%,
+      var(--ql-aurora-indigo-300) 15%,
+      var(--ql-aurora-blue-300) 20%,
+      var(--ql-aurora-violet-200) 25%,
+      var(--ql-aurora-blue-400) 30%
+    );
+  background-size: 300%, 200%;
+  background-position: 50% 50%, 50% 50%;
+  filter: blur(16px);
+  opacity: 0.72;
+  transform: translate3d(0, 0, 0);
+  mask-image: radial-gradient(ellipse at 100% 0%, black 12%, transparent 72%);
+}
+
+.ql-app-shell::after {
+  inset: -180px -260px -180px;
+  background-image:
+    repeating-linear-gradient(
+      100deg,
+      var(--ql-aurora-white) 0%,
+      var(--ql-aurora-white) 8%,
+      var(--ql-aurora-transparent) 11%,
+      var(--ql-aurora-transparent) 13%,
+      var(--ql-aurora-white) 18%
+    ),
+    repeating-linear-gradient(
+      100deg,
+      rgba(37, 99, 235, 0.2) 8%,
+      rgba(96, 165, 250, 0.22) 18%,
+      rgba(196, 181, 253, 0.18) 26%,
+      rgba(103, 232, 249, 0.2) 34%,
+      rgba(148, 163, 184, 0.12) 42%
+    );
+  background-size: 220%, 160%;
+  background-position: 50% 50%, 50% 50%;
+  filter: blur(72px);
+  opacity: 0.44;
+  mix-blend-mode: screen;
+  transform: translate3d(0, 0, 0);
+  mask-image: radial-gradient(ellipse at 80% 0%, black 16%, transparent 70%);
+}
+
+.ql-app-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ql-topbar {
+  position: sticky;
+  top: 0;
+  flex-shrink: 0;
+  z-index: 70;
+  border-bottom: 1px solid var(--ql-color-border-strong);
+  background: var(--ql-color-bg-glass);
+  backdrop-filter: blur(20px);
+  box-shadow: none;
+}
+
+.ql-topbar::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: transparent;
+}
+
+.ql-topbar__inner {
+  width: 100%;
+  min-height: 56px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.ql-topbar__brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  color: var(--ql-ink);
+  flex-shrink: 0;
+}
+
+.ql-topbar__brand:hover {
+  text-decoration: none;
+}
+
+.ql-topbar__brand-copy {
+  font-family:
+    "Hanken Grotesk", "SF Pro Display", "SF Pro Text", "-apple-system",
+    BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.ql-topbar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: var(--ql-color-bg-glass);
+  color: var(--ql-color-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  box-shadow: none;
+}
+
+.ql-topbar__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ql-ink);
+  box-shadow: none;
+}
+
+.ql-main-stage {
+  flex: 1 1 auto;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+}
+
+.ql-main-stage--shell {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ql-shell-sidebar {
+  position: relative;
+  top: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  flex-shrink: 0;
+  height: calc(100vh - 56px);
+  min-height: calc(100vh - 56px);
+  max-height: calc(100vh - 56px);
+  margin-left: 0;
+  padding: 14px;
+  border: 0;
+  border-right: 1px solid var(--ql-color-border-strong);
+  border-radius: 0;
+  background: var(--ql-color-bg-glass);
+  box-shadow: none;
+  backdrop-filter: blur(16px);
+  transition:
+    width 220ms ease,
+    margin-left 220ms ease,
+    padding 220ms ease,
+    border-color 220ms ease,
+    background-color 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.ql-shell-sidebar--collapsed {
+  width: 72px;
+  padding: 12px 8px;
+}
+
+.ql-shell-sidebar--collapsed .ql-shell-sidebar__nav {
+  align-items: center;
+}
+
+.ql-shell-sidebar--collapsed .ql-shell-sidebar__item {
+  width: 40px;
+}
+
+.ql-shell-sidebar--collapsed .ql-shell-sidebar__footer {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.ql-shell-sidebar__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border: 1px solid var(--ql-color-border-strong);
+  border-radius: 4px;
+  background: var(--ql-color-bg-glass-strong);
+  color: var(--ql-color-text-strong);
+  box-shadow: none;
+}
+
+.ql-shell-sidebar__toggle:hover,
+.ql-shell-sidebar__toggle:focus-visible {
+  border-color: var(--ql-color-text-subtle);
+  background: var(--ql-color-bg-surface-strong);
+  text-decoration: none;
+}
+
+.ql-shell-sidebar__header-label {
+  color: var(--ql-color-text-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.ql-shell-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 0 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ql-shell-sidebar__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 10px;
+}
+
+.ql-shell-sidebar__section-label {
+  padding: 6px 10px 4px;
+  color: var(--ql-color-text-subtle);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ql-shell-sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ql-color-text-muted);
+  text-decoration: none;
+  box-shadow: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.ql-shell-sidebar__item:hover,
+.ql-shell-sidebar__item:focus-visible {
+  border-color: var(--ql-color-border-strong);
+  background: var(--ql-color-bg-glass-soft);
+  color: var(--ql-color-text-strong);
+  text-decoration: none;
+  box-shadow: none;
+}
+
+.ql-shell-sidebar__item--active {
+  border-color: var(--ql-color-border-strong);
+  background: var(--ql-color-bg-glass-strong);
+  color: var(--ql-color-text-strong);
+  box-shadow: none;
+}
+
+.ql-shell-sidebar__item--collapsed {
+  justify-content: center;
+  padding: 0;
+}
+
+.ql-shell-sidebar__item--disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.ql-shell-sidebar__item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: rgba(100, 116, 139, 0.92);
+}
+
+.ql-shell-sidebar__item--active .ql-shell-sidebar__item-icon,
+.ql-shell-sidebar__item:hover .ql-shell-sidebar__item-icon,
+.ql-shell-sidebar__item:focus-visible .ql-shell-sidebar__item-icon {
+  color: var(--ql-color-text-strong);
+}
+
+.ql-shell-sidebar__item-label {
+  min-width: 0;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ql-shell-sidebar__item-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(148, 163, 184, 0.92);
+  flex-shrink: 0;
+}
+
+.ql-shell-sidebar__item--active .ql-shell-sidebar__item-arrow {
+  color: var(--ql-color-text-strong);
+}
+
+.ql-shell-sidebar__children {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 8px 14px;
+  padding-left: 10px;
+  border-left: 1px solid var(--ql-color-border-strong);
+}
+
+.ql-shell-sidebar__child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ql-color-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.ql-shell-sidebar__child:hover,
+.ql-shell-sidebar__child:focus-visible {
+  background: var(--ql-color-bg-glass-soft);
+  color: var(--ql-color-text-strong);
+}
+
+.ql-shell-sidebar__child--active {
+  background: var(--ql-color-bg-glass-strong);
+  color: var(--ql-color-text-strong);
+}
+
+.ql-shell-sidebar__child-icon {
+  flex-shrink: 0;
+  opacity: 0.45;
+}
+
+.ql-shell-sidebar__footer {
+  display: flex;
+  justify-content: flex-start;
+  padding: 12px 0 0;
+  margin-top: auto;
+  border-top: 1px solid var(--ql-color-border-strong);
+}
+
+.ql-page-shell {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, var(--ql-max-page));
+  min-width: 0;
+  min-height: 0;
+  margin: 0 auto;
+}
+
+.ql-page-shell--with-sidebar {
+  flex: 1;
+  width: auto;
+  margin: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+}
+
+@media (min-width: 1120px) {
+  .ql-main-stage--shell {
+    display: flex;
+    position: static;
+  }
+
+  .ql-shell-sidebar {
+    position: relative;
+    top: 0;
+    left: auto;
+    height: calc(100vh - 56px);
+    min-height: calc(100vh - 56px);
+    max-height: calc(100vh - 56px);
+  }
+
+  .ql-page-shell--with-sidebar {
+    margin-top: 0;
+    margin-left: 0;
+  }
+
+  .ql-shell-sidebar--collapsed + .ql-page-shell--with-sidebar {
+    margin-left: 0;
+  }
+}
+
+.ql-stage-alert {
+  @apply ql-rounded-[12px] ql-border ql-px-4 ql-py-3 ql-text-sm ql-text-fall;
+  border-color: rgba(186, 26, 26, 0.16);
+  background: rgba(255, 245, 245, 0.9);
+}
+
+@layer components {
+  .ql-shell-card {
+    @apply ql-overflow-hidden ql-border;
+    border-radius: var(--ql-radius-lg);
+    border-color: transparent;
+    background: var(--ql-color-bg-surface);
+    box-shadow: var(--ql-shadow-xs);
+  }
+
+  .ql-subtle-panel {
+    @apply ql-rounded-[10px] ql-border;
+    border-color: var(--ql-color-border-soft);
+    background: var(--ql-color-bg-muted);
+    box-shadow: inset 0 0 0 1px var(--ql-color-border-soft);
+  }
+
+  .ql-soft-field {
+    @apply ql-w-full ql-border ql-px-4 ql-py-3 ql-text-sm ql-text-ink ql-outline-none ql-transition;
+    min-height: var(--ql-control-height-md);
+    border-radius: var(--ql-radius-field);
+    border-color: var(--ql-color-border-strong);
+    background: var(--ql-panel);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.03);
+    letter-spacing: -0.224px;
+  }
+
+  select.ql-soft-field {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: none;
+  }
+
+  select.ql-soft-field::-ms-expand {
+    display: none;
+  }
+
+  .ql-soft-field::placeholder {
+    color: var(--ql-muted-soft);
+  }
+
+  .ql-soft-field:focus {
+    border-color: var(--ql-color-primary);
+    background: var(--ql-panel);
+    box-shadow:
+      inset 0 0 0 1px rgba(15, 23, 42, 0.05),
+      0 0 0 4px var(--ql-color-primary-ring);
+  }
+
+  .ql-soft-field-mono {
+    @apply ql-soft-field ql-font-mono;
+  }
+
+  .ql-soft-button {
+    @apply ql-inline-flex ql-min-h-[40px] ql-items-center ql-justify-center ql-border ql-px-4 ql-py-2 ql-text-sm ql-font-semibold ql-transition;
+    border-radius: var(--ql-radius-button);
+    border-color: var(--ql-color-border-strong);
+    background: var(--ql-panel);
+    color: var(--ql-color-text-body);
+    box-shadow: var(--ql-shadow-xs);
+    line-height: 1.43;
+    letter-spacing: -0.224px;
+  }
+
+  .ql-soft-button:hover,
+  .ql-soft-button:focus-visible {
+    border-color: rgba(203, 213, 225, 0.96);
+    background: var(--ql-color-bg-muted-strong);
+    color: var(--ql-color-text-strong);
+  }
+
+  .ql-primary-button {
+    @apply ql-inline-flex ql-min-h-[40px] ql-items-center ql-justify-center ql-px-4 ql-py-2 ql-text-sm ql-font-semibold ql-text-white ql-transition disabled:ql-cursor-not-allowed disabled:ql-opacity-60;
+    border-radius: var(--ql-radius-button);
+    border: 1px solid var(--ql-color-primary);
+    background: var(--ql-color-primary);
+    line-height: 1.43;
+    letter-spacing: -0.224px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  }
+
+  .ql-primary-button:hover,
+  .ql-primary-button:focus-visible {
+    background: var(--ql-color-primary-strong);
+    border-color: var(--ql-color-primary-strong);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  }
+
+  .ql-soft-chip {
+    @apply ql-inline-flex ql-items-center ql-justify-center ql-rounded-[980px] ql-border ql-px-3 ql-py-2 ql-text-xs ql-font-semibold ql-transition;
+    border-color: var(--ql-color-border-soft);
+    background: var(--ql-color-bg-muted);
+    color: var(--ql-color-text-muted);
+  }
+
+  .ql-reference-blue-button {
+    @apply ql-inline-flex ql-items-center ql-justify-center ql-gap-2 ql-border ql-text-white ql-transition;
+    border-radius: var(--ql-radius-button) !important;
+    border-color: var(--ql-color-primary);
+    background: var(--ql-color-primary);
+    line-height: 1.43;
+    letter-spacing: -0.224px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  }
+
+  .ql-reference-blue-button:hover,
+  .ql-reference-blue-button:focus-visible {
+    border-color: var(--ql-color-primary-strong);
+    background: var(--ql-color-primary-strong);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  }
+
+  .ql-reference-blue-hover-button {
+    @apply ql-inline-flex ql-items-center ql-justify-center ql-gap-2 ql-border ql-transition;
+    border-radius: var(--ql-radius-pill) !important;
+    color: var(--ql-color-text-muted);
+    border-color: transparent;
+    background: var(--ql-panel);
+    box-shadow: var(--ql-shadow-xs);
+    line-height: 1.43;
+    letter-spacing: -0.224px;
+  }
+
+  .ql-reference-blue-hover-button:hover,
+  .ql-reference-blue-hover-button:focus-visible {
+    color: var(--ql-color-primary-strong);
+    border-color: transparent;
+    background: var(--ql-color-bg-muted-strong);
+    box-shadow: var(--ql-shadow-xs);
+  }
+
+  .ql-reference-blue-tab {
+    @apply ql-inline-flex ql-items-center ql-gap-2 ql-border ql-px-4 ql-py-2 ql-text-sm ql-font-semibold ql-transition;
+    border-radius: var(--ql-radius-button);
+    border-color: transparent;
+    background: var(--ql-color-bg-muted-strong);
+    color: var(--ql-color-text-muted);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.03);
+    line-height: 1.43;
+    letter-spacing: -0.224px;
+  }
+
+  .ql-reference-blue-tab:hover,
+  .ql-reference-blue-tab:focus-visible,
+  .ql-reference-blue-tab-active:hover,
+  .ql-reference-blue-tab-active:focus-visible {
+    border-color: transparent;
+    background: var(--ql-color-primary);
+    color: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 8px 16px rgba(15, 82, 186, 0.16);
+  }
+
+  .ql-reference-blue-tab-active {
+    border-color: transparent;
+    background: var(--ql-color-primary);
+    color: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 8px 16px rgba(15, 82, 186, 0.16);
+  }
+
+  .ql-table-hover-row > td,
+  .ql-table-hover-row > th {
+    transition:
+      background-color 160ms ease,
+      color 160ms ease;
+  }
+
+  .ql-table-hover-row:hover > td,
+  .ql-table-hover-row:hover > th {
+    background: var(--ql-color-bg-muted);
+  }
+
+  .ql-table-hover-row-clickable:hover > td,
+  .ql-table-hover-row-clickable:focus-visible > td {
+    background: rgba(15, 82, 186, 0.08);
+  }
+
+  .ql-table-hover-row-clickable:focus-visible {
+    outline: none;
+  }
+
+  .ql-list-item {
+    @apply ql-flex ql-w-full ql-cursor-pointer ql-items-start ql-justify-between ql-gap-3 ql-border ql-border-transparent ql-px-3 ql-py-3 ql-text-left ql-transition hover:ql-bg-white;
+    border-radius: var(--ql-radius-lg);
+    background: var(--ql-color-bg-surface);
+    box-shadow: none;
+  }
+
+  .ql-list-item-active {
+    box-shadow: var(--ql-shadow-xs);
+    border-color: var(--ql-color-border-soft);
+    background: var(--ql-panel);
+  }
+
+  .ql-section-panel {
+    @apply ql-border ql-p-4 lg:ql-p-5;
+    border-radius: var(--ql-radius-lg);
+    border-color: transparent;
+    background: var(--ql-color-bg-surface);
+    box-shadow: var(--ql-shadow-xs);
+  }
+
+  .ql-category-pill {
+    @apply ql-inline-flex ql-min-h-[38px] ql-items-center ql-justify-center ql-border ql-px-3 ql-py-2 ql-text-xs ql-font-semibold ql-transition;
+    border-radius: 980px;
+    border-color: transparent;
+    background: var(--ql-color-bg-muted-strong);
+    color: var(--ql-color-text-muted);
+    letter-spacing: -0.12px;
+  }
+
+  .ql-category-pill-active {
+    border-color: transparent;
+    background: rgba(15, 82, 186, 0.08);
+    color: var(--ql-color-primary);
+    box-shadow: none;
+  }
+
+  .ql-editor-tab {
+    @apply ql-flex ql-min-w-0 ql-max-w-[220px] ql-items-center ql-gap-2 ql-border ql-px-3 ql-py-2 ql-text-left ql-text-xs ql-font-medium ql-transition;
+    border-radius: var(--ql-radius-lg);
+    border-color: transparent;
+    background: var(--ql-color-bg-muted-strong);
+    color: var(--ql-color-text-muted);
+    letter-spacing: -0.12px;
+  }
+
+  .ql-editor-tab-active {
+    border-color: transparent;
+    background: var(--ql-panel);
+    color: var(--ql-color-primary);
+    box-shadow: var(--ql-shadow-xs);
+  }
+
+  .ql-code-surface {
+    @apply ql-border;
+    border-radius: var(--ql-radius-lg);
+    border-color: var(--ql-color-border-soft);
+    background: linear-gradient(
+      180deg,
+      var(--ql-panel) 0%,
+      var(--ql-color-bg-muted) 100%
+    );
+    box-shadow: var(--ql-shadow-xs);
+  }
+
+  .ql-code-toolbar {
+    @apply ql-flex ql-items-center ql-justify-between ql-border-b ql-px-4 ql-py-3;
+    border-color: var(--ql-color-border-soft);
+  }
+
+  .ql-code-dot {
+    @apply ql-h-2.5 ql-w-2.5 ql-rounded-full;
+  }
+
+  .ql-rounded-2xl.ql-border.ql-border-slate-200.ql-bg-white,
+  .ql-rounded-2xl.ql-border.ql-border-slate-200.ql-bg-white.ql-shadow-sm,
+  .ql-rounded-2xl.ql-border.ql-border-slate-200,
+  .ql-rounded-3xl.ql-border.ql-border-slate-200.ql-bg-white,
+  .ql-rounded-3xl.ql-border.ql-border-slate-200.ql-bg-white.ql-shadow-sm {
+    border-color: var(--ql-color-border-soft) !important;
+    background: var(--ql-color-bg-surface) !important;
+    box-shadow: var(--ql-shadow-xs) !important;
+    border-radius: 12px !important;
+  }
+
+  .ql-rounded-xl.ql-border.ql-border-slate-200.ql-bg-slate-50,
+  .ql-rounded-xl.ql-border.ql-border-slate-200.ql-bg-white,
+  .ql-rounded-lg.ql-border.ql-border-slate-200.ql-bg-slate-50,
+  .ql-rounded-lg.ql-border.ql-border-slate-200.ql-bg-white {
+    border-color: var(--ql-color-border-soft) !important;
+    background: var(--ql-color-bg-muted) !important;
+    border-radius: var(--ql-radius-field) !important;
+  }
+
+  .ql-bg-slate-50,
+  .ql-bg-slate-50\/60,
+  .ql-bg-slate-50\/70,
+  .ql-bg-slate-50\/90 {
+    background-color: var(--ql-color-bg-muted) !important;
+  }
+
+  .ql-border-slate-100 {
+    border-color: var(--ql-color-border-soft) !important;
+  }
+
+  .ql-shadow-sm {
+    box-shadow: var(--ql-shadow-soft) !important;
+  }
+
+  .ql-shadow-lg,
+  .ql-shadow-xl,
+  .ql-shadow-2xl {
+    box-shadow: var(--ql-shadow-card) !important;
+  }
+
+  thead.ql-bg-slate-50,
+  .ql-border-b.ql-border-slate-100.ql-bg-slate-50 {
+    background-color: var(--ql-color-bg-muted-strong) !important;
+  }
+
+  .ql-bg-indigo-50 {
+    background-color: rgba(0, 113, 227, 0.08) !important;
+  }
+
+  .ql-bg-indigo-100 {
+    background-color: rgba(0, 113, 227, 0.12) !important;
+  }
+
+  .ql-border-indigo-100,
+  .ql-border-indigo-200,
+  .ql-border-indigo-300 {
+    border-color: rgba(0, 113, 227, 0.22) !important;
+  }
+
+  .ql-ring-indigo-100,
+  .ql-ring-indigo-200 {
+    --tw-ring-color: rgba(0, 113, 227, 0.18) !important;
+  }
+
+  .ql-text-indigo-300,
+  .ql-text-indigo-400,
+  .ql-text-indigo-500 {
+    color: var(--ql-accent-link) !important;
+  }
+
+  .ql-text-indigo-600,
+  .ql-text-indigo-700 {
+    color: var(--ql-accent) !important;
+  }
+
+  input.ql-border-slate-200.ql-bg-slate-50,
+  input.ql-border-slate-200.ql-bg-slate-100,
+  input.ql-border-slate-200.ql-bg-white,
+  button.ql-border.ql-border-slate-200.ql-bg-white,
+  select.ql-border-slate-200.ql-bg-slate-50,
+  select.ql-border-slate-200.ql-bg-slate-100,
+  select.ql-border-slate-200.ql-bg-white,
+  textarea.ql-border-slate-200.ql-bg-slate-50,
+  textarea.ql-border-slate-200.ql-bg-slate-100,
+  textarea.ql-border-slate-200.ql-bg-white {
+    border-color: var(--ql-color-border-strong) !important;
+    background: var(--ql-field-bg) !important;
+    color: var(--ql-ink) !important;
+    border-radius: var(--ql-radius-field);
+  }
+
+  button.ql-border.ql-border-slate-200.ql-bg-white {
+    background: var(--ql-paper-soft) !important;
+    color: var(--ql-ink) !important;
+    border-radius: var(--ql-radius-button);
+    letter-spacing: -0.224px;
+  }
+
+  select.ql-border-slate-200.ql-bg-slate-50,
+  select.ql-border-slate-200.ql-bg-slate-100,
+  select.ql-border-slate-200.ql-bg-white {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='M3.5 5.5L7 9L10.5 5.5' stroke='%236E6E73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 14px center !important;
+    background-size: 14px 14px !important;
+    padding-right: 42px !important;
+  }
+
+  input.ql-border-slate-200.ql-bg-slate-50:focus,
+  input.ql-border-slate-200.ql-bg-slate-100:focus,
+  input.ql-border-slate-200.ql-bg-white:focus,
+  button.ql-border.ql-border-slate-200.ql-bg-white:focus-visible,
+  select.ql-border-slate-200.ql-bg-slate-50:focus,
+  select.ql-border-slate-200.ql-bg-slate-100:focus,
+  select.ql-border-slate-200.ql-bg-white:focus,
+  textarea.ql-border-slate-200.ql-bg-slate-50:focus,
+  textarea.ql-border-slate-200.ql-bg-slate-100:focus,
+  textarea.ql-border-slate-200.ql-bg-white:focus {
+    border-color: var(--ql-color-primary) !important;
+    box-shadow: 0 0 0 4px var(--ql-color-primary-ring);
+    outline: none;
+    background: var(--ql-panel) !important;
+  }
+
+  label.ql-border-slate-200:focus-within {
+    border-color: var(--ql-color-primary) !important;
+    background: var(--ql-panel) !important;
+    box-shadow:
+      0 0 0 4px var(--ql-color-primary-ring),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+
+  .ql-ui-card {
+    @apply ql-border;
+    border-radius: var(--ql-radius-lg);
+    border-color: transparent;
+    background: var(--ql-color-bg-surface);
+    box-shadow: var(--ql-shadow-xs);
+  }
+
+  .ql-ui-card--muted {
+    background: var(--ql-color-bg-glass-strong);
+    box-shadow: var(--ql-shadow-xs);
+  }
+
+  .ql-ui-card__header {
+    @apply ql-flex ql-flex-col ql-gap-3 ql-border-b ql-px-5 ql-py-[18px] sm:ql-flex-row sm:ql-items-start sm:ql-justify-between;
+    border-color: var(--ql-color-border-soft);
+  }
+
+  .ql-ui-card__body {
+    @apply ql-px-5 ql-pb-5 ql-pt-[18px];
+  }
+
+  .ql-ui-card__footer {
+    @apply ql-flex ql-flex-wrap ql-items-center ql-justify-between ql-gap-3 ql-border-t ql-px-5 ql-py-4;
+    border-color: var(--ql-color-border-soft);
+  }
+
+  .ql-ui-eyebrow {
+    @apply ql-text-[11px] ql-font-semibold ql-uppercase ql-tracking-[0.18em] ql-text-slate-400;
+  }
+
+  .ql-ui-title {
+    @apply ql-font-display ql-text-[20px] ql-font-semibold ql-leading-[1.15] ql-tracking-[-0.03em] ql-text-ink;
+  }
+
+  .ql-ui-description {
+    @apply ql-text-sm ql-leading-6 ql-text-slate-500;
+  }
+
+  .ql-ui-control {
+    @apply ql-w-full ql-border ql-px-4 ql-text-sm ql-text-slate-700 ql-outline-none ql-transition placeholder:ql-text-slate-400 disabled:ql-cursor-not-allowed disabled:ql-bg-slate-100 disabled:ql-text-slate-400;
+    min-height: var(--ql-control-height-lg);
+    border-radius: var(--ql-radius-field);
+    border-color: var(--ql-color-border-strong);
+    background: var(--ql-panel);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.03);
+  }
+
+  .ql-ui-control:hover {
+    border-color: rgba(148, 163, 184, 0.54);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
+  }
+
+  .ql-ui-control:focus {
+    border-color: var(--ql-color-primary);
+    background: var(--ql-panel);
+    box-shadow:
+      inset 0 0 0 1px rgba(15, 23, 42, 0.05),
+      0 0 0 4px var(--ql-color-primary-ring);
+  }
+
+  .ql-ui-control--sm {
+    min-height: var(--ql-control-height-sm);
+    border-radius: var(--ql-radius-field);
+    @apply ql-px-3;
+  }
+
+  .ql-ui-control--md {
+    min-height: var(--ql-control-height-md);
+    border-radius: var(--ql-radius-field);
+  }
+
+  .ql-ui-control--invalid {
+    border-color: rgba(194, 65, 12, 0.35);
+    box-shadow: 0 0 0 4px rgba(194, 65, 12, 0.08);
+  }
+
+  .ql-ui-select {
+    appearance: none;
+    background-image: none;
+  }
+
+  .ql-ui-button {
+    @apply ql-inline-flex ql-items-center ql-justify-center ql-gap-2 ql-whitespace-nowrap ql-border ql-font-semibold ql-transition disabled:ql-cursor-not-allowed disabled:ql-opacity-50;
+    min-height: var(--ql-control-height-lg);
+    padding: 0 16px;
+    border-radius: var(--ql-radius-button);
+    font-size: var(--ql-font-size-sm);
+  }
+
+  .ql-ui-button--sm {
+    min-height: var(--ql-control-height-sm);
+    padding: 0 12px;
+    border-radius: var(--ql-radius-button);
+  }
+
+  .ql-ui-button--md {
+    min-height: var(--ql-control-height-md);
+    border-radius: var(--ql-radius-button);
+  }
+
+  .ql-ui-button--block {
+    @apply ql-flex ql-w-full;
+  }
+
+  .ql-ui-button--icon {
+    width: var(--ql-control-height-lg);
+    padding: 0;
+  }
+
+  .ql-ui-button--primary {
+    border-color: var(--ql-color-primary);
+    background: var(--ql-color-primary);
+    color: white;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  }
+
+  .ql-ui-button--primary:hover,
+  .ql-ui-button--primary:focus-visible {
+    border-color: var(--ql-color-primary-strong);
+    background: var(--ql-color-primary-strong);
+  }
+
+  .ql-ui-button--secondary {
+    border-color: var(--ql-color-border-strong);
+    background: var(--ql-panel);
+    color: var(--ql-color-text-body);
+    box-shadow: var(--ql-shadow-xs);
+  }
+
+  .ql-ui-button--secondary:hover,
+  .ql-ui-button--secondary:focus-visible {
+    border-color: rgba(203, 213, 225, 0.96);
+    background: var(--ql-color-bg-muted-strong);
+    color: var(--ql-color-text-strong);
+  }
+
+  .ql-ui-button--ghost {
+    border-color: transparent;
+    background: transparent;
+    color: var(--ql-color-text-muted);
+    box-shadow: none;
+  }
+
+  .ql-ui-button--ghost:hover,
+  .ql-ui-button--ghost:focus-visible {
+    border-color: transparent;
+    background: var(--ql-color-bg-muted-strong);
+    color: var(--ql-color-text-strong);
+  }
+
+  .ql-ui-button--danger {
+    border-color: transparent;
+    background: var(--ql-color-danger-soft);
+    color: var(--ql-color-danger);
+  }
+
+  .ql-ui-button--danger:hover,
+  .ql-ui-button--danger:focus-visible {
+    border-color: transparent;
+    background: rgba(239, 68, 68, 0.16);
+  }
+
+  .ql-ui-badge {
+    @apply ql-inline-flex ql-items-center ql-gap-1 ql-rounded-full ql-px-2.5 ql-py-1 ql-text-[11px] ql-font-semibold;
+  }
+
+  .ql-ui-badge--neutral {
+    @apply ql-bg-slate-100 ql-text-slate-600;
+  }
+
+  .ql-ui-badge--info {
+    color: var(--ql-color-info);
+    background: var(--ql-color-info-soft);
+  }
+
+  .ql-ui-badge--success {
+    color: var(--ql-color-success);
+    background: var(--ql-color-success-soft);
+  }
+
+  .ql-ui-badge--warning {
+    color: var(--ql-color-warning);
+    background: var(--ql-color-warning-soft);
+  }
+
+  .ql-ui-badge--danger {
+    color: var(--ql-color-danger);
+    background: var(--ql-color-danger-soft);
+  }
+
+  .ql-ui-badge--accent {
+    color: var(--ql-color-primary-strong);
+    background: var(--ql-color-primary-soft);
+  }
+
+  .ql-ui-alert {
+    @apply ql-flex ql-items-start ql-gap-3 ql-border ql-px-4 ql-py-3;
+    border-radius: var(--ql-radius-md);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.03);
+  }
+
+  .ql-ui-alert--info {
+    color: var(--ql-color-info);
+    background: rgba(15, 110, 205, 0.06);
+    border-color: rgba(15, 110, 205, 0.14);
+  }
+
+  .ql-ui-alert--success {
+    color: var(--ql-color-success);
+    background: rgba(15, 159, 110, 0.06);
+    border-color: rgba(15, 159, 110, 0.14);
+  }
+
+  .ql-ui-alert--warning {
+    color: var(--ql-color-warning);
+    background: rgba(200, 123, 6, 0.08);
+    border-color: rgba(200, 123, 6, 0.16);
+  }
+
+  .ql-ui-alert--danger {
+    color: var(--ql-color-danger);
+    background: rgba(194, 65, 12, 0.08);
+    border-color: rgba(194, 65, 12, 0.16);
+  }
+
+  .ql-ui-empty {
+    @apply ql-flex ql-min-h-[220px] ql-flex-col ql-items-center ql-justify-center ql-gap-4 ql-border-2 ql-border-dashed ql-p-8 ql-text-center;
+    border-radius: var(--ql-radius-lg);
+    border-color: var(--ql-color-border-strong);
+    background: var(--ql-color-bg-muted);
+  }
+
+  .ql-ui-empty__icon {
+    @apply ql-flex ql-h-12 ql-w-12 ql-items-center ql-justify-center ql-rounded-2xl;
+    color: var(--ql-color-primary-strong);
+    background: var(--ql-color-primary-soft);
+  }
+
+  .ql-ui-empty__title {
+    @apply ql-text-base ql-font-semibold ql-text-slate-800;
+  }
+
+  .ql-ui-empty__description {
+    @apply ql-max-w-md ql-text-sm ql-leading-6 ql-text-slate-500;
+  }
+
+  .ql-ui-skeleton {
+    @apply ql-relative ql-overflow-hidden ql-bg-slate-100;
+    border-radius: var(--ql-radius-sm);
+  }
+
+  .ql-ui-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.7),
+      transparent
+    );
+    animation: ql-skeleton 1.4s infinite;
+  }
+
+  .ql-ui-tabs {
+    @apply ql-inline-flex ql-flex-wrap ql-items-center ql-gap-1 ql-border-b ql-pb-0.5;
+    border-color: var(--ql-color-border-strong);
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  .ql-ui-tab {
+    @apply ql-inline-flex ql-items-center ql-gap-2 ql-border-b-2 ql-border-transparent ql-px-3 ql-py-2 ql-text-sm ql-font-medium ql-text-slate-500 ql-transition;
+    border-radius: 0;
+    margin-bottom: -1px;
+  }
+
+  .ql-ui-tab:hover,
+  .ql-ui-tab:focus-visible {
+    background: transparent;
+    color: var(--ql-color-text-strong);
+  }
+
+  .ql-ui-tab--active {
+    background: transparent;
+    border-bottom-color: var(--ql-color-text-strong);
+    color: var(--ql-color-text-strong);
+    box-shadow: none;
+  }
+
+  .ql-ui-drawer {
+    @apply ql-fixed ql-inset-0 ql-z-[90] ql-flex ql-items-stretch ql-justify-end;
+    background: var(--ql-overlay);
+    backdrop-filter: blur(8px);
+  }
+
+  .ql-ui-drawer__panel {
+    @apply ql-flex ql-h-full ql-w-full ql-max-w-[760px] ql-flex-col ql-overflow-hidden ql-border-l;
+    border-color: var(--ql-color-border-strong);
+    background: var(--ql-panel);
+    box-shadow: none;
+  }
+
+  .ql-ui-drawer__header {
+    @apply ql-flex ql-items-start ql-justify-between ql-gap-4 ql-border-b ql-px-5 ql-py-4;
+    border-color: var(--ql-color-border-soft);
+    background: var(--ql-panel);
+  }
+
+  .ql-ui-drawer__header-main {
+    display: grid;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .ql-ui-drawer__header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .ql-ui-drawer__close {
+    flex-shrink: 0;
+  }
+
+  .ql-ui-drawer__body {
+    @apply ql-min-h-0 ql-flex-1 ql-overflow-y-auto ql-p-5;
+    background: var(--ql-panel);
+  }
+
+  .ql-ui-drawer--clear {
+    background: var(--ql-overlay-clear);
+    backdrop-filter: blur(6px);
+  }
+
+  .ql-ui-drawer--clear .ql-ui-drawer__panel {
+    box-shadow: none;
+  }
+
+  .ql-ui-table {
+    @apply ql-w-full ql-border-separate ql-border-spacing-0;
+  }
+
+  .ql-ui-table thead th {
+    @apply ql-sticky ql-top-0 ql-bg-white/95 ql-px-4 ql-py-3 ql-text-left ql-text-xs ql-font-semibold ql-uppercase ql-tracking-[0.16em] ql-text-slate-400;
+    backdrop-filter: blur(10px);
+  }
+
+  .ql-ui-table tbody td {
+    @apply ql-border-t ql-px-4 ql-py-3 ql-text-sm ql-text-slate-600;
+    border-color: rgba(15, 23, 42, 0.06);
+  }
+}
+
+@keyframes ql-skeleton {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 1023px) {
+  .ql-topbar__inner {
+    width: 100%;
+    gap: 12px;
+    padding: 0 12px;
+  }
+
+  .ql-main-stage--shell {
+    gap: 10px;
+  }
+
+  .ql-shell-sidebar {
+    width: 72px;
+    height: calc(100vh - 56px);
+    min-height: calc(100vh - 90px);
+    max-height: calc(100vh - 56px);
+    padding: 12px 8px;
+    margin-left: 0;
+    border-radius: 4px;
+  }
+
+  .ql-shell-sidebar__section-label,
+  .ql-shell-sidebar__children,
+  .ql-shell-sidebar__item-label,
+  .ql-shell-sidebar__item-arrow {
+    display: none;
+  }
+
+  .ql-shell-sidebar__item {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .ql-shell-sidebar__footer {
+    justify-content: center;
+    padding: 12px 0 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .ql-main-stage {
+    width: 100%;
+    padding: 0;
+  }
+
+  .ql-main-stage--shell {
+    gap: 8px;
+  }
+
+  .ql-shell-sidebar {
+    width: 56px;
+    height: calc(100vh - 56px);
+    min-height: calc(100vh - 80px);
+    max-height: calc(100vh - 56px);
+    margin-left: 0;
+    padding: 6px 4px;
+    border-radius: 4px;
+  }
+
+  .ql-shell-sidebar--collapsed .ql-shell-sidebar__item {
+    width: 40px;
+  }
+
+  .ql-shell-sidebar__toggle {
+    width: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 4px;
+  }
+
+  .ql-shell-sidebar__footer {
+    padding-top: 12px;
+  }
+
+  .ql-topbar__status {
+    display: none;
+  }
+
+  .ql-topbar__brand-copy {
+    font-size: 20px;
+    letter-spacing: -0.03em;
+  }
+
+  .ql-page-shell {
+    margin-top: 0;
+  }
+
+  .ql-page-shell--with-sidebar {
+    padding: 12px;
+  }
+}
+
+.ql-page-shell--minimal {
+  --ql-color-primary: #0f172a;
+  --ql-color-primary-strong: #1e293b;
+  --ql-color-primary-soft: #f1f5f9;
+  --ql-color-primary-ring: rgba(15, 23, 42, 0.08);
+  --ql-color-bg-surface: #ffffff;
+  --ql-color-bg-surface-strong: #ffffff;
+  --ql-color-bg-muted: #f7f9fb;
+  --ql-color-bg-muted-strong: #eff1f3;
+  --ql-color-border-soft: #e2e8f0;
+  --ql-color-border-strong: #cbd5e1;
+  --ql-radius-xs: 4px;
+  --ql-radius-sm: 4px;
+  --ql-radius-md: 4px;
+  --ql-radius-lg: 4px;
+  --ql-radius-card: 4px;
+  --ql-radius-field: 4px;
+  --ql-radius-button: 4px;
+  --ql-radius-pill: 4px;
+  --ql-shadow-xs: none;
+  --ql-shadow-sm: none;
+  --ql-shadow-md: none;
+  --ql-shadow-lg: none;
+  --ql-shadow-card: none;
+  --ql-shadow-soft: none;
+  color: var(--ql-color-text-strong);
+  font-family:
+    "Hanken Grotesk", "SF Pro Text", "-apple-system", BlinkMacSystemFont,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+html[data-theme="dark"] .ql-page-shell--minimal {
+  --ql-color-primary: #60a5fa;
+  --ql-color-primary-strong: #93c5fd;
+  --ql-color-primary-soft: rgba(96, 165, 250, 0.16);
+  --ql-color-primary-ring: rgba(96, 165, 250, 0.22);
+  --ql-color-bg-surface: rgba(17, 24, 39, 0.96);
+  --ql-color-bg-surface-strong: #111827;
+  --ql-color-bg-muted: #151f30;
+  --ql-color-bg-muted-strong: #1e293b;
+  --ql-color-border-soft: rgba(71, 85, 105, 0.38);
+  --ql-color-border-strong: rgba(100, 116, 139, 0.5);
+}
+
+.ql-app-shell:has(.ql-page-shell--minimal) {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.64)),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    #f7f9fb;
+  background-size: auto, 24px 24px, 24px 24px, auto;
+}
+
+html[data-theme="dark"] .ql-app-shell:has(.ql-page-shell--minimal) {
+  background:
+    linear-gradient(rgba(9, 15, 29, 0.82), rgba(9, 15, 29, 0.82)),
+    linear-gradient(90deg, rgba(100, 116, 139, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(100, 116, 139, 0.1) 1px, transparent 1px),
+    var(--ql-color-bg-app);
+  background-size: auto, 24px 24px, 24px 24px, auto;
+}
+
+.ql-app-shell:has(.ql-page-shell--minimal)::before,
+.ql-app-shell:has(.ql-page-shell--minimal)::after {
+  display: none;
+}
+
+.ql-page-shell--minimal .ql-page {
+  gap: 16px;
+}
+
+.ql-page-shell--minimal .ql-page-title {
+  font-family:
+    "Hanken Grotesk", "SF Pro Display", "SF Pro Text", "-apple-system",
+    BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+}
+
+.ql-page-shell--minimal .ql-page-description,
+.ql-page-shell--minimal .ql-ui-description {
+  color: var(--ql-color-text-muted);
+  line-height: 1.6;
+}
+
+.ql-page-shell--minimal .ql-ui-card,
+.ql-page-shell--minimal .ql-shell-card,
+.ql-page-shell--minimal .ql-section-panel,
+.ql-page-shell--minimal .ql-subtle-panel,
+.ql-page-shell--minimal .workspace-editor-shell,
+.ql-page-shell--minimal .comparison-panel,
+.ql-page-shell--minimal .comparison-chart-shell,
+.ql-page-shell--minimal .comparison-table-panel,
+.ql-page-shell--minimal .backtest-page__metric-card,
+.ql-page-shell--minimal .backtest-page__panel,
+.ql-page-shell--minimal .backtest-page__sidebar,
+.ql-page-shell--minimal .backtest-page__empty,
+.ql-page-shell--minimal .backtest-page__recent-card,
+.ql-page-shell--minimal .backtest-page__notice,
+.ql-page-shell--minimal .logs-page__notes-layout,
+.ql-page-shell--minimal .strategy-research-page__overview-card,
+.ql-page-shell--minimal .strategy-research-page__overview-subpanel,
+.ql-page-shell--minimal .strategy-research-page__tab-shell {
+  border: 1px solid var(--ql-color-border-soft) !important;
+  border-radius: 4px !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card--muted,
+.ql-page-shell--minimal .ql-bg-slate-50,
+.ql-page-shell--minimal .ql-bg-slate-50\/50,
+.ql-page-shell--minimal .ql-bg-slate-50\/60,
+.ql-page-shell--minimal .ql-bg-slate-50\/70,
+.ql-page-shell--minimal .ql-bg-slate-50\/80,
+.ql-page-shell--minimal .ql-bg-slate-50\/90,
+.ql-page-shell--minimal .ql-bg-slate-100,
+.ql-page-shell--minimal .comparison-run-card,
+.ql-page-shell--minimal .comparison-table-panel__hint,
+.ql-page-shell--minimal .logs-page__note-pane-label {
+  background: var(--ql-color-bg-muted) !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card__header,
+.ql-page-shell--minimal .ql-ui-card__footer,
+.ql-page-shell--minimal .ql-border-slate-100,
+.ql-page-shell--minimal .ql-border-slate-200,
+.ql-page-shell--minimal .ql-border-b,
+.ql-page-shell--minimal .ql-border-t,
+.ql-page-shell--minimal .ql-border-l,
+.ql-page-shell--minimal .ql-border-r {
+  border-color: var(--ql-color-border-soft) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-control,
+.ql-page-shell--minimal .ql-soft-field,
+.ql-page-shell--minimal .comparison-toolbar__search,
+.ql-page-shell--minimal input.ql-border-slate-200,
+.ql-page-shell--minimal select.ql-border-slate-200,
+.ql-page-shell--minimal textarea.ql-border-slate-200,
+.ql-page-shell--minimal .workspace-config-panel__date-range,
+.ql-page-shell--minimal .workspace-config-panel__instrument-input {
+  min-height: 40px;
+  border-color: var(--ql-color-border-strong) !important;
+  border-radius: 4px !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .ql-ui-control:focus,
+.ql-page-shell--minimal .ql-soft-field:focus,
+.ql-page-shell--minimal .comparison-toolbar__search:focus-within,
+.ql-page-shell--minimal input.ql-border-slate-200:focus,
+.ql-page-shell--minimal select.ql-border-slate-200:focus,
+.ql-page-shell--minimal textarea.ql-border-slate-200:focus,
+.ql-page-shell--minimal .workspace-config-panel__instrument-input:focus-within {
+  border-color: var(--ql-color-primary) !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+  box-shadow: 0 0 0 3px var(--ql-color-primary-ring) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-button,
+.ql-page-shell--minimal .ql-soft-button,
+.ql-page-shell--minimal .ql-primary-button,
+.ql-page-shell--minimal .ql-reference-blue-button,
+.ql-page-shell--minimal .ql-reference-blue-hover-button,
+.ql-page-shell--minimal button.ql-border.ql-border-slate-200.ql-bg-white {
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .ql-ui-button--primary,
+.ql-page-shell--minimal .ql-primary-button,
+.ql-page-shell--minimal .ql-reference-blue-button {
+  border-color: var(--ql-color-primary) !important;
+  background: var(--ql-color-primary) !important;
+  color: #ffffff !important;
+}
+
+.ql-page-shell--minimal .ql-ui-button--primary:hover,
+.ql-page-shell--minimal .ql-ui-button--primary:focus-visible,
+.ql-page-shell--minimal .ql-primary-button:hover,
+.ql-page-shell--minimal .ql-primary-button:focus-visible,
+.ql-page-shell--minimal .ql-reference-blue-button:hover,
+.ql-page-shell--minimal .ql-reference-blue-button:focus-visible {
+  border-color: var(--ql-color-primary-strong) !important;
+  background: var(--ql-color-primary-strong) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-button--secondary,
+.ql-page-shell--minimal .ql-soft-button,
+.ql-page-shell--minimal .ql-reference-blue-hover-button,
+.ql-page-shell--minimal button.ql-border.ql-border-slate-200.ql-bg-white {
+  border-color: var(--ql-color-border-strong) !important;
+  background: var(--ql-color-bg-muted-strong) !important;
+  color: var(--ql-color-text-strong) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-button--ghost:hover,
+.ql-page-shell--minimal .ql-ui-button--ghost:focus-visible,
+.ql-page-shell--minimal .ql-soft-button:hover,
+.ql-page-shell--minimal .ql-soft-button:focus-visible,
+.ql-page-shell--minimal .ql-reference-blue-hover-button:hover,
+.ql-page-shell--minimal .ql-reference-blue-hover-button:focus-visible {
+  border-color: var(--ql-color-border-strong) !important;
+  background: var(--ql-color-bg-muted-strong) !important;
+  color: var(--ql-color-text-strong) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-badge,
+.ql-page-shell--minimal .ql-soft-chip,
+.ql-page-shell--minimal .comparison-run-card__return,
+.ql-page-shell--minimal .ql-rounded-full {
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .ql-ui-badge--accent,
+.ql-page-shell--minimal .ql-bg-indigo-50,
+.ql-page-shell--minimal .ql-bg-indigo-100,
+.ql-page-shell--minimal .comparison-run-card--selected,
+.ql-page-shell--minimal .ql-reference-blue-tab-active {
+  background: var(--ql-color-primary-soft) !important;
+  color: var(--ql-color-primary) !important;
+  border-color: var(--ql-color-border-strong) !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .ql-text-indigo-300,
+.ql-page-shell--minimal .ql-text-indigo-400,
+.ql-page-shell--minimal .ql-text-indigo-500,
+.ql-page-shell--minimal .ql-text-indigo-600,
+.ql-page-shell--minimal .ql-text-indigo-700,
+.ql-page-shell--minimal .ql-text-accent {
+  color: var(--ql-color-primary) !important;
+}
+
+.ql-page-shell--minimal .ql-border-indigo-100,
+.ql-page-shell--minimal .ql-border-indigo-200,
+.ql-page-shell--minimal .ql-border-indigo-300,
+.ql-page-shell--minimal .ql-ring-indigo-100,
+.ql-page-shell--minimal .ql-ring-indigo-200 {
+  border-color: var(--ql-color-border-strong) !important;
+  --tw-ring-color: var(--ql-color-primary-ring) !important;
+}
+
+.ql-page-shell--minimal .ql-rounded-md,
+.ql-page-shell--minimal .ql-rounded-lg,
+.ql-page-shell--minimal .ql-rounded-xl,
+.ql-page-shell--minimal .ql-rounded-2xl,
+.ql-page-shell--minimal .ql-rounded-3xl,
+.ql-page-shell--minimal .ql-rounded-\[12px\],
+.ql-page-shell--minimal .ql-rounded-\[22px\] {
+  border-radius: 4px !important;
+}
+
+.ql-page-shell--minimal .ql-shadow-sm,
+.ql-page-shell--minimal .ql-shadow-lg,
+.ql-page-shell--minimal .ql-shadow-xl,
+.ql-page-shell--minimal .ql-shadow-2xl,
+.ql-page-shell--minimal [class*="ql-shadow-"] {
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .comparison-page__status,
+.ql-page-shell--minimal .comparison-run-menu,
+.ql-page-shell--minimal .backtest-page__menu-preview,
+.ql-page-shell--minimal .backtest-page__sidebar-section,
+.ql-page-shell--minimal .logs-page__tabs,
+.ql-page-shell--minimal .logs-page__floating-action,
+.ql-page-shell--minimal .strategy-research-page__select-tooltip,
+.ql-page-shell--minimal .ql-ui-drawer__panel {
+  border: 1px solid var(--ql-color-border-soft) !important;
+  border-radius: 4px !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.ql-page-shell--minimal .backtest-page__metric-card.ql-border.ql-bg-white,
+.ql-page-shell--minimal .backtest-page__panel.ql-border.ql-bg-white,
+.ql-page-shell--minimal .backtest-page__sidebar.ql-border.ql-bg-white,
+.ql-page-shell--minimal .backtest-page__empty.ql-border.ql-bg-white,
+.ql-page-shell--minimal .backtest-page__recent-card.ql-border.ql-bg-white {
+  border-color: var(--ql-color-border-soft) !important;
+  border-radius: 4px !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .comparison-page__status-dot {
+  background: var(--ql-color-primary) !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .comparison-run-card:hover,
+.ql-page-shell--minimal .comparison-run-card--selected {
+  border-color: var(--ql-color-border-strong) !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+  transform: none !important;
+}
+
+.ql-page-shell--minimal .strategy-research-page__tab-shell .ql-reference-blue-tab {
+  border-radius: 4px !important;
+  background: var(--ql-color-bg-muted) !important;
+  color: var(--ql-color-text-muted) !important;
+}
+
+.ql-page-shell--minimal .strategy-research-page__tab-shell .ql-reference-blue-tab-active,
+.ql-page-shell--minimal .strategy-research-page__tab-shell .ql-reference-blue-tab:hover,
+.ql-page-shell--minimal .strategy-research-page__tab-shell .ql-reference-blue-tab:focus-visible {
+  background: var(--ql-color-primary) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .logs-page__tab {
+  border: 1px solid transparent;
+  border-radius: 4px !important;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.ql-page-shell--minimal .logs-page__tab:hover,
+.ql-page-shell--minimal .logs-page__tab--active {
+  border-color: var(--ql-color-border-strong);
+  background: var(--ql-color-primary-soft) !important;
+  color: var(--ql-color-primary) !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .logs-page__notes-resizer {
+  background: var(--ql-color-bg-muted) !important;
+}
+
+.ql-page-shell--minimal .logs-page__notes-resizer:hover {
+  background: var(--ql-color-bg-muted-strong) !important;
+}
+
+.ql-page-shell--minimal .logs-page__floating-action:hover,
+.ql-page-shell--minimal .logs-page__floating-action:focus-visible {
+  transform: none !important;
+  border-color: var(--ql-color-primary) !important;
+  background: var(--ql-color-primary) !important;
+  color: #ffffff !important;
+}
+
+.ql-page-shell--minimal .ql-ui-empty {
+  border-color: var(--ql-color-border-strong) !important;
+  border-radius: 4px !important;
+  background: var(--ql-color-bg-muted) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-empty__icon {
+  border-radius: 4px !important;
+  background: var(--ql-color-primary-soft) !important;
+  color: var(--ql-color-primary) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-drawer,
+.ql-page-shell--minimal .ql-ui-drawer--clear {
+  background: rgba(247, 249, 251, 0.56) !important;
+  backdrop-filter: blur(8px);
+}
+
+.ql-page-shell--minimal .ql-ui-drawer__header,
+.ql-page-shell--minimal .ql-ui-drawer__body {
+  border-color: var(--ql-color-border-soft) !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-table thead th {
+  background: var(--ql-color-bg-muted) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-table tbody td {
+  border-color: var(--ql-color-border-soft) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card .ql-ui-card,
+.ql-page-shell--minimal .ql-ui-card .ql-shell-card,
+.ql-page-shell--minimal .ql-ui-card .ql-section-panel,
+.ql-page-shell--minimal .ql-ui-card .ql-subtle-panel,
+.ql-page-shell--minimal .ql-shell-card .ql-ui-card,
+.ql-page-shell--minimal .ql-shell-card .ql-section-panel,
+.ql-page-shell--minimal .ql-shell-card .ql-subtle-panel,
+.ql-page-shell--minimal .ql-section-panel .ql-ui-card,
+.ql-page-shell--minimal .ql-section-panel .ql-section-panel,
+.ql-page-shell--minimal .ql-section-panel .ql-subtle-panel,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-ui-card,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-shell-card,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-section-panel,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-subtle-panel,
+.ql-page-shell--minimal .ql-ui-drawer__body .workspace-config-panel__drawer-section,
+.ql-page-shell--minimal .ql-ui-drawer__body .strategy-research-page__overview-subpanel,
+.ql-page-shell--minimal .ql-ui-drawer__body .data-network-config-panel {
+  border: 0 !important;
+  border-top: 1px solid var(--ql-color-border-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card .ql-ui-card:first-child,
+.ql-page-shell--minimal .ql-ui-card .ql-shell-card:first-child,
+.ql-page-shell--minimal .ql-ui-card .ql-section-panel:first-child,
+.ql-page-shell--minimal .ql-ui-card .ql-subtle-panel:first-child,
+.ql-page-shell--minimal .ql-section-panel .ql-subtle-panel:first-child,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-ui-card:first-child,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-shell-card:first-child,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-section-panel:first-child,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-subtle-panel:first-child,
+.ql-page-shell--minimal .ql-ui-drawer__body .workspace-config-panel__drawer-section:first-child,
+.ql-page-shell--minimal .ql-ui-drawer__body .strategy-research-page__overview-subpanel:first-child,
+.ql-page-shell--minimal .ql-ui-drawer__body .data-network-config-panel:first-child {
+  border-top: 0 !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"]:not(:is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field)),
+.ql-page-shell--minimal .ql-shell-card [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"]:not(:is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field)),
+.ql-page-shell--minimal .ql-section-panel [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"]:not(:is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field)),
+.ql-page-shell--minimal .ql-ui-drawer__body [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"]:not(:is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field)) {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card > [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"]:not(:is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field)),
+.ql-page-shell--minimal .ql-shell-card > [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"]:not(:is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field)),
+.ql-page-shell--minimal .ql-section-panel > [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"]:not(:is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field)),
+.ql-page-shell--minimal .ql-ui-drawer__body > [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"]:not(:is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field)) {
+  border: 0 !important;
+  border-top: 1px solid var(--ql-color-border-soft) !important;
+  background: transparent !important;
+}
+
+.ql-page-shell--minimal .ql-ui-drawer__panel {
+  max-width: min(760px, calc(100vw - 88px));
+  border-left: 1px solid var(--ql-color-border-strong) !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-drawer__header {
+  padding: 16px 20px !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-drawer__body {
+  padding: 8px 20px 24px !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-drawer__body > * + * {
+  margin-top: 16px;
+}
+
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-ui-card__header,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-ui-card__body,
+.ql-page-shell--minimal .ql-ui-drawer__body .ql-ui-card__footer {
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+}
+
+.ql-page-shell--minimal .strategy-research-results__metric-strip,
+.ql-page-shell--minimal .strategy-research-results [class*="ql-rounded-"][class*="ql-border"],
+.ql-page-shell--minimal .workspace-config-panel__drawer-section,
+.ql-page-shell--minimal .backtest-page__sidebar-section,
+.ql-page-shell--minimal .backtest-page__menu-preview {
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+  border-left: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .data-center-detail-card .ql-ui-card,
+.ql-page-shell--minimal .data-center-detail-card [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"],
+.ql-page-shell--minimal .data-center-summary-card [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"] {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card :is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field),
+.ql-page-shell--minimal .ql-shell-card :is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field),
+.ql-page-shell--minimal .ql-section-panel :is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field),
+.ql-page-shell--minimal .ql-ui-drawer__body :is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field),
+.ql-page-shell--minimal .workspace-config-panel__date-range,
+.ql-page-shell--minimal .workspace-config-panel__instrument-input,
+.ql-page-shell--minimal .data-type-filter,
+.ql-page-shell--minimal .search-field,
+.ql-page-shell--minimal .input-shell--date {
+  border-radius: 4px !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card > .workspace-config-panel__date-range[class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"],
+.ql-page-shell--minimal .ql-ui-card > .workspace-config-panel__instrument-input[class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"],
+.ql-page-shell--minimal .ql-section-panel > .workspace-config-panel__date-range[class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"],
+.ql-page-shell--minimal .ql-section-panel > .workspace-config-panel__instrument-input[class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"] {
+  border: 1px solid var(--ql-color-border-strong) !important;
+  border-radius: 4px !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card .workspace-config-panel__date-range[class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"],
+.ql-page-shell--minimal .ql-ui-card .workspace-config-panel__instrument-input[class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"],
+.ql-page-shell--minimal .ql-section-panel .workspace-config-panel__date-range[class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"],
+.ql-page-shell--minimal .ql-section-panel .workspace-config-panel__instrument-input[class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"] {
+  border: 1px solid var(--ql-color-border-strong) !important;
+  border-radius: 4px !important;
+  background: var(--ql-color-bg-surface-strong) !important;
+}
+
+.ql-ui-drawer__body .ql-ui-card,
+.ql-ui-drawer__body .ql-shell-card,
+.ql-ui-drawer__body .ql-section-panel,
+.ql-ui-drawer__body .ql-subtle-panel,
+.ql-ui-drawer__body .workspace-config-panel__drawer-section,
+.ql-ui-drawer__body .strategy-research-page__overview-subpanel,
+.ql-ui-drawer__body .data-network-config-panel {
+  border: 0 !important;
+  border-top: 1px solid var(--ql-color-border-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.ql-ui-drawer__body .ql-ui-card:first-child,
+.ql-ui-drawer__body .ql-shell-card:first-child,
+.ql-ui-drawer__body .ql-section-panel:first-child,
+.ql-ui-drawer__body .ql-subtle-panel:first-child,
+.ql-ui-drawer__body .workspace-config-panel__drawer-section:first-child,
+.ql-ui-drawer__body .strategy-research-page__overview-subpanel:first-child,
+.ql-ui-drawer__body .data-network-config-panel:first-child {
+  border-top: 0 !important;
+}
+
+.ql-ui-drawer__body [class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"]:not(:is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field)) {
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+  border-left: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.ql-ui-drawer__body :is(button, input, select, textarea, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button, .ql-ui-control, .ql-soft-field) {
+  border-radius: 4px !important;
+}
+
+.ql-ui-drawer__body :is(button, .ql-ui-button, .ql-soft-button, .ql-primary-button, .ql-reference-blue-button) {
+  box-shadow: none !important;
+}
+
+.ql-ui-drawer__body :is(button, .ql-ui-button, .ql-soft-button, .ql-reference-blue-button):not(:disabled) {
+  color: var(--ql-color-text-strong) !important;
+}
+
+.ql-ui-drawer__body :is(button, .ql-ui-button, .ql-soft-button, .ql-reference-blue-button):hover,
+.ql-ui-drawer__body :is(button, .ql-ui-button, .ql-soft-button, .ql-reference-blue-button):focus-visible {
+  border-color: rgba(15, 23, 42, 0.24) !important;
+  background: rgba(15, 23, 42, 0.04) !important;
+  color: var(--ql-color-text-strong) !important;
+}
+
+.ql-ui-drawer__body button[aria-pressed="true"],
+.ql-ui-drawer__body button[aria-selected="true"],
+.ql-ui-drawer__body .ql-ui-button--primary,
+.ql-ui-drawer__body .ql-primary-button {
+  border-color: rgba(15, 23, 42, 0.28) !important;
+  background: rgba(15, 23, 42, 0.06) !important;
+  color: var(--ql-color-text-strong) !important;
+}
+
+.ql-ui-drawer__body button[aria-pressed="true"] :is(svg, [class*="ql-text-"]),
+.ql-ui-drawer__body button[aria-selected="true"] :is(svg, [class*="ql-text-"]),
+.ql-ui-drawer__body .ql-ui-button--primary :is(svg, [class*="ql-text-"]),
+.ql-ui-drawer__body .ql-primary-button :is(svg, [class*="ql-text-"]) {
+  color: var(--ql-color-text-strong) !important;
+}
+
+.ql-page-shell--minimal .strategy-research-page__overview-card {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.ql-page-shell--minimal [role="tree"] .ql-group > div {
+  border-radius: 4px !important;
+}
+
+.ql-page-shell--minimal .ql-ui-card [role="tree"] .ql-group > div[class*="ql-rounded-"][class*="ql-border"][class*="ql-bg-"] {
+  border-radius: 4px !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.ql-page-shell--minimal [role="tree"] .ql-group > div {
+  border-radius: 4px !important;
+}

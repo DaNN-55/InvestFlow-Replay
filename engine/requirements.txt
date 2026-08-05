@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+duckdb
+pandas
+easy-tdx==1.20.4
+pytest

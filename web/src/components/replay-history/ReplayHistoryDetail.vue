@@ -1,0 +1,1053 @@
+<script setup>
+import { computed } from "vue";
+import { ChevronDown, ChevronUp } from "lucide-vue-next";
+
+import {
+  buildReplayHistoryScoreDimensions,
+  formatReplayCompletionReason,
+  formatReplayHistoryIdentity,
+  getReplayAttemptPresentation,
+  getReplayHistoryStatePresentation,
+} from "../../utils/replayHistoryPresentation.js";
+import {
+  buildReplayScoreMetrics,
+  buildReplayScoreWeightSnapshot,
+  formatReplayScoreMetric,
+  isReplayPlaybookComplianceApplicable,
+} from "../../utils/replayScorePresentation.js";
+import {
+  formatReplayInvalidationRule,
+  formatReplayReasonTags,
+} from "../../utils/replayReviewPresentation.js";
+import ReplayReviewTimeline from "../replay/ReplayReviewTimeline.vue";
+import ReplayOrderDecisionSnapshot from "../replay/ReplayOrderDecisionSnapshot.vue";
+import UiButton from "../ui/UiButton.vue";
+
+const props = defineProps({
+  item: {
+    type: Object,
+    required: true,
+  },
+  candidateState: {
+    type: Object,
+    default: () => ({}),
+  },
+  retrainState: {
+    type: Object,
+    default: () => ({}),
+  },
+  deleteState: {
+    type: Object,
+    default: () => ({}),
+  },
+});
+
+const emit = defineEmits(["open", "addCandidate", "retrain", "delete"]);
+
+const scoreDimensions = computed(() =>
+  buildReplayHistoryScoreDimensions(props.item.scoreCard),
+);
+const scoreMetrics = computed(() =>
+  buildReplayScoreMetrics(props.item.scoreCard),
+);
+const scoreWeightSnapshot = computed(() =>
+  buildReplayScoreWeightSnapshot(props.item.scoreCard),
+);
+const playbookFitApplicable = computed(
+  () => isReplayPlaybookComplianceApplicable(props.item),
+);
+const linkedPlaybook = computed(
+  () =>
+    Boolean(props.item.blindReview?.playbookId) &&
+    Boolean(props.item.blindReview?.playbookVersionId),
+);
+const hasAdjustment = computed(() =>
+  Boolean(props.item.postReview?.strategyAdjustment?.trim()),
+);
+const existingCandidate = computed(
+  () =>
+    props.candidateState.created ||
+    Boolean(
+      props.item.playbookCandidate ??
+        props.item.playbookCandidateId ??
+        props.item.candidateId,
+    ),
+);
+const attemptPresentation = computed(() =>
+  getReplayAttemptPresentation(props.item.attemptInfo),
+);
+const executions = computed(() =>
+  Array.isArray(props.item.executions) ? props.item.executions : [],
+);
+const pendingOrders = computed(() =>
+  Array.isArray(props.item.pendingOrders) ? props.item.pendingOrders : [],
+);
+const hasOrderRecords = computed(
+  () => executions.value.length > 0 || pendingOrders.value.length > 0,
+);
+const orderColumns = computed(() =>
+  ["buy", "sell"].map((side) => ({
+    side,
+    records: [
+      ...executions.value
+        .filter((execution) => execution.side === side)
+        .map((execution) => ({
+          key: `execution-${execution.orderId}`,
+          kind: "execution",
+          value: execution,
+          sequence: Number(execution.sequence ?? 0),
+        })),
+      ...pendingOrders.value
+        .filter((order) => order.side === side)
+        .map((order) => ({
+          key: `pending-${order.orderId}`,
+          kind: "pending",
+          value: order,
+          sequence: Number(order.scheduledSequence ?? 0),
+        })),
+    ].sort((left, right) => left.sequence - right.sequence),
+  })),
+);
+
+const outcomeLabels = {
+  correct: "正确",
+  partial: "部分正确",
+  wrong: "错误",
+};
+
+function formatScore(value) {
+  return Number(value ?? 0)
+    .toFixed(2)
+    .replace(/\.00$/u, "");
+}
+
+function formatMoney(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "—";
+}
+
+function isStrongScore(value, maximum = 100) {
+  const numericValue = Number(value);
+  const numericMaximum = Number(maximum);
+  return (
+    Number.isFinite(numericValue) &&
+    Number.isFinite(numericMaximum) &&
+    numericMaximum > 0 &&
+    numericValue / numericMaximum >= 0.8
+  );
+}
+
+function isPositiveMetric(metric) {
+  return (
+    !metric.unavailable &&
+    metric.signed &&
+    Number.isFinite(Number(metric.value)) &&
+    Number(metric.value) > 0
+  );
+}
+
+</script>
+
+<template>
+  <article class="replay-history-detail">
+    <header class="replay-history-detail__header">
+      <div>
+        <p>{{ item.revealed ? "真实标的已揭晓" : "匿名行情" }}</p>
+        <h2>{{ formatReplayHistoryIdentity(item) }}</h2>
+        <span>
+          {{ getReplayHistoryStatePresentation(item.reviewState).label }}
+          · {{ item.interval === "1m" ? "1 分钟" : item.interval === "hybrid" ? `日内模拟 · ${item.stepMinutes ?? 1}分钟` : "日线" }}
+          {{ item.gameLength }} {{ item.interval === "1m" ? "分钟" : "日" }}
+        </span>
+      </div>
+      <div class="replay-history-detail__actions">
+        <UiButton type="button" size="sm" @click="emit('open', item)">
+          打开演练
+        </UiButton>
+        <UiButton
+          v-if="item.revealed"
+          type="button"
+          size="sm"
+          variant="secondary"
+          :loading="retrainState.loading"
+          :disabled="retrainState.loading"
+          @click="emit('retrain', item)"
+        >
+          复练此行情
+        </UiButton>
+        <UiButton
+          type="button"
+          size="sm"
+          variant="danger"
+          :loading="deleteState.loading"
+          :disabled="deleteState.loading || retrainState.loading"
+          @click="emit('delete', item)"
+        >
+          删除记录
+        </UiButton>
+        <small
+          v-if="retrainState.error || deleteState.error"
+          class="replay-history-detail__action-error"
+          role="alert"
+        >
+          {{ retrainState.error || deleteState.error }}
+        </small>
+      </div>
+    </header>
+
+    <dl class="replay-history-detail__facts">
+      <div>
+        <dt>训练类型</dt>
+        <dd>{{ attemptPresentation.label }}</dd>
+      </div>
+      <div>
+        <dt>推进进度</dt>
+        <dd>
+          {{ item.progress?.current ?? 0 }} /
+          {{ item.progress?.total ?? item.gameLength }}
+        </dd>
+      </div>
+      <div>
+        <dt>完成原因</dt>
+        <dd>{{ formatReplayCompletionReason(item.completionReason) }}</dd>
+      </div>
+      <div v-if="item.trainingConfig?.mode === 'playbook'">
+        <dt>专项战法</dt>
+        <dd>
+          {{ item.trainingConfig.playbookName || "未命名战法" }} ·
+          v{{ item.trainingConfig.playbookVersionNumber ?? "—" }}
+        </dd>
+      </div>
+      <div v-if="item.revealed">
+        <dt>行情区间</dt>
+        <dd>{{ item.reveal?.startDate || "—" }} 至 {{ item.reveal?.endDate || "—" }}</dd>
+      </div>
+    </dl>
+
+    <details
+      v-if="item.scoreCard"
+      class="replay-history-detail__score"
+      open
+    >
+      <summary class="replay-history-detail__score-summary">
+        <div>
+          <span>综合评分</span>
+          <strong
+            :class="{
+              'replay-history-detail__value--positive': isStrongScore(
+                item.scoreCard.total,
+              ),
+            }"
+          >
+            {{ formatScore(item.scoreCard.total) }}
+          </strong>
+          <small>/ 100</small>
+          <small class="replay-history-detail__algorithm">
+            算法 {{ item.scoreCard.algorithmVersion || "旧版评分" }}
+            <span
+              class="replay-history-detail__score-note"
+              :class="{
+                'replay-history-detail__score-note--retrain':
+                  attemptPresentation.kind === 'retrain',
+              }"
+            >
+              {{ attemptPresentation.scoreNote }}
+            </span>
+          </small>
+        </div>
+        <div class="replay-history-detail__score-summary-side">
+          <span
+            class="replay-history-detail__collapse-hint replay-history-detail__collapse-hint--open"
+            title="折叠评分"
+          >
+            <ChevronUp :size="17" />
+          </span>
+          <span
+            class="replay-history-detail__collapse-hint replay-history-detail__collapse-hint--closed"
+            title="展开评分"
+          >
+            <ChevronDown :size="17" />
+          </span>
+        </div>
+      </summary>
+      <div class="replay-history-detail__score-body">
+        <div class="replay-history-detail__score-meta">
+          <span title="各维度权重来自评分算法；不适用的维度不计入本局得分。">
+            权重快照：
+            <template v-for="(entry, index) in scoreWeightSnapshot" :key="entry.key">
+              <span :title="entry.description">
+                {{ entry.label }} {{ entry.weight }}{{ entry.applicable ? "" : "（不适用）" }}
+              </span>{{ index < scoreWeightSnapshot.length - 1 ? " · " : "" }}
+            </template>
+          </span>
+          <span
+            v-if="item.scoreCard.appliedWeightTotal != null"
+            title="不适用维度会从总权重中扣除；原始得分按本局适用权重重新折算为 100 分。"
+          >
+            本局适用权重
+            {{ formatScore(item.scoreCard.appliedWeightTotal) }} / 100
+            <template v-if="item.scoreCard.rawTotal != null">
+              · 原始得分 {{ formatScore(item.scoreCard.rawTotal) }}
+            </template>
+          </span>
+        </div>
+        <div
+          class="replay-history-detail__dimensions"
+          aria-label="评分维度"
+        >
+          <div
+            v-for="dimension in scoreDimensions"
+            :key="dimension.key"
+            :title="dimension.description"
+            :class="{
+              'replay-history-detail__data-card--positive':
+                dimension.applicable &&
+                isStrongScore(dimension.value, dimension.maximum),
+            }"
+          >
+            <span>{{ dimension.label }}</span>
+            <strong v-if="dimension.applicable">
+              {{ formatScore(dimension.value) }}
+              <small>/ {{ dimension.maximum }}</small>
+            </strong>
+            <strong v-else class="replay-history-detail__not-applicable">
+              不适用
+            </strong>
+            <small v-if="!dimension.applicable && dimension.reason">
+              {{ dimension.reason }}
+            </small>
+          </div>
+        </div>
+        <div class="replay-history-detail__metrics">
+          <div
+            v-for="metric in scoreMetrics"
+            :key="metric.key"
+            :title="metric.description"
+            :class="{
+              'replay-history-detail__data-card--positive':
+                isPositiveMetric(metric),
+            }"
+          >
+            <span>{{ metric.label }}</span>
+            <strong>{{ formatReplayScoreMetric(metric) }}</strong>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <section class="replay-history-detail__section">
+      <h3>逐笔委托与成交</h3>
+      <div v-if="hasOrderRecords" class="replay-history-detail__order-columns">
+        <section
+          v-for="column in orderColumns"
+          :key="column.side"
+          class="replay-history-detail__order-column"
+          :class="`replay-history-detail__order-column--${column.side}`"
+        >
+          <h4>{{ column.side === "buy" ? "买入记录" : "卖出记录" }}</h4>
+          <div v-if="column.records.length" class="replay-history-detail__orders">
+            <article
+              v-for="record in column.records"
+              :key="record.key"
+              class="replay-history-detail__order"
+            >
+              <header>
+                <span :class="`replay-history-detail__side--${column.side}`">
+                  {{
+                    record.kind === "pending"
+                      ? column.side === "buy" ? "待买入" : "待卖出"
+                      : column.side === "buy" ? "买入" : "卖出"
+                  }}
+                </span>
+                <strong>
+                  第 {{ record.kind === "execution" ? record.value.sequence : record.value.scheduledSequence }}
+                  {{ item.interval === "hybrid" ? `${item.stepMinutes ?? 1}分钟` : item.interval === "1m" ? "分钟" : "日" }}{{ record.kind === "pending" ? "开盘" : "" }}
+                </strong>
+                <template v-if="record.kind === 'execution'">
+                  <span v-if="record.value.status === 'filled'">
+                    {{ record.value.quantity }} 股 · ¥{{ formatMoney(record.value.price) }}
+                    · 费用 ¥{{ formatMoney(record.value.totalFee) }}
+                  </span>
+                  <span v-else class="replay-history-detail__order-status">
+                    {{ record.value.status === "cancelled" ? "已取消" : "未成交" }}
+                    <template v-if="record.value.reasonMessage">
+                      · {{ record.value.reasonMessage }}
+                    </template>
+                  </span>
+                </template>
+                <span v-else>
+                  {{
+                    record.value.quantityType === "shares"
+                      ? `${record.value.requestedQuantity} 股`
+                      : `${Number(record.value.ratio) * 100}%`
+                  }}
+                </span>
+              </header>
+              <ReplayOrderDecisionSnapshot
+                :decision="record.value.decision"
+                :side="column.side"
+              />
+            </article>
+          </div>
+          <p v-else class="replay-history-detail__order-empty">
+            暂无{{ column.side === "buy" ? "买入" : "卖出" }}记录
+          </p>
+        </section>
+      </div>
+      <p v-else class="replay-history-detail__empty">
+        本局没有提交买卖委托。
+      </p>
+    </section>
+
+    <div class="replay-history-detail__reviews">
+      <details class="replay-history-detail__review-section" open>
+        <summary>
+          <h3>揭晓前整局确认</h3>
+          <span class="replay-history-detail__review-collapse--open" title="折叠">
+            <ChevronUp :size="17" />
+          </span>
+          <span class="replay-history-detail__review-collapse--closed" title="展开">
+            <ChevronDown :size="17" />
+          </span>
+        </summary>
+        <div class="replay-history-detail__review-body">
+        <dl v-if="item.blindReview" class="replay-history-detail__review">
+        <div>
+          <dt>战法名称</dt>
+          <dd>{{ item.blindReview.strategyName || "未指定" }}</dd>
+          <small v-if="item.blindReview.playbookVersionNumber">
+            关联战法 · v{{ item.blindReview.playbookVersionNumber }}，已冻结
+          </small>
+        </div>
+        <div>
+          <dt>判断信心</dt>
+          <dd>{{ item.blindReview.confidence }} / 5</dd>
+        </div>
+        <div>
+          <dt>判断理由</dt>
+          <dd>{{ formatReplayReasonTags(item.blindReview.reasonTags) }}</dd>
+        </div>
+        <div>
+          <dt>止损价</dt>
+          <dd>
+            {{
+              Number(item.blindReview.stopLossPrice) > 0
+                ? Number(item.blindReview.stopLossPrice)
+                : "未记录"
+            }}
+          </dd>
+        </div>
+        <div>
+          <dt>判断失效条件</dt>
+          <dd>
+            {{ formatReplayInvalidationRule(item.blindReview.invalidationRule) }}
+          </dd>
+        </div>
+        <div>
+          <dt>核心判断</dt>
+          <dd>{{ item.blindReview.thesis }}</dd>
+        </div>
+        <div>
+          <dt>交易计划</dt>
+          <dd>{{ item.blindReview.tradePlan }}</dd>
+        </div>
+        <div>
+          <dt>风险计划</dt>
+          <dd>{{ item.blindReview.riskPlan }}</dd>
+        </div>
+        </dl>
+        <p v-else class="replay-history-detail__empty">
+          尚未保存盲评。
+        </p>
+        </div>
+      </details>
+
+      <details class="replay-history-detail__review-section" open>
+        <summary>
+          <h3>揭晓后复盘</h3>
+          <span class="replay-history-detail__review-collapse--open" title="折叠">
+            <ChevronUp :size="17" />
+          </span>
+          <span class="replay-history-detail__review-collapse--closed" title="展开">
+            <ChevronDown :size="17" />
+          </span>
+        </summary>
+        <div class="replay-history-detail__review-body">
+        <dl v-if="item.postReview" class="replay-history-detail__review">
+        <div>
+          <dt>判断结果</dt>
+          <dd>{{ outcomeLabels[item.postReview.outcome] || item.postReview.outcome }}</dd>
+        </div>
+        <div>
+          <dt>执行纪律</dt>
+          <dd>{{ item.postReview.disciplineScore }} / 5</dd>
+        </div>
+        <div>
+          <dt>风险控制</dt>
+          <dd>
+            {{
+              item.postReview.riskControlScore == null
+                ? "旧记录未保存"
+                : `${item.postReview.riskControlScore} / 5`
+            }}
+          </dd>
+        </div>
+        <div>
+          <dt>战法符合度</dt>
+          <dd>
+            {{
+              playbookFitApplicable && item.postReview.playbookFitScore != null
+                ? `${item.postReview.playbookFitScore} / 5`
+                : "不适用"
+            }}
+          </dd>
+        </div>
+        <div>
+          <dt>执行复盘</dt>
+          <dd>{{ item.postReview.executionReview }}</dd>
+        </div>
+        <div>
+          <dt>错误与不足</dt>
+          <dd>{{ item.postReview.mistakes }}</dd>
+        </div>
+        <div>
+          <dt>经验总结</dt>
+          <dd>{{ item.postReview.lessons }}</dd>
+        </div>
+        <div>
+          <dt>战法调整建议</dt>
+          <dd>{{ item.postReview.strategyAdjustment || "未填写" }}</dd>
+          <small>候选改进，不会直接修改原战法</small>
+          <div
+            v-if="hasAdjustment"
+            class="replay-history-detail__candidate"
+          >
+            <template v-if="linkedPlaybook">
+              <UiButton
+                v-if="!existingCandidate"
+                type="button"
+                size="sm"
+                variant="secondary"
+                :loading="candidateState.loading"
+                :disabled="candidateState.loading"
+                @click="emit('addCandidate', item)"
+              >
+                一键加入候选改进
+              </UiButton>
+              <span
+                v-else
+                class="replay-history-detail__candidate-success"
+              >
+                已加入候选库，等待人工处理
+              </span>
+            </template>
+            <span v-else class="replay-history-detail__candidate-hint">
+              本次盲评未关联战法，只保留调整文本，不能自动加入候选。
+            </span>
+            <span
+              v-if="candidateState.error"
+              class="replay-history-detail__candidate-error"
+            >
+              {{ candidateState.error }}
+            </span>
+            <span
+              v-else-if="candidateState.success"
+              class="replay-history-detail__candidate-success"
+            >
+              {{ candidateState.success }}
+            </span>
+          </div>
+        </div>
+        </dl>
+        <p v-else class="replay-history-detail__empty">
+          尚未保存事后复盘。
+        </p>
+        </div>
+      </details>
+    </div>
+
+    <ReplayReviewTimeline
+      :blind-review="item.blindReview"
+      :post-review="item.postReview"
+      :corrections="item.corrections"
+      :revealed="item.revealed"
+      :show-original="false"
+    />
+  </article>
+</template>
+
+<style scoped>
+.replay-history-detail {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: var(--ql-color-bg-surface-strong);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.replay-history-detail__header {
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1rem;
+}
+
+.replay-history-detail__header p {
+  color: #2563eb;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.replay-history-detail__header h2 {
+  color: var(--ql-color-text-strong);
+  font-size: 1rem;
+  font-weight: 800;
+  margin-top: 0.25rem;
+}
+
+.replay-history-detail__header span {
+  color: var(--ql-color-text-muted);
+  display: block;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.replay-history-detail__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.replay-history-detail__action-error {
+  flex-basis: 100%;
+  max-width: 260px;
+  color: #be123c;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.replay-history-detail__facts,
+.replay-history-detail__dimensions,
+.replay-history-detail__metrics {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.replay-history-detail__facts {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 1rem;
+}
+
+.replay-history-detail__facts > div,
+.replay-history-detail__dimensions > div,
+.replay-history-detail__metrics > div {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: var(--ql-color-bg-muted);
+  padding: 0.75rem;
+}
+
+.replay-history-detail dt,
+.replay-history-detail__score span {
+  color: var(--ql-color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.replay-history-detail dd {
+  color: var(--ql-color-text-body);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.55;
+  margin-top: 0.25rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.replay-history-detail__section,
+.replay-history-detail__score,
+.replay-history-detail__reviews {
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.replay-history-detail__section {
+  padding: 1rem;
+}
+
+.replay-history-detail__section h3 {
+  color: var(--ql-color-text-strong);
+  font-size: 0.875rem;
+  font-weight: 800;
+  margin-bottom: 0.75rem;
+}
+
+.replay-history-detail__reviews {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.replay-history-detail__review-section {
+  min-width: 0;
+}
+
+.replay-history-detail__review-section + .replay-history-detail__review-section {
+  border-left: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.replay-history-detail__review-section > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  list-style: none;
+  padding: 1rem;
+}
+
+.replay-history-detail__review-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.replay-history-detail__review-section > summary h3 {
+  color: var(--ql-color-text-strong);
+  font-size: 0.875rem;
+  font-weight: 800;
+}
+
+.replay-history-detail__review-section > summary span {
+  color: var(--ql-color-text-subtle);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.replay-history-detail__review-collapse--closed,
+.replay-history-detail__review-section:not([open])
+  .replay-history-detail__review-collapse--open {
+  display: none;
+}
+
+.replay-history-detail__review-section:not([open])
+  .replay-history-detail__review-collapse--closed {
+  display: inline;
+}
+
+.replay-history-detail__review-body {
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  padding: 1rem;
+}
+
+.replay-history-detail__review {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.replay-history-detail__review > div:nth-child(n + 3) {
+  grid-column: 1 / -1;
+}
+
+.replay-history-detail__review small {
+  color: #b45309;
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  margin-top: 0.375rem;
+}
+
+.replay-history-detail__candidate {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.replay-history-detail__candidate-error,
+.replay-history-detail__candidate-hint,
+.replay-history-detail__candidate-success {
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.replay-history-detail__candidate-error {
+  color: #be123c;
+}
+
+.replay-history-detail__candidate-hint {
+  color: var(--ql-color-text-muted);
+}
+
+.replay-history-detail__candidate-success {
+  color: #047857;
+}
+
+.replay-history-detail__empty {
+  color: var(--ql-color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.replay-history-detail__orders {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.replay-history-detail__order-columns {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.replay-history-detail__order-column {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  min-width: 0;
+  padding: 0.75rem;
+}
+
+.replay-history-detail__order-column h4 {
+  color: var(--ql-color-text-body);
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin-bottom: 0.625rem;
+}
+
+.replay-history-detail__order-column--buy {
+  background: var(--ql-color-danger-soft);
+}
+
+.replay-history-detail__order-column--sell {
+  background: rgba(236, 253, 245, 0.36);
+}
+
+.replay-history-detail__order-empty {
+  color: var(--ql-color-text-subtle);
+  font-size: 0.75rem;
+  margin: 0;
+  padding: 1rem 0;
+  text-align: center;
+}
+
+.replay-history-detail__order {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: var(--ql-color-bg-muted);
+  padding: 0.75rem;
+}
+
+.replay-history-detail__order header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--ql-color-text-muted);
+  font-size: 0.75rem;
+}
+
+.replay-history-detail__order header strong {
+  color: var(--ql-color-text-strong);
+}
+
+.replay-history-detail__side--buy,
+.replay-history-detail__side--sell {
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+.replay-history-detail__side--buy {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.replay-history-detail__side--sell {
+  color: #047857;
+  background: var(--ql-color-success-soft);
+}
+
+.replay-history-detail__order-status {
+  color: #b45309;
+}
+
+.replay-history-detail__score-summary {
+  align-items: end;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+  min-height: 80px;
+  padding: 0.5625rem 1rem;
+}
+
+.replay-history-detail__score-summary::-webkit-details-marker {
+  display: none;
+}
+
+.replay-history-detail__score-summary strong {
+  color: #1d4ed8;
+  font-size: 1.75rem;
+  margin-left: 0.5rem;
+}
+
+.replay-history-detail__score small {
+  color: var(--ql-color-text-muted);
+  font-size: 0.6875rem;
+}
+
+.replay-history-detail__score-note {
+  color: #166534;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  margin-left: 0.5rem;
+}
+
+.replay-history-detail__score-note--retrain {
+  color: #b45309;
+}
+
+.replay-history-detail__score-summary-side {
+  align-items: center;
+  display: grid;
+  place-items: center;
+}
+
+.replay-history-detail__collapse-hint {
+  color: #94a3b8 !important;
+  font-size: 0.6875rem !important;
+  font-weight: 600 !important;
+  line-height: 0;
+}
+
+.replay-history-detail__collapse-hint--closed,
+.replay-history-detail__score:not([open])
+  .replay-history-detail__collapse-hint--open {
+  display: none;
+}
+
+.replay-history-detail__score:not([open])
+  .replay-history-detail__collapse-hint--closed {
+  display: inline;
+}
+
+.replay-history-detail__score-body {
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  padding: 0.875rem 1rem 1rem;
+}
+
+.replay-history-detail__score-meta [title],
+.replay-history-detail__dimensions [title],
+.replay-history-detail__metrics [title] {
+  cursor: help;
+}
+
+.replay-history-detail__algorithm {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.replay-history-detail__score-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.75rem;
+  color: var(--ql-color-text-muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+.replay-history-detail__dimensions {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.replay-history-detail__dimensions strong,
+.replay-history-detail__metrics strong {
+  color: var(--ql-color-text-strong);
+  display: block;
+  font-size: 0.8125rem;
+  margin-top: 0.25rem;
+}
+
+.replay-history-detail__metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0.75rem;
+}
+
+.replay-history-detail__value--positive {
+  color: #047857 !important;
+}
+
+.replay-history-detail__data-card--positive {
+  border-color: #a7f3d0 !important;
+  background: #ecfdf5 !important;
+  box-shadow: inset 3px 0 0 #10b981;
+}
+
+.replay-history-detail__data-card--positive strong {
+  color: #047857;
+}
+
+.replay-history-detail__not-applicable {
+  color: #64748b !important;
+}
+
+@media (max-width: 720px) {
+  .replay-history-detail__header {
+    flex-direction: column;
+  }
+
+  .replay-history-detail__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .replay-history-detail__action-error {
+    max-width: none;
+    text-align: left;
+  }
+
+  .replay-history-detail__score-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .replay-history-detail__score-summary-side {
+    align-items: center;
+  }
+
+  .replay-history-detail__score-note {
+    margin-left: 0.375rem;
+  }
+
+  .replay-history-detail__facts,
+  .replay-history-detail__order-columns,
+  .replay-history-detail__review,
+  .replay-history-detail__dimensions,
+  .replay-history-detail__metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .replay-history-detail__review > div:nth-child(n + 3) {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 1100px) {
+  .replay-history-detail__reviews {
+    grid-template-columns: 1fr;
+  }
+
+  .replay-history-detail__review-section + .replay-history-detail__review-section {
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    border-left: 0;
+  }
+}
+</style>
