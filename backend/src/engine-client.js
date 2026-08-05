@@ -123,6 +123,8 @@ export function createEngineClient(baseUrl = DEFAULT_ENGINE_URL) {
       benchmarkCode,
       seed = null,
       interval = "1d",
+      excludedTsCodes = [],
+      recentWindowEndDates = [],
     } = {}) {
       return requestJson(`${baseUrl}/internal/replay/scenarios`, {
         method: "POST",
@@ -130,8 +132,17 @@ export function createEngineClient(baseUrl = DEFAULT_ENGINE_URL) {
           gameLength,
           benchmarkCode,
           interval,
+          excludedTsCodes,
+          recentWindowEndDates,
           ...(seed == null ? {} : { seed }),
         }),
+      });
+    },
+
+    async prefetchReplayStocks({ excludedTsCodes = [], targetReserve = 12 } = {}) {
+      return requestJson(`${baseUrl}/internal/replay/cache/stocks/prefetch`, {
+        method: "POST",
+        body: JSON.stringify({ excludedTsCodes, targetReserve }),
       });
     },
 

@@ -5850,11 +5850,14 @@ export function createApp(options = {}) {
           playbookContent: link.content,
         };
       }
+      const scenarioUsage = database.getReplayScenarioUsage();
       const snapshot = await engine.createReplayScenario({
         gameLength,
         benchmarkCode: body.benchmarkCode,
         seed,
         interval,
+        excludedTsCodes: scenarioUsage.usedTsCodes,
+        recentWindowEndDates: scenarioUsage.recentWindowEndDates,
       });
       assertCondition(
         Number(snapshot?.observationBars) === 250 &&
@@ -5893,6 +5896,10 @@ export function createApp(options = {}) {
         createdAt: now,
         updatedAt: now,
       });
+      void engine.prefetchReplayStocks({
+        excludedTsCodes: [...scenarioUsage.usedTsCodes, String(snapshot.tsCode || "")],
+        targetReserve: 12,
+      }).catch(() => {});
       res.status(201).json({
         session: toPublicReplaySession(session),
       });

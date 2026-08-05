@@ -1,5 +1,5 @@
 <script setup>
-import { Moon, Sun } from "lucide-vue-next";
+import { ChartCandlestick, ClipboardList, Moon, Sun } from "lucide-vue-next";
 import { onMounted, ref } from "vue";
 import { RouterLink, RouterView } from "vue-router";
 
@@ -28,8 +28,12 @@ onMounted(() => {
         InvestFlow Replay
       </RouterLink>
       <nav aria-label="主导航">
-        <RouterLink to="/decision/market-replay">行情演练</RouterLink>
-        <RouterLink to="/decision/trade-records">交易追踪</RouterLink>
+        <RouterLink to="/decision/market-replay" aria-label="行情演练" title="行情演练">
+          <ChartCandlestick :size="18" aria-hidden="true" />
+        </RouterLink>
+        <RouterLink to="/decision/trade-records" aria-label="交易追踪" title="交易追踪">
+          <ClipboardList :size="18" aria-hidden="true" />
+        </RouterLink>
       </nav>
       <button class="standalone-shell__theme" type="button" aria-label="切换主题" @click="toggleTheme">
         <Sun v-if="dark" :size="18" />
@@ -48,12 +52,12 @@ onMounted(() => {
 
 <style scoped>
 .standalone-shell { min-height: 100vh; background: var(--ql-paper); color: var(--ql-ink); }
-.standalone-shell__header { position: sticky; top: 0; z-index: 30; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 56px; padding: 0 24px; border-bottom: 1px solid var(--ql-line-strong); background: var(--ql-panel); }
-.standalone-shell__brand { color: inherit; font-size: 18px; font-weight: 700; text-decoration: none; }
-nav { display: flex; gap: 8px; }
-nav a { padding: 8px 14px; border-radius: 6px; color: var(--ql-muted); text-decoration: none; }
+.standalone-shell__header { position: sticky; top: 0; z-index: 30; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 44px; padding: 0 20px; border-bottom: 1px solid var(--ql-line-strong); background: var(--ql-panel); }
+.standalone-shell__brand { color: inherit; font-size: 16px; font-weight: 700; text-decoration: none; }
+nav { display: flex; gap: 6px; }
+nav a { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 6px; color: var(--ql-muted); text-decoration: none; }
 nav a.router-link-active { background: var(--ql-color-primary-soft); color: var(--ql-color-primary); }
-.standalone-shell__theme { justify-self: end; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--ql-line-strong); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.standalone-shell__theme { justify-self: end; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--ql-line-strong); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
 .standalone-shell__main { width: min(100%, 1600px); min-width: 0; margin: 0 auto; padding: 0 clamp(16px, 2.5vw, 40px) 40px; box-sizing: border-box; }
-@media (max-width: 720px) { .standalone-shell__header { grid-template-columns: 1fr auto; padding: 0 12px; } nav { order: 3; grid-column: 1 / -1; justify-content: center; } .standalone-shell__header { height: auto; min-height: 56px; padding-block: 8px; } .standalone-shell__main { padding-right: 12px; padding-left: 12px; } }
+@media (max-width: 720px) { .standalone-shell__header { padding: 0 12px; } .standalone-shell__brand { font-size: 14px; } .standalone-shell__main { padding-right: 12px; padding-left: 12px; } }
 </style>

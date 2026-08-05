@@ -234,12 +234,35 @@ class ReplayScenarioTest(unittest.TestCase):
         game_length: int = 120,
         seed: int | None = 42,
         benchmark_code: str = BENCHMARK_CODE,
+        excluded_ts_codes: tuple[str, ...] = (),
+        recent_window_end_dates: tuple[date, ...] = (),
     ) -> dict:
         return self.store.create_replay_scenario(
             game_length=game_length,
             benchmark_code=benchmark_code,
             seed=seed,
+            excluded_ts_codes=excluded_ts_codes,
+            recent_window_end_dates=recent_window_end_dates,
         )
+
+    def test_excludes_previously_trained_symbols_from_normal_selection(self) -> None:
+        scenario = self.create_replay_scenario(
+            game_length=20,
+            excluded_ts_codes=("000001.SZ",),
+        )
+
+        self.assertEqual(scenario["tsCode"], "600000.SH")
+
+    def test_prefers_a_window_far_from_recent_training_periods(self) -> None:
+        recent_end = trading_dates(date(2022, 1, 3), 400)[-1]
+        scenario = self.create_replay_scenario(
+            game_length=20,
+            seed=42,
+            excluded_ts_codes=("600000.SH",),
+            recent_window_end_dates=(recent_end,),
+        )
+
+        self.assertLess(date.fromisoformat(scenario["bars"][-1]["tradeDate"]), recent_end)
 
     def test_seed_reproduces_a_complete_private_daily_scenario(self) -> None:
         first = self.create_replay_scenario()

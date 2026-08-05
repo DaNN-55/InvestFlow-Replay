@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from datetime import date
+
 from pydantic import BaseModel, Field
 
 from .errors import QuantWorkbenchError
@@ -13,6 +15,13 @@ class ReplayScenarioRequest(BaseModel):
     benchmarkCode: str = Field(..., min_length=1)
     seed: int | None = None
     interval: str = "1d"
+    excludedTsCodes: list[str] = Field(default_factory=list)
+    recentWindowEndDates: list[date] = Field(default_factory=list)
+
+
+class ReplayStockPrefetchRequest(BaseModel):
+    excludedTsCodes: list[str] = Field(default_factory=list)
+    targetReserve: int = Field(default=12, ge=1, le=24)
 
 
 service = ReplayService()
@@ -37,5 +46,18 @@ def benchmarks(retry: bool = False):
 @app.post("/internal/replay/scenarios")
 def create_scenario(request: ReplayScenarioRequest):
     return service.create_scenario(
-        request.gameLength, request.benchmarkCode, request.seed, request.interval
+        request.gameLength,
+        request.benchmarkCode,
+        request.seed,
+        request.interval,
+        excluded_ts_codes=tuple(request.excludedTsCodes),
+        recent_window_end_dates=tuple(request.recentWindowEndDates),
+    )
+
+
+@app.post("/internal/replay/cache/stocks/prefetch")
+def prefetch_stocks(request: ReplayStockPrefetchRequest):
+    return service.prefetch_replay_stocks(
+        tuple(request.excludedTsCodes),
+        target_reserve=request.targetReserve,
     )

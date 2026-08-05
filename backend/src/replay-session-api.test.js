@@ -298,6 +298,8 @@ describe("replay session API", () => {
       .send({ gameLength: 20, seed: 7 })
       .expect(201);
 
+    assert.equal(lastScenarioPayload.excludedTsCodes.includes("600000.SH"), true);
+
     assert.equal(created.body.session.gameLength, 20);
     assert.equal(created.body.session.observationBars, 250);
     assert.equal(created.body.session.revealedFutureBars, 0);

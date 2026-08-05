@@ -285,33 +285,6 @@ class HostAwareContextClient(ContextFakeTdxClient):
         return super().get_index_bars(market, code, category, start, count, **kwargs)
 
 
-class BlockingBackfillClient(FakeTdxClient):
-    def __init__(self, bars_by_code):
-        super().__init__(bars_by_code)
-        self.backfill_started = threading.Event()
-        self.release_backfill = threading.Event()
-
-    def _wait_for_backfill(self, start):
-        if start >= 800:
-            self.backfill_started.set()
-            self.release_backfill.wait(timeout=5)
-
-    def get_security_bars(self, market, code, category, start, count, **kwargs):
-        self._wait_for_backfill(start)
-        return super().get_security_bars(market, code, category, start, count, **kwargs)
-
-    def get_index_bars(self, market, code, category, start, count, **kwargs):
-        self._wait_for_backfill(start)
-        return super().get_index_bars(market, code, category, start, count, **kwargs)
-
-
-class FailingBackfillClient(FakeTdxClient):
-    def get_index_bars(self, market, code, category, start, count, **kwargs):
-        if start >= 800:
-            raise OSError("backfill interrupted")
-        return super().get_index_bars(market, code, category, start, count, **kwargs)
-
-
 def make_daily_frame(start: str, count: int, base: float) -> pd.DataFrame:
     dates = pd.bdate_range(start, periods=count)
     return pd.DataFrame(
@@ -331,7 +304,44 @@ def make_daily_frame(start: str, count: int, base: float) -> pd.DataFrame:
 
 
 class TdxMarketDataProviderTest(unittest.TestCase):
-    def test_resumes_full_history_after_bootstrap_backfill_was_interrupted(self) -> None:
+    def test_expands_daily_pool_when_every_cached_symbol_was_already_trained(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cache = TdxMarketCache(Path(directory) / "market.duckdb")
+            client = FakeTdxClient(
+                {
+                    "600000": make_daily_frame("2020-01-02", 400, 10),
+                    "000001": make_daily_frame("2020-01-02", 400, 20),
+                    "000001-index": make_daily_frame("2020-01-02", 400, 3000),
+                }
+            )
+            client.bars_by_code["000001"] = make_daily_frame("2020-01-02", 400, 20)
+            provider = TdxMarketDataProvider(
+                cache,
+                initial_stock_count=1,
+                minimum_replay_bars=3,
+                benchmark_codes=("000001.SH",),
+            )
+            provider.sync_with_client(client)
+
+            expanded = provider.ensure_unseen_stock_available(
+                ("600000.SH",),
+                client=client,
+            )
+
+            self.assertTrue(expanded)
+            connection = duckdb.connect(str(cache.path), read_only=True)
+            try:
+                codes = {
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT DISTINCT ts_code FROM stock_daily_bars"
+                    ).fetchall()
+                }
+            finally:
+                connection.close()
+            self.assertEqual(codes, {"600000.SH", "000001.SZ"})
+
+    def test_bootstrap_stops_after_the_latest_800_daily_bars(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "market.duckdb"
             bars_by_code = {
@@ -339,23 +349,14 @@ class TdxMarketDataProviderTest(unittest.TestCase):
                 "000001": make_daily_frame("2020-01-02", 900, 3000),
                 "399001": make_daily_frame("2020-01-02", 900, 9000),
             }
-            interrupted = TdxMarketDataProvider(
+            client = FakeTdxClient(bars_by_code)
+            provider = TdxMarketDataProvider(
                 TdxMarketCache(path),
                 initial_stock_count=1,
                 minimum_replay_bars=3,
                 benchmark_codes=("000001.SH", "399001.SZ"),
             )
-            with self.assertRaisesRegex(OSError, "backfill interrupted"):
-                interrupted.sync_with_client(FailingBackfillClient(bars_by_code))
-
-            resumed_client = FakeTdxClient(bars_by_code)
-            resumed = TdxMarketDataProvider(
-                TdxMarketCache(path),
-                initial_stock_count=1,
-                minimum_replay_bars=3,
-                benchmark_codes=("000001.SH", "399001.SZ"),
-            )
-            resumed.sync_with_client(resumed_client)
+            provider.sync_with_client(client)
 
             connection = duckdb.connect(str(path), read_only=True)
             try:
@@ -367,49 +368,9 @@ class TdxMarketDataProviderTest(unittest.TestCase):
                 ).fetchone()[0]
             finally:
                 connection.close()
-            self.assertEqual(stock_count, 900)
-            self.assertEqual(benchmark_count, 900)
-            self.assertIn(("600000", 800), resumed_client.security_bar_starts)
-
-    def test_bootstrap_cache_becomes_ready_before_full_history_backfill_finishes(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            cache = TdxMarketCache(Path(directory) / "market.duckdb")
-            client = BlockingBackfillClient(
-                {
-                    "600000": make_daily_frame("2020-01-02", 900, 10),
-                    "000001": make_daily_frame("2020-01-02", 900, 3000),
-                    "399001": make_daily_frame("2020-01-02", 900, 9000),
-                }
-            )
-            provider = TdxMarketDataProvider(
-                cache,
-                initial_stock_count=1,
-                minimum_replay_bars=3,
-                benchmark_codes=("000001.SH", "399001.SZ"),
-            )
-            failure = []
-
-            def run_sync():
-                try:
-                    provider.sync_with_client(client)
-                except Exception as exc:  # pragma: no cover - surfaced by assertion
-                    failure.append(exc)
-
-            thread = threading.Thread(target=run_sync)
-            provider._sync_thread = thread
-            thread.start()
-            self.assertTrue(client.backfill_started.wait(timeout=10))
-            try:
-                self.assertTrue(
-                    cache.is_replay_ready(("000001.SH", "399001.SZ"), 3)
-                )
-                result = provider.ensure_ready()
-                self.assertEqual(result["mode"], "cache")
-                self.assertIn("后台", result["message"])
-            finally:
-                client.release_backfill.set()
-                thread.join(timeout=10)
-            self.assertFalse(failure)
+            self.assertEqual(stock_count, 800)
+            self.assertEqual(benchmark_count, 800)
+            self.assertNotIn(("600000", 800), client.security_bar_starts)
 
     def test_prepare_cache_returns_running_status_and_deduplicates_background_sync(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -649,7 +610,7 @@ class TdxMarketDataProviderTest(unittest.TestCase):
                 ).fetchone()[0]
             finally:
                 connection.close()
-            self.assertEqual(count, 901)
+            self.assertEqual(count, 801)
 
     def test_offline_uses_complete_cache_but_empty_cache_reports_clear_failure(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

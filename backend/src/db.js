@@ -3086,6 +3086,36 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       return rows.map(rowToRunSummary);
     },
 
+    getReplayScenarioUsage() {
+      const rows = db.prepare(
+        `
+        SELECT snapshot_json
+        FROM replay_sessions
+        ORDER BY created_at DESC
+        `,
+      ).all();
+      const usedTsCodes = new Set();
+      const recentWindowEndDates = [];
+      for (const row of rows) {
+        try {
+          const snapshot = JSON.parse(row.snapshot_json || "{}");
+          const tsCode = String(snapshot.tsCode || "").trim().toUpperCase();
+          if (tsCode) usedTsCodes.add(tsCode);
+          const bars = Array.isArray(snapshot.bars) ? snapshot.bars : [];
+          const endDate = String(bars.at(-1)?.tradeDate || "").slice(0, 10);
+          if (endDate && recentWindowEndDates.length < 12) {
+            recentWindowEndDates.push(endDate);
+          }
+        } catch {
+          // Legacy or damaged snapshots cannot participate in novelty scheduling.
+        }
+      }
+      return {
+        usedTsCodes: [...usedTsCodes],
+        recentWindowEndDates,
+      };
+    },
+
     createReplaySession(session) {
       const scenarioIdentity = createReplayScenarioIdentity({
         snapshot: session.snapshot,

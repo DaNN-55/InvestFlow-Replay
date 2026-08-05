@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from .config import MARKET_DB_PATH, MINUTE_REPLAY_DB_PATH
@@ -60,14 +61,39 @@ class ReplayService:
     def get_replay_benchmarks(self) -> dict[str, Any]:
         return self.benchmarks()
 
+    def prefetch_replay_stocks(
+        self,
+        excluded_ts_codes: tuple[str, ...],
+        *,
+        target_reserve: int = 12,
+    ) -> dict[str, Any]:
+        available = self.market_provider.ensure_unseen_stock_available(
+            excluded_ts_codes,
+            target_count=target_reserve,
+        )
+        return {
+            "available": available,
+            "targetReserve": int(target_reserve),
+        }
+
     def create_scenario(
         self,
         game_length: int,
         benchmark_code: str,
         seed: int | None,
         interval: str,
+        *,
+        excluded_ts_codes: tuple[str, ...] = (),
+        recent_window_end_dates: tuple[date, ...] = (),
     ) -> dict[str, Any]:
         self._ensure_cache()
+        if excluded_ts_codes and not self.market_provider.ensure_unseen_stock_available(
+            excluded_ts_codes
+        ):
+            raise QuantWorkbenchError(
+                "当前缓存中的新标的已用完，通达信暂时无法补充新的日线标的",
+                409,
+            )
         normalized_interval = str(interval or "1d").strip().lower()
         supported = {
             "1d": {20, 60, 120},
@@ -85,13 +111,21 @@ class ReplayService:
         try:
             if normalized_interval == "1d":
                 return self.store.create_replay_scenario(
-                    game_length=int(game_length), benchmark_code=benchmark, seed=seed
+                    game_length=int(game_length),
+                    benchmark_code=benchmark,
+                    seed=seed,
+                    excluded_ts_codes=excluded_ts_codes,
+                    recent_window_end_dates=recent_window_end_dates,
                 )
             last_error: Exception | None = None
             for attempt in range(6):
                 candidate_seed = None if seed is None else int(seed) + attempt
                 daily = self.store.create_replay_scenario(
-                    game_length=20, benchmark_code=benchmark, seed=candidate_seed
+                    game_length=20,
+                    benchmark_code=benchmark,
+                    seed=candidate_seed,
+                    excluded_ts_codes=excluded_ts_codes,
+                    recent_window_end_dates=recent_window_end_dates,
                 )
                 try:
                     options: dict[str, Any] = {
@@ -125,8 +159,17 @@ class ReplayService:
         benchmark_code: str,
         seed: int | None = None,
         interval: str = "1d",
+        excluded_ts_codes: tuple[str, ...] = (),
+        recent_window_end_dates: tuple[date, ...] = (),
     ) -> dict[str, Any]:
-        return self.create_scenario(game_length, benchmark_code, seed, interval)
+        return self.create_scenario(
+            game_length,
+            benchmark_code,
+            seed,
+            interval,
+            excluded_ts_codes=excluded_ts_codes,
+            recent_window_end_dates=recent_window_end_dates,
+        )
 
     def search_instruments(self, keyword: str, limit: int = 8) -> dict[str, Any]:
         self.market_provider.ensure_ready()

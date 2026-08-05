@@ -649,6 +649,7 @@ class TdxMarketDataProvider:
         self.minimum_replay_bars = int(minimum_replay_bars)
         self.benchmark_codes = tuple(str(code).upper() for code in benchmark_codes)
         self._status_lock = Lock()
+        self._pool_lock = Lock()
         self._sync_thread: Thread | None = None
         self._sync_status: dict[str, Any] = {
             "state": "idle",
@@ -692,6 +693,37 @@ class TdxMarketDataProvider:
         if str(symbol).startswith(("300", "301")):
             return "创业板"
         return "主板"
+
+    @staticmethod
+    def _balanced_instruments(
+        instruments: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        groups: dict[str, list[dict[str, Any]]] = {
+            "sh_main": [],
+            "sz_main": [],
+            "chinext": [],
+            "star": [],
+        }
+        for item in instruments:
+            code = str(item.get("ts_code") or "")
+            market = str(item.get("market") or "主板")
+            if market == "科创板":
+                key = "star"
+            elif market == "创业板":
+                key = "chinext"
+            elif code.endswith(".SZ"):
+                key = "sz_main"
+            else:
+                key = "sh_main"
+            groups[key].append(item)
+        for values in groups.values():
+            values.sort(key=lambda item: str(item.get("ts_code") or ""))
+        ordered: list[dict[str, Any]] = []
+        while any(groups.values()):
+            for key in ("sh_main", "sz_main", "chinext", "star"):
+                if groups[key]:
+                    ordered.append(groups[key].pop(0))
+        return ordered
 
     def _fetch_instruments(self, client: Any, updated_at: datetime) -> list[dict[str, Any]]:
         instruments: list[dict[str, Any]] = []
@@ -775,7 +807,6 @@ class TdxMarketDataProvider:
         self.cache.ensure_schema()
         total = 1 + len(self.benchmark_codes) + self.initial_stock_count
         completed = 0
-        needs_full_backfill = not self.cache.has_successful_sync()
 
         def report(message: str, *, ready: bool = False) -> None:
             if progress_callback is not None:
@@ -798,7 +829,6 @@ class TdxMarketDataProvider:
         completed += 1
         report(f"证券名单已缓存，共 {len(instruments)} 只")
 
-        backfill_benchmarks: list[str] = []
         for benchmark_code in self.benchmark_codes:
             latest = self.cache.latest_trade_date("index_daily_bars", benchmark_code)
             bootstrap = latest is None
@@ -826,8 +856,6 @@ class TdxMarketDataProvider:
                     else None
                 ),
             )
-            if bootstrap or needs_full_backfill:
-                backfill_benchmarks.append(benchmark_code)
             completed += 1
             report(f"指数 {benchmark_code} 已缓存")
 
@@ -844,19 +872,16 @@ class TdxMarketDataProvider:
             connection.close()
         available_codes = {str(row["ts_code"]): row for row in instruments}
         selected_codes = [code for code in cached_codes if code in available_codes]
-        for suffix in ("SH", "SZ"):
-            for code in sorted(code for code in available_codes if code.endswith(f".{suffix}")):
-                if code not in selected_codes:
-                    selected_codes.append(code)
-                if len(selected_codes) >= self.initial_stock_count:
-                    break
+        for item in self._balanced_instruments(list(available_codes.values())):
+            code = str(item["ts_code"])
+            if code not in selected_codes:
+                selected_codes.append(code)
             if len(selected_codes) >= self.initial_stock_count:
                 break
-        selected_codes = selected_codes[: max(self.initial_stock_count, len(cached_codes))]
+        selected_codes = selected_codes[: self.initial_stock_count]
         total = 1 + len(self.benchmark_codes) + len(selected_codes)
 
         synced_codes: list[str] = []
-        backfill_stocks: list[str] = []
         for ts_code in selected_codes:
             latest = self.cache.latest_trade_date("stock_daily_bars", ts_code)
             bootstrap = latest is None
@@ -882,8 +907,6 @@ class TdxMarketDataProvider:
             metadata["list_date"] = stock_rows[0]["trade_date"]
             self.cache.upsert_instruments([metadata])
             synced_codes.append(ts_code)
-            if bootstrap or needs_full_backfill:
-                backfill_stocks.append(ts_code)
             completed += 1
             report(f"股票 {ts_code} 已缓存")
 
@@ -891,52 +914,9 @@ class TdxMarketDataProvider:
             self.benchmark_codes,
             self.minimum_replay_bars,
         )
-        report("演练所需行情已就绪，正在后台补齐完整历史", ready=ready)
-
-        total += len(backfill_benchmarks) + len(backfill_stocks)
-        for benchmark_code in backfill_benchmarks:
-            bars = self._fetch_daily_pages(
-                client,
-                benchmark_code,
-                is_index=True,
-                latest_cached_date=None,
-            )
-            exchange = "SSE" if benchmark_code.endswith(".SH") else "SZSE"
-            index_rows, calendar_rows = build_index_history(
-                benchmark_code,
-                exchange,
-                bars,
-                updated_at=updated_at,
-            )
-            self.cache.replace_index_history(
-                benchmark_code,
-                exchange,
-                index_rows,
-                calendar_rows if benchmark_code in {"000001.SH", "399001.SZ"} else None,
-            )
-            completed += 1
-            report(f"指数 {benchmark_code} 完整历史已补齐", ready=ready)
-
-        for ts_code in backfill_stocks:
-            bars = self._fetch_daily_pages(
-                client,
-                ts_code,
-                is_index=False,
-                latest_cached_date=None,
-            )
-            xdxr = client.get_xdxr_info(
-                self._market_for_code(ts_code),
-                self._symbol(ts_code),
-            )
-            stock_rows, factor_rows = build_stock_history(
-                ts_code,
-                bars,
-                xdxr,
-                updated_at=updated_at,
-            )
-            self.cache.upsert_stock_history(stock_rows, factor_rows)
-            completed += 1
-            report(f"股票 {ts_code} 完整历史已补齐", ready=ready)
+        if not ready:
+            raise ValueError("通达信快速行情缓存不足，无法形成连续演练窗口")
+        report("演练所需行情已就绪", ready=True)
 
         detail = f"stocks={len(synced_codes)},benchmarks={len(self.benchmark_codes)}"
         self.cache.mark_sync_success(detail)
@@ -997,6 +977,107 @@ class TdxMarketDataProvider:
             self.benchmark_codes,
             self.minimum_replay_bars,
         )
+
+    def ensure_unseen_stock_available(
+        self,
+        excluded_ts_codes: tuple[str, ...],
+        *,
+        client: Any | None = None,
+        target_count: int = 1,
+    ) -> bool:
+        with self._pool_lock:
+            excluded = {str(code).strip().upper() for code in excluded_ts_codes}
+            desired = max(int(target_count), 1)
+            connection = self.cache._connect()
+            try:
+                all_cached_codes = {
+                    str(row[0])
+                    for row in connection.execute(
+                        "SELECT DISTINCT ts_code FROM stock_daily_bars"
+                    ).fetchall()
+                }
+                eligible_cached_codes = {
+                    str(row[0])
+                    for row in connection.execute(
+                        """
+                        SELECT ts_code
+                        FROM stock_daily_bars
+                        GROUP BY ts_code
+                        HAVING COUNT(DISTINCT trade_date) >= ?
+                        """,
+                        [self.minimum_replay_bars],
+                    ).fetchall()
+                }
+                unseen_count = len(eligible_cached_codes - excluded)
+                if unseen_count >= desired:
+                    return True
+                candidates = self._balanced_instruments([
+                    {
+                        "ts_code": str(row[0]),
+                        "symbol": str(row[1]),
+                        "name": str(row[2] or ""),
+                        "market": str(row[3] or "主板"),
+                    }
+                    for row in connection.execute(
+                        """
+                        SELECT ts_code, symbol, name, market
+                        FROM stock_instruments
+                        WHERE list_status = 'L'
+                        ORDER BY
+                            CASE market
+                                WHEN '主板' THEN 0
+                                WHEN '创业板' THEN 1
+                                WHEN '科创板' THEN 2
+                                ELSE 3
+                            END,
+                            ts_code
+                        """
+                    ).fetchall()
+                    if str(row[0]) not in all_cached_codes
+                ])
+            finally:
+                connection.close()
+            if not candidates:
+                return unseen_count > 0
+
+            resolved_client = client or _FailoverTdxClient(
+                self._resolved_client_factory(),
+                self._connection_hosts(),
+            )
+            updated_at = datetime.now().replace(microsecond=0)
+            for metadata in candidates:
+                ts_code = metadata["ts_code"]
+                try:
+                    bars = self._fetch_daily_pages(
+                        resolved_client,
+                        ts_code,
+                        is_index=False,
+                        latest_cached_date=None,
+                        maximum_bars=TDX_PAGE_SIZE,
+                    )
+                    xdxr = resolved_client.get_xdxr_info(
+                        self._market_for_code(ts_code),
+                        self._symbol(ts_code),
+                    )
+                    stock_rows, factor_rows = build_stock_history(
+                        ts_code,
+                        bars,
+                        xdxr,
+                        updated_at=updated_at,
+                    )
+                    if len(stock_rows) < self.minimum_replay_bars:
+                        continue
+                    self.cache.upsert_stock_history(stock_rows, factor_rows)
+                    metadata["list_status"] = "L"
+                    metadata["list_date"] = stock_rows[0]["trade_date"]
+                    metadata["updated_at"] = updated_at
+                    self.cache.upsert_instruments([metadata])
+                    unseen_count += 1
+                    if unseen_count >= desired:
+                        return True
+                except Exception:
+                    continue
+            return unseen_count > 0
 
     def _update_sync_status(self, payload: dict[str, Any]) -> None:
         with self._status_lock:

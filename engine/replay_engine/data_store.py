@@ -1520,11 +1520,16 @@ class DuckDbBarStore:
         benchmark_code: str,
         benchmark_rows: list[ReplayBenchmarkSourceBar],
         rng: random.Random,
+        excluded_ts_codes: tuple[str, ...] = (),
+        recent_window_end_dates: tuple[date, ...] = (),
     ) -> tuple[str, list[ReplayAlignedSourceBar]]:
         benchmark_by_date = {row.trade_date: row for row in benchmark_rows}
+        excluded = {str(code).strip().upper() for code in excluded_ts_codes}
         candidates = []
         for ts_code in cls._replay_length_candidates(connection, required_bars):
             if str(ts_code).strip().upper().endswith(".BJ"):
+                continue
+            if str(ts_code).strip().upper() in excluded:
                 continue
             cls._replay_calendar_exchange(ts_code)
             candidates.append(ts_code)
@@ -1562,6 +1567,22 @@ class DuckDbBarStore:
             )
             if window_count <= 0:
                 continue
+            if recent_window_end_dates:
+                windows = [
+                    aligned_rows[start : start + required_bars]
+                    for run_start, run_length in valid_runs
+                    for start in range(
+                        run_start,
+                        run_start + run_length - required_bars + 1,
+                    )
+                ]
+                return ts_code, max(
+                    windows,
+                    key=lambda window: min(
+                        abs((window[-1].stock.trade_date - recent_date).days)
+                        for recent_date in recent_window_end_dates
+                    ),
+                )
             selected_window = rng.randrange(window_count)
             for run_start, run_length in valid_runs:
                 run_window_count = run_length - required_bars + 1
@@ -1595,6 +1616,8 @@ class DuckDbBarStore:
         game_length: int,
         benchmark_code: str,
         seed: int | None = None,
+        excluded_ts_codes: tuple[str, ...] = (),
+        recent_window_end_dates: tuple[date, ...] = (),
     ) -> dict[str, Any]:
         if not self._source_enabled():
             raise FileNotFoundError("历史行情演练需要外部原始库")
@@ -1629,6 +1652,8 @@ class DuckDbBarStore:
                 benchmark_code=resolved_benchmark_code,
                 benchmark_rows=benchmark_rows,
                 rng=rng,
+                excluded_ts_codes=excluded_ts_codes,
+                recent_window_end_dates=recent_window_end_dates,
             )
             selected_start_date = rows[0].stock.trade_date
             selected_end_date = rows[-1].stock.trade_date
