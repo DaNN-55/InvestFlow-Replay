@@ -115,6 +115,55 @@ describe("replay indicator local state", () => {
     );
   });
 
+  it("saves and restores an advanced subchart indicator", () => {
+    const storage = createStorage();
+    const state = useReplayIndicators({ storage });
+    const advanced = {
+      definitions: "change = close - REF(close, 1)",
+      plot: {
+        type: "rangeBar",
+        label: "砖型图",
+        fromExpression: "REF(change, 1)",
+        toExpression: "change",
+        risingColor: "#ef4444",
+        fallingColor: "#10b981",
+      },
+    };
+
+    const saved = state.saveCustomIndicator({
+      name: "砖型图",
+      mode: "advanced",
+      placement: "main",
+      advanced,
+    });
+
+    assert.ok(saved.id);
+    assert.equal(saved.mode, "advanced");
+    assert.equal(saved.placement, "sub");
+    assert.deepEqual(saved.advanced, advanced);
+    assert.equal(saved.expression, undefined);
+
+    const restored = useReplayIndicators({ storage });
+    assert.deepEqual(restored.customIndicators.value, [saved]);
+    assert.equal(restored.visiblePanelIds.value.includes(saved.id), true);
+  });
+
+  it("rejects malformed advanced indicators without changing stored state", () => {
+    const storage = createStorage();
+    const state = useReplayIndicators({ storage });
+
+    assert.equal(state.saveCustomIndicator({
+      name: "错误指标",
+      mode: "advanced",
+      advanced: {
+        definitions: "future = missing + 1",
+        plot: { type: "line", expression: "future" },
+      },
+    }), null);
+    assert.deepEqual(state.customIndicators.value, []);
+    assert.equal(storage.getItem(REPLAY_INDICATORS_STORAGE_KEY), null);
+  });
+
   it("saves main-chart indicators separately from limited subcharts", () => {
     const storage = createStorage();
     const state = useReplayIndicators({ storage });

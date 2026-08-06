@@ -103,6 +103,18 @@ describe("replay indicator frontend surface", () => {
     assert.match(panelSource, /\.map\(Number\)[\s\S]*?\.filter\(Number\.isFinite\)/u);
   });
 
+  it("offers advanced formulas and renders range bars in subcharts", () => {
+    assert.match(editorSource, /高级公式/u);
+    assert.match(editorSource, /计算步骤/u);
+    assert.match(editorSource, /区间柱/u);
+    assert.match(editorSource, /HHV、LLV、SMA、IF/u);
+    assert.match(workspaceSource, /evaluateReplayAdvancedIndicator/u);
+    assert.match(panelSource, /rangeBar/u);
+    assert.match(panelSource, /fromValues/u);
+    assert.match(panelSource, /risingColor/u);
+    assert.match(panelSource, /fallingColor/u);
+  });
+
   it("uses constrained mobile layouts without horizontal fixed-width panels", () => {
     assert.match(workspaceSource, /min-width: 0/u);
     assert.match(workspaceSource, /@media \(max-width: 640px\)/u);

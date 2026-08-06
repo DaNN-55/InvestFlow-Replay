@@ -11,6 +11,7 @@ import {
   calculateMa,
   calculateMacd,
   calculateRsi,
+  evaluateReplayAdvancedIndicator,
   evaluateReplayIndicator,
 } from "../../utils/replayIndicatorEngine";
 import ReplayIndicatorEditor from "./ReplayIndicatorEditor.vue";
@@ -51,7 +52,10 @@ const selectionMessage = shallowRef("");
 
 const customMainResults = computed(() =>
   customIndicators.value
-    .filter((indicator) => indicator.placement === "main")
+    .filter(
+      (indicator) =>
+        indicator.placement === "main" && indicator.mode !== "advanced",
+    )
     .map((indicator) => ({
       indicator,
       result: evaluateReplayIndicator(indicator.expression, props.bars),
@@ -206,6 +210,18 @@ const customPanels = computed(() =>
         visiblePanelIds.value.includes(indicator.id),
     )
     .map((indicator) => {
+      if (indicator.mode === "advanced") {
+        const result = evaluateReplayAdvancedIndicator(
+          indicator.advanced,
+          props.bars,
+        );
+        return {
+          ...indicator,
+          title: indicator.name,
+          series: result.series,
+          error: result.error ?? "",
+        };
+      }
       const result = evaluateReplayIndicator(indicator.expression, props.bars);
       return {
         ...indicator,

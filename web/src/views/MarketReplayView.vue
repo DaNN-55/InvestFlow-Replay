@@ -308,15 +308,11 @@ onBeforeUnmount(() => {
       <ReplaySetupPanel
         v-if="!hasSession"
         :loading="isCreating"
-        :playbooks="playbooks"
-        :playbooks-loading="playbooksLoading"
-        :playbooks-error="playbooksError"
         :benchmarks="benchmarks"
         :benchmarks-loading="benchmarksLoading"
         :benchmarks-error="benchmarksError"
         :benchmark-initialization="benchmarkInitialization"
         @create="createSession"
-        @retry-playbooks="loadReplayPlaybooks"
         @retry-benchmarks="retryReplayBenchmarks"
       />
 

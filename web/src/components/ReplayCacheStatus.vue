@@ -1,6 +1,6 @@
 <script setup>
 import { AlertTriangle, Database, LoaderCircle, RefreshCw } from "lucide-vue-next";
-import { computed, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from "vue";
 
 import { useReplayCacheStatus } from "../composables/useReplayCacheStatus.js";
 import {
@@ -10,6 +10,7 @@ import {
 } from "../utils/replayCacheStatus.js";
 
 const open = shallowRef(false);
+const cacheStatusRoot = useTemplateRef("cacheStatusRoot");
 const { status, error, loading, progress, refresh } = useReplayCacheStatus();
 
 const isCachedFallback = computed(() => {
@@ -34,10 +35,19 @@ const storage = computed(() => status.value?.storage ?? {});
 function close() {
   open.value = false;
 }
+
+function handleOutsidePointerDown(event) {
+  if (!open.value || cacheStatusRoot.value?.contains(event.target)) return;
+  close();
+}
+
+onMounted(() => document.addEventListener("pointerdown", handleOutsidePointerDown));
+onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutsidePointerDown));
 </script>
 
 <template>
   <div
+    ref="cacheStatusRoot"
     class="replay-cache-status"
     :class="[`replay-cache-status--${tone}`, { 'replay-cache-status--open': open }]"
     @keydown.esc="close"
@@ -61,6 +71,7 @@ function close() {
       class="replay-cache-status__panel"
       role="status"
       aria-live="polite"
+      :aria-hidden="!open"
     >
       <header class="replay-cache-status__heading">
         <div>
@@ -119,8 +130,6 @@ function close() {
 .replay-cache-status__trigger:focus-visible { outline: 2px solid var(--ql-color-primary); outline-offset: 2px; }
 .replay-cache-status__badge { position: absolute; top: -5px; right: -8px; min-width: 23px; padding: 1px 3px; border-radius: 8px; background: var(--ql-color-primary); color: #fff; font-size: 9px; font-weight: 700; line-height: 13px; }
 .replay-cache-status__panel { visibility: hidden; position: absolute; top: calc(100% + 8px); right: 0; z-index: 50; width: min(340px, calc(100vw - 24px)); padding: 14px; border: 1px solid var(--ql-line-strong); border-radius: 10px; background: var(--ql-panel); box-shadow: var(--ql-shadow-lg); opacity: 0; transform: translateY(-4px); transition: opacity 120ms ease, transform 120ms ease, visibility 120ms; pointer-events: none; }
-.replay-cache-status:hover .replay-cache-status__panel,
-.replay-cache-status:focus-within .replay-cache-status__panel,
 .replay-cache-status--open .replay-cache-status__panel { visibility: visible; opacity: 1; transform: translateY(0); pointer-events: auto; }
 .replay-cache-status__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 11px; border-bottom: 1px solid var(--ql-line); }
 .replay-cache-status__heading strong { color: var(--ql-ink); font-size: 14px; }

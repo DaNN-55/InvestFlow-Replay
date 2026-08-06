@@ -1,5 +1,7 @@
 import { computed, readonly, shallowRef } from "vue";
 
+import { validateReplayAdvancedIndicatorConfig } from "../utils/replayIndicatorEngine.js";
+
 export const REPLAY_INDICATORS_STORAGE_KEY =
   "investflow.replay.indicator-preferences.v1";
 export const MAX_REPLAY_SUBCHARTS = 3;
@@ -20,10 +22,60 @@ function createIndicatorId() {
   );
 }
 
+function normalizeColor(value, fallback) {
+  return /^#[\da-f]{6}$/iu.test(value) ? value : fallback;
+}
+
+function normalizeAdvancedConfig(config, fallbackLabel) {
+  const definitions = String(config?.definitions ?? "").trim();
+  const sourcePlot = config?.plot ?? {};
+  const type = ["line", "histogram", "rangeBar"].includes(sourcePlot.type)
+    ? sourcePlot.type
+    : "line";
+  const label = String(sourcePlot.label ?? fallbackLabel).trim() || fallbackLabel;
+  const plot = type === "rangeBar"
+    ? {
+        type,
+        label,
+        fromExpression: String(sourcePlot.fromExpression ?? "").trim(),
+        toExpression: String(sourcePlot.toExpression ?? "").trim(),
+        risingColor: normalizeColor(sourcePlot.risingColor, "#ef4444"),
+        fallingColor: normalizeColor(sourcePlot.fallingColor, "#10b981"),
+      }
+    : {
+        type,
+        label,
+        expression: String(sourcePlot.expression ?? "").trim(),
+        color: normalizeColor(sourcePlot.color, "#2563eb"),
+        negativeColor: normalizeColor(sourcePlot.negativeColor, "#10b981"),
+      };
+  const normalized = { definitions, plot };
+  return validateReplayAdvancedIndicatorConfig(normalized).valid
+    ? normalized
+    : null;
+}
+
 function normalizeCustomIndicator(indicator) {
   const name = String(indicator?.name ?? "").trim();
+  if (!name) {
+    return null;
+  }
+  if (indicator?.mode === "advanced") {
+    const advanced = normalizeAdvancedConfig(indicator.advanced, name);
+    if (!advanced) {
+      return null;
+    }
+    return {
+      id: String(indicator?.id ?? createIndicatorId()),
+      name,
+      mode: "advanced",
+      advanced,
+      placement: "sub",
+      color: advanced.plot.risingColor ?? advanced.plot.color,
+    };
+  }
   const expression = String(indicator?.expression ?? "").trim();
-  if (!name || !expression) {
+  if (!expression) {
     return null;
   }
   return {
@@ -31,9 +83,7 @@ function normalizeCustomIndicator(indicator) {
     name,
     expression,
     placement: indicator?.placement === "main" ? "main" : "sub",
-    color: /^#[\da-f]{6}$/iu.test(indicator?.color)
-      ? indicator.color
-      : "#2563eb",
+    color: normalizeColor(indicator?.color, "#2563eb"),
   };
 }
 

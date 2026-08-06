@@ -26,22 +26,11 @@ const historyDetailSource = readSource(
 );
 
 describe("replay playbook training surface", () => {
-  it("creates free training by default and freezes a selected current version", () => {
+  it("creates new training only in free mode without a specialist entry", () => {
     assert.match(setupSource, /trainingMode: "free"/u);
-    assert.match(setupSource, /playbookId: ""/u);
-    assert.match(setupSource, /payload\.playbookId = selectedPlaybook\.value\.id/u);
-    assert.match(
-      setupSource,
-      /payload\.playbookVersionId = selectedPlaybook\.value\.currentVersion\.id/u,
-    );
-    assert.match(
-      setupSource,
-      /开局后固定 v\{\{ selectedPlaybook\.currentVersion\.versionNumber \}\}，后续修改不影响本局/u,
-    );
-    assert.match(setupSource, /正在加载战法/u);
-    assert.match(setupSource, /暂无可用战法/u);
-    assert.match(setupSource, /重新加载/u);
-    assert.match(setupSource, /当前版本尚未填写内容/u);
+    assert.doesNotMatch(setupSource, /战法专项/u);
+    assert.doesNotMatch(setupSource, /专项战法设置/u);
+    assert.doesNotMatch(setupSource, /playbookVersionId/u);
   });
 
   it("keeps the route view as a composition surface for frozen context", () => {
@@ -52,7 +41,6 @@ describe("replay playbook training surface", () => {
       /<ReplayTrainingContext :training-config="session\.trainingConfig" \/>/u,
     );
     assert.match(viewSource, /:playbooks="playbooks"/u);
-    assert.match(viewSource, /@retry-playbooks="loadReplayPlaybooks"/u);
   });
 
   it("shows the frozen playbook name, version and original plain text", () => {

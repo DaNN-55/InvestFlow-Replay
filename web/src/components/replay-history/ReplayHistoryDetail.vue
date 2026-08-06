@@ -22,6 +22,7 @@ import {
 import ReplayReviewTimeline from "../replay/ReplayReviewTimeline.vue";
 import ReplayOrderDecisionSnapshot from "../replay/ReplayOrderDecisionSnapshot.vue";
 import UiButton from "../ui/UiButton.vue";
+import UiTooltip from "../ui/UiTooltip.vue";
 
 const props = defineProps({
   item: {
@@ -272,23 +273,33 @@ function isPositiveMetric(metric) {
       </summary>
       <div class="replay-history-detail__score-body">
         <div class="replay-history-detail__score-meta">
-          <span title="各维度权重来自评分算法；不适用的维度不计入本局得分。">
-            权重快照：
+          <span class="replay-history-detail__score-meta-item">
+            <span>权重快照：</span>
+            <UiTooltip
+              content="各维度权重来自评分算法；不适用的维度不计入本局得分。"
+              label="查看权重快照说明"
+            />
             <template v-for="(entry, index) in scoreWeightSnapshot" :key="entry.key">
-              <span :title="entry.description">
+              <span>
                 {{ entry.label }} {{ entry.weight }}{{ entry.applicable ? "" : "（不适用）" }}
               </span>{{ index < scoreWeightSnapshot.length - 1 ? " · " : "" }}
             </template>
           </span>
           <span
             v-if="item.scoreCard.appliedWeightTotal != null"
-            title="不适用维度会从总权重中扣除；原始得分按本局适用权重重新折算为 100 分。"
+            class="replay-history-detail__score-meta-item"
           >
-            本局适用权重
-            {{ formatScore(item.scoreCard.appliedWeightTotal) }} / 100
-            <template v-if="item.scoreCard.rawTotal != null">
-              · 原始得分 {{ formatScore(item.scoreCard.rawTotal) }}
-            </template>
+            <span>
+              本局适用权重
+              {{ formatScore(item.scoreCard.appliedWeightTotal) }} / 100
+              <template v-if="item.scoreCard.rawTotal != null">
+                · 原始得分 {{ formatScore(item.scoreCard.rawTotal) }}
+              </template>
+            </span>
+            <UiTooltip
+              content="不适用维度会从总权重中扣除；原始得分按本局适用权重重新折算为 100 分。"
+              label="查看适用权重说明"
+            />
           </span>
         </div>
         <div
@@ -298,14 +309,20 @@ function isPositiveMetric(metric) {
           <div
             v-for="dimension in scoreDimensions"
             :key="dimension.key"
-            :title="dimension.description"
             :class="{
               'replay-history-detail__data-card--positive':
                 dimension.applicable &&
                 isStrongScore(dimension.value, dimension.maximum),
             }"
           >
-            <span>{{ dimension.label }}</span>
+            <div class="replay-history-detail__metric-label">
+              <span>{{ dimension.label }}</span>
+              <UiTooltip
+                v-if="dimension.explain"
+                :content="dimension.description"
+                :label="`查看${dimension.label}说明`"
+              />
+            </div>
             <strong v-if="dimension.applicable">
               {{ formatScore(dimension.value) }}
               <small>/ {{ dimension.maximum }}</small>
@@ -322,13 +339,19 @@ function isPositiveMetric(metric) {
           <div
             v-for="metric in scoreMetrics"
             :key="metric.key"
-            :title="metric.description"
             :class="{
               'replay-history-detail__data-card--positive':
                 isPositiveMetric(metric),
             }"
           >
-            <span>{{ metric.label }}</span>
+            <div class="replay-history-detail__metric-label">
+              <span>{{ metric.label }}</span>
+              <UiTooltip
+                v-if="metric.explain"
+                :content="metric.description"
+                :label="`查看${metric.label}说明`"
+              />
+            </div>
             <strong>{{ formatReplayScoreMetric(metric) }}</strong>
           </div>
         </div>
@@ -942,12 +965,6 @@ function isPositiveMetric(metric) {
   padding: 0.875rem 1rem 1rem;
 }
 
-.replay-history-detail__score-meta [title],
-.replay-history-detail__dimensions [title],
-.replay-history-detail__metrics [title] {
-  cursor: help;
-}
-
 .replay-history-detail__algorithm {
   display: block;
   margin-top: 0.25rem;
@@ -961,6 +978,18 @@ function isPositiveMetric(metric) {
   color: var(--ql-color-text-muted);
   font-size: 0.6875rem;
   line-height: 1.5;
+}
+
+.replay-history-detail__score-meta-item,
+.replay-history-detail__metric-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+}
+
+.replay-history-detail__metric-label {
+  justify-content: space-between;
 }
 
 .replay-history-detail__dimensions {

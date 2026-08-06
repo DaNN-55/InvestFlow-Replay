@@ -79,12 +79,20 @@ const visibleSeries = computed(() =>
       normalizedRange.value.start,
       normalizedRange.value.endExclusive,
     ),
+    ...(Array.isArray(item.fromValues)
+      ? {
+          fromValues: item.fromValues.slice(
+            normalizedRange.value.start,
+            normalizedRange.value.endExclusive,
+          ),
+        }
+      : {}),
   })),
 );
 
 const numericValues = computed(() =>
   visibleSeries.value.flatMap((item) =>
-    item.values
+    [...item.values, ...(item.fromValues ?? [])]
       .filter(
         (value) => value !== null && value !== undefined && value !== "",
       )
@@ -146,7 +154,9 @@ function buildLinePath(values) {
 const renderedSeries = computed(() =>
   visibleSeries.value.map((item) => ({
     ...item,
-    path: item.type === "histogram" ? "" : buildLinePath(item.values),
+    path: ["histogram", "rangeBar"].includes(item.type)
+      ? ""
+      : buildLinePath(item.values),
   })),
 );
 
@@ -176,9 +186,54 @@ const histogramBars = computed(() => {
         y: Math.min(y, baseY),
         width: barWidth,
         height: Math.max(Math.abs(baseY - y), 1),
-        color: Number(value) >= 0 ? "#ef4444" : "#10b981",
+        color:
+          Number(value) >= 0
+            ? histogram.positiveColor ?? "#ef4444"
+            : histogram.negativeColor ?? "#10b981",
       },
     ];
+  });
+});
+
+const rangeBars = computed(() => {
+  if (visibleBars.value.length === 0) {
+    return [];
+  }
+  const barWidth = Math.max(
+    Math.min(
+      (width - padding.left - padding.right) / visibleBars.value.length - 1,
+      7,
+    ),
+    1,
+  );
+  return visibleSeries.value.flatMap((item) => {
+    if (item.type !== "rangeBar" || !Array.isArray(item.fromValues)) {
+      return [];
+    }
+    return item.values.flatMap((value, index) => {
+      const fromValue = item.fromValues[index];
+      if (
+        value == null ||
+        fromValue == null ||
+        !Number.isFinite(Number(value)) ||
+        !Number.isFinite(Number(fromValue)) ||
+        Number(value) === Number(fromValue)
+      ) {
+        return [];
+      }
+      const fromY = scaleY(fromValue);
+      const toY = scaleY(value);
+      return [{
+        x: scaleX(index) - barWidth / 2,
+        y: Math.min(fromY, toY),
+        width: barWidth,
+        height: Math.max(Math.abs(fromY - toY), 1),
+        color:
+          Number(value) > Number(fromValue)
+            ? item.risingColor
+            : item.fallingColor,
+      }];
+    });
   });
 });
 
@@ -243,8 +298,10 @@ function pointerToGlobalIndex(event) {
   if (!bounds || !visibleBars.value.length) {
     return null;
   }
+  const viewBoxX =
+    ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * width;
   const ratio = clamp(
-    (event.clientX - bounds.left) / Math.max(bounds.width, 1),
+    (viewBoxX - padding.left) / (width - padding.left - padding.right),
     0,
     1,
   );
@@ -329,6 +386,14 @@ function clearHover() {
         v-bind="bar"
         :fill="bar.color"
         fill-opacity="0.62"
+        rx="0.5"
+      />
+      <rect
+        v-for="(bar, index) in rangeBars"
+        :key="`range-${index}`"
+        v-bind="bar"
+        :fill="bar.color"
+        fill-opacity="0.82"
         rx="0.5"
       />
       <path

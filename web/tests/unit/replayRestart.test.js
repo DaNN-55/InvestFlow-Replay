@@ -36,7 +36,7 @@ describe("buildReplayRestartOptions", () => {
     });
   });
 
-  it("preserves the frozen playbook selection for a strategy drill", () => {
+  it("restarts a legacy strategy drill as free training", () => {
     const options = buildReplayRestartOptions({
       interval: "1d",
       gameLength: 60,
@@ -50,8 +50,8 @@ describe("buildReplayRestartOptions", () => {
       },
     });
 
-    assert.equal(options.trainingMode, "playbook");
-    assert.equal(options.playbookId, "playbook-1");
-    assert.equal(options.playbookVersionId, "version-3");
+    assert.equal(options.trainingMode, "free");
+    assert.equal("playbookId" in options, false);
+    assert.equal("playbookVersionId" in options, false);
   });
 });

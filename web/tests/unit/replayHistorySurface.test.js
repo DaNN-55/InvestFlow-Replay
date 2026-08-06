@@ -38,6 +38,10 @@ const scorePresentationUrl = new URL(
   "../../src/utils/replayScorePresentation.js",
   import.meta.url,
 );
+const tooltipUrl = new URL(
+  "../../src/components/ui/UiTooltip.vue",
+  import.meta.url,
+);
 
 function sourceIfPresent(url) {
   return existsSync(url) ? readFileSync(url, "utf8") : "";
@@ -89,6 +93,7 @@ describe("replay history tracking surface", () => {
     const listSource = sourceIfPresent(listUrl);
     const detailSource = sourceIfPresent(detailUrl);
     const scorePresentationSource = sourceIfPresent(scorePresentationUrl);
+    const tooltipSource = sourceIfPresent(tooltipUrl);
 
     for (const component of [
       "ReplayHistoryFilters",
@@ -147,9 +152,14 @@ describe("replay history tracking surface", () => {
     assert.match(detailSource, /ChevronUp/u);
     assert.match(detailSource, /ChevronDown/u);
     assert.match(detailSource, /replay-history-detail__data-card--positive/u);
-    assert.match(detailSource, /:title="dimension\.description"/u);
-    assert.match(detailSource, /:title="metric\.description"/u);
-    assert.match(detailSource, /:title="entry\.description"/u);
+    assert.equal(existsSync(tooltipUrl), true);
+    assert.match(detailSource, /UiTooltip/u);
+    assert.match(detailSource, /v-if="dimension\.explain"/u);
+    assert.match(detailSource, /v-if="metric\.explain"/u);
+    assert.doesNotMatch(detailSource, /:title="dimension\.description"/u);
+    assert.doesNotMatch(detailSource, /:title="metric\.description"/u);
+    assert.match(tooltipSource, /TooltipPortal/u);
+    assert.match(tooltipSource, /TooltipTrigger/u);
     assert.match(
       detailSource,
       /\.replay-history-detail__score-summary \{[\s\S]*?min-height: 80px;[\s\S]*?padding: 0\.5625rem 1rem;/u,

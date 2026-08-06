@@ -42,10 +42,23 @@ const METRIC_DESCRIPTIONS = {
   indexExcessReturnPct: "实际总收益率减去同期指数基准收益率。",
 };
 
+const EXPLAINED_DIMENSION_KEYS = new Set(["playbookCompliance"]);
+const EXPLAINED_METRIC_KEYS = new Set([
+  "stockBuyAndHoldReturnPct",
+  "strategyVsStockBuyAndHoldPct",
+  "maxDrawdownPct",
+  "endingCapitalUtilizationPct",
+  "averageCapitalUtilizationPct",
+  "maxCapitalUtilizationPct",
+  "indexBenchmarkReturnPct",
+  "indexExcessReturnPct",
+]);
+
 function withMetricDescriptions(metrics) {
   return metrics.map((metric) => ({
     ...metric,
     description: METRIC_DESCRIPTIONS[metric.key] ?? "本局评分使用的统计指标。",
+    explain: EXPLAINED_METRIC_KEYS.has(metric.key),
   }));
 }
 
@@ -69,6 +82,9 @@ export function buildReplayScoreDimensions(scoreCard) {
     return {
       ...dimension,
       value,
+      ...(EXPLAINED_DIMENSION_KEYS.has(dimension.key)
+        ? { explain: true }
+        : {}),
       applicable:
         applicability?.applicable ?? value != null,
       reason: applicability?.reason

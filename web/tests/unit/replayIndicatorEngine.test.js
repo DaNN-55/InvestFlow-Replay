@@ -8,6 +8,7 @@ import {
   calculateMa,
   calculateMacd,
   calculateRsi,
+  evaluateReplayAdvancedIndicator,
   evaluateReplayIndicator,
   parseReplayIndicatorExpression,
   validateReplayIndicatorExpression,
@@ -115,6 +116,81 @@ describe("replay indicator expression engine", () => {
       ]).values[0],
       null,
     );
+  });
+});
+
+describe("advanced replay indicator engine", () => {
+  const brickConfig = {
+    definitions: [
+      "range = HHV(high, 2) - LLV(low, 2)",
+      "smooth = SMA(range, 3, 1)",
+      "brick = IF(smooth > 3, smooth - 3, 0)",
+    ].join("\n"),
+    plot: {
+      type: "rangeBar",
+      label: "砖型图",
+      fromExpression: "REF(brick, 1)",
+      toExpression: "brick",
+      risingColor: "#ef4444",
+      fallingColor: "#10b981",
+    },
+  };
+
+  it("evaluates ordered variables and builds a causal range-bar series", () => {
+    const result = evaluateReplayAdvancedIndicator(brickConfig, bars);
+
+    assert.equal(result.error, null);
+    assert.equal(result.series.length, 1);
+    assert.equal(result.series[0].type, "rangeBar");
+    assert.equal(result.series[0].label, "砖型图");
+    assert.deepEqual(result.series[0].fromValues.slice(0, 3), [null, null, 2]);
+    assert.deepEqual(result.series[0].values.slice(0, 2), [null, 2]);
+    assert.ok(Math.abs(result.series[0].values[2] - 7 / 3) < 1e-12);
+    assert.equal(result.series[0].risingColor, "#ef4444");
+    assert.equal(result.series[0].fallingColor, "#10b981");
+
+    const prefix = evaluateReplayAdvancedIndicator(brickConfig, bars.slice(0, 4));
+    assert.deepEqual(prefix.series[0].values, result.series[0].values.slice(0, 4));
+    assert.deepEqual(
+      prefix.series[0].fromValues,
+      result.series[0].fromValues.slice(0, 4),
+    );
+  });
+
+  it("supports line and histogram plots from calculated variables", () => {
+    for (const type of ["line", "histogram"]) {
+      const result = evaluateReplayAdvancedIndicator({
+        definitions: "change = close - REF(close, 1)",
+        plot: {
+          type,
+          label: "涨跌",
+          expression: "change",
+          color: "#2563eb",
+          negativeColor: "#10b981",
+        },
+      }, bars);
+      assert.equal(result.error, null);
+      assert.deepEqual(result.series[0].values.slice(0, 3), [null, 2, 2]);
+      assert.equal(result.series[0].type, type);
+    }
+  });
+
+  it("rejects unsafe, forward, duplicate and malformed definitions", () => {
+    for (const definitions of [
+      "brick = missing + 1",
+      "next = current + 1\ncurrent = close",
+      "value = close\nvalue = high",
+      "close = high",
+      "value = globalThis.alert(1)",
+      "value = SMA(close, 3, 4)",
+    ]) {
+      const result = evaluateReplayAdvancedIndicator({
+        definitions,
+        plot: { type: "line", label: "错误", expression: "value" },
+      }, bars);
+      assert.deepEqual(result.series, [], definitions);
+      assert.ok(result.error, definitions);
+    }
   });
 });
 

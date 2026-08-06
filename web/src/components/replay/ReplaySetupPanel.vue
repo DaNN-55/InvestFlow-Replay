@@ -1,6 +1,5 @@
 <script setup>
 import {
-  BookOpenCheck,
   ChevronDown,
   Play,
   RefreshCw,
@@ -17,18 +16,6 @@ const props = defineProps({
   loading: {
     type: Boolean,
     default: false,
-  },
-  playbooks: {
-    type: Array,
-    default: () => [],
-  },
-  playbooksLoading: {
-    type: Boolean,
-    default: false,
-  },
-  playbooksError: {
-    type: String,
-    default: "",
   },
   benchmarks: {
     type: Array,
@@ -50,14 +37,11 @@ const props = defineProps({
 
 const emit = defineEmits([
   "create",
-  "retryPlaybooks",
   "retryBenchmarks",
 ]);
 
 const form = reactive({
-  trainingMode: "free",
   barInterval: "1d",
-  playbookId: "",
   benchmarkCode: "",
   gameLength: 60,
   initialCapital: 100000,
@@ -75,15 +59,6 @@ const lengthOptions = computed(() =>
     : [20, 60, 120],
 );
 
-const availablePlaybooks = computed(() =>
-  props.playbooks.filter((playbook) => playbook.currentVersion?.id),
-);
-const selectedPlaybook = computed(
-  () =>
-    availablePlaybooks.value.find(
-      (playbook) => playbook.id === form.playbookId,
-    ) ?? null,
-);
 const compatibleBenchmarks = computed(() =>
   props.benchmarks.filter((benchmark) =>
     form.barInterval === "hybrid" ||
@@ -103,12 +78,7 @@ const canSubmit = computed(
     lengthOptions.value.includes(Number(form.gameLength)) &&
     Number(form.initialCapital) > 0 &&
     (!props.benchmarksLoading || compatibleBenchmarks.value.length > 0) &&
-    Boolean(selectedBenchmark.value) &&
-    (form.trainingMode === "free" ||
-      Boolean(
-        selectedPlaybook.value?.id &&
-          selectedPlaybook.value.currentVersion?.id,
-      )),
+    Boolean(selectedBenchmark.value),
 );
 const benchmarkProgressText = computed(() => {
   const status = props.benchmarkInitialization;
@@ -158,12 +128,8 @@ function submit() {
         Number(value),
       ]),
     ),
-    trainingMode: form.trainingMode,
+    trainingMode: "free",
   };
-  if (form.trainingMode === "playbook") {
-    payload.playbookId = selectedPlaybook.value.id;
-    payload.playbookVersionId = selectedPlaybook.value.currentVersion.id;
-  }
   emit("create", payload);
 }
 </script>
@@ -183,41 +149,6 @@ function submit() {
 
     <UiCard class="replay-setup__card" overflow-visible>
       <form class="replay-setup__form" @submit.prevent="submit">
-        <fieldset class="replay-setup__section">
-          <legend class="replay-setup__label">训练方式</legend>
-          <div class="replay-setup__modes">
-            <button
-              type="button"
-              class="replay-setup__mode"
-              :class="{
-                'replay-setup__mode--active': form.trainingMode === 'free',
-              }"
-              @click="form.trainingMode = 'free'"
-            >
-              <ShieldCheck :size="18" />
-              <span>
-                <strong>自由演练</strong>
-                <small>不预设战法，完成后可自由关联</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              class="replay-setup__mode"
-              :class="{
-                'replay-setup__mode--active':
-                  form.trainingMode === 'playbook',
-              }"
-              @click="form.trainingMode = 'playbook'"
-            >
-              <BookOpenCheck :size="18" />
-              <span>
-                <strong>战法专项</strong>
-                <small>按一个固定版本完成整局训练</small>
-              </span>
-            </button>
-          </div>
-        </fieldset>
-
         <fieldset class="replay-setup__section">
           <legend class="replay-setup__label">行情精度</legend>
           <div class="replay-setup__intervals">
@@ -241,65 +172,6 @@ function submit() {
             </button>
           </div>
         </fieldset>
-
-        <section
-          v-if="form.trainingMode === 'playbook'"
-          class="replay-setup__playbook"
-          aria-label="专项战法设置"
-        >
-          <label class="replay-setup__field">
-            <span class="replay-setup__label">专项战法</span>
-            <select
-              v-model="form.playbookId"
-              class="replay-setup__select"
-              :disabled="playbooksLoading"
-            >
-              <option value="">请选择一个有当前版本的战法</option>
-              <option
-                v-for="playbook in availablePlaybooks"
-                :key="playbook.id"
-                :value="playbook.id"
-              >
-                {{ playbook.name }} · v{{ playbook.currentVersion.versionNumber }}
-              </option>
-            </select>
-          </label>
-          <div v-if="playbooksLoading" class="replay-setup__playbook-state">
-            <RefreshCw :size="14" class="replay-setup__spinner" />
-            正在加载战法…
-          </div>
-          <div
-            v-else-if="playbooksError"
-            class="replay-setup__playbook-state replay-setup__playbook-state--error"
-          >
-            <span>{{ playbooksError }}</span>
-            <button type="button" @click="emit('retryPlaybooks')">
-              重新加载
-            </button>
-          </div>
-          <div
-            v-else-if="availablePlaybooks.length === 0"
-            class="replay-setup__playbook-state"
-          >
-            暂无可用战法。你仍可切回自由演练开始训练。
-          </div>
-          <div
-            v-else-if="selectedPlaybook"
-            class="replay-setup__playbook-preview"
-          >
-            <header>
-              <strong>{{ selectedPlaybook.name }}</strong>
-              <span>v{{ selectedPlaybook.currentVersion.versionNumber }}</span>
-            </header>
-            <p>
-              {{
-                selectedPlaybook.currentVersion.content ||
-                "当前版本尚未填写内容，请先到战法库补充。"
-              }}
-            </p>
-            <small>开局后固定 v{{ selectedPlaybook.currentVersion.versionNumber }}，后续修改不影响本局</small>
-          </div>
-        </section>
 
         <section
           class="replay-setup__benchmark"
@@ -525,12 +397,6 @@ function submit() {
   gap: 10px;
 }
 
-.replay-setup__modes {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
 .replay-setup__intervals {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -565,53 +431,6 @@ function submit() {
   color: var(--ql-accent);
   background: var(--ql-color-primary-soft);
   box-shadow: 0 0 0 3px var(--ql-color-primary-ring);
-}
-
-.replay-setup__mode {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 13px;
-  border: 1px solid var(--ql-line-strong);
-  border-radius: 10px;
-  color: var(--ql-color-text-muted);
-  background: var(--ql-color-bg-surface-strong);
-  text-align: left;
-  cursor: pointer;
-}
-
-.replay-setup__mode > span {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.replay-setup__mode strong {
-  color: var(--ql-ink);
-  font-size: 13px;
-}
-
-.replay-setup__mode small {
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.replay-setup__mode--active {
-  border-color: var(--ql-accent);
-  color: var(--ql-accent);
-  background: var(--ql-color-primary-soft);
-  box-shadow: 0 0 0 3px var(--ql-color-primary-ring);
-}
-
-.replay-setup__playbook {
-  display: grid;
-  min-width: 0;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--ql-line);
-  border-radius: 10px;
-  background: var(--ql-paper-soft);
 }
 
 .replay-setup__benchmark {
@@ -664,44 +483,6 @@ function submit() {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-}
-
-.replay-setup__playbook-preview {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid rgba(15, 82, 186, 0.14);
-  border-radius: 8px;
-  background: var(--ql-color-bg-surface-strong);
-}
-
-.replay-setup__playbook-preview header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.replay-setup__playbook-preview header span {
-  flex: 0 0 auto;
-  color: var(--ql-accent);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.replay-setup__playbook-preview p {
-  max-height: 150px;
-  overflow: auto;
-  margin: 10px 0;
-  color: var(--ql-color-text-body);
-  font-size: 12px;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.replay-setup__playbook-preview small {
-  color: var(--ql-color-text-muted);
-  font-size: 10px;
 }
 
 .replay-setup__spinner {
@@ -799,10 +580,6 @@ function submit() {
   }
 
   .replay-setup__cost-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .replay-setup__modes {
     grid-template-columns: 1fr;
   }
 

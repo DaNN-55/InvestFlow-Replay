@@ -59,6 +59,7 @@ describe("replay score presentation", () => {
     assert.deepEqual(dimensions.map((dimension) => {
       const comparable = { ...dimension };
       delete comparable.description;
+      delete comparable.explain;
       return comparable;
     }), [
       {
@@ -169,6 +170,37 @@ describe("replay score presentation", () => {
         metrics.find((metric) => metric.key === "indexExcessReturnPct"),
       ),
       "暂无指数数据",
+    );
+  });
+
+  it("marks only concepts that need extra explanation", () => {
+    const dimensions = buildReplayScoreDimensions(v2ScoreCard);
+    const metrics = buildReplayScoreMetrics(v2ScoreCard);
+
+    assert.deepEqual(
+      dimensions.filter((dimension) => dimension.explain).map((dimension) => dimension.key),
+      ["playbookCompliance"],
+    );
+    assert.deepEqual(
+      metrics.filter((metric) => metric.explain).map((metric) => metric.key),
+      [
+        "stockBuyAndHoldReturnPct",
+        "strategyVsStockBuyAndHoldPct",
+        "maxDrawdownPct",
+        "endingCapitalUtilizationPct",
+        "averageCapitalUtilizationPct",
+        "maxCapitalUtilizationPct",
+        "indexBenchmarkReturnPct",
+        "indexExcessReturnPct",
+      ],
+    );
+    assert.equal(
+      metrics.find((metric) => metric.key === "totalReturnPct").explain,
+      false,
+    );
+    assert.equal(
+      metrics.find((metric) => metric.key === "totalTradingCosts").explain,
+      false,
     );
   });
 
