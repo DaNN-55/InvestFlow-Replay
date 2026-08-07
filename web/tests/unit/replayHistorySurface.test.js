@@ -14,10 +14,6 @@ const composableUrl = new URL(
   "../../src/composables/useReplayHistory.js",
   import.meta.url,
 );
-const panelUrl = new URL(
-  "../../src/components/replay-history/ReplayHistoryPanel.vue",
-  import.meta.url,
-);
 const recordsUrl = new URL(
   "../../src/components/replay-history/ReplayHistoryRecords.vue",
   import.meta.url,
@@ -48,17 +44,18 @@ function sourceIfPresent(url) {
 }
 
 describe("replay history tracking surface", () => {
-  it("keeps live tracking and replay history in separate primary tabs", () => {
+  it("keeps tracking, replay history and playbooks in separate primary tabs", () => {
     assert.match(viewSource, /const primaryTab = ref\("records"\)/u);
     assert.match(viewSource, /aria-label="交易追踪分类"/u);
     assert.match(viewSource, /实盘与模拟/u);
     assert.match(viewSource, /历史演练/u);
+    assert.match(viewSource, /战法库/u);
     assert.match(viewSource, /primaryTab === 'records'/u);
-    assert.match(viewSource, /ReplayHistoryPanel/u);
-    assert.match(
-      viewSource,
-      /v-if="primaryTab === 'records'"[\s\S]*?executionSettingsOpen = true/u,
-    );
+    assert.match(viewSource, /primaryTab === 'replay'/u);
+    assert.match(viewSource, /ReplayHistoryRecords/u);
+    assert.match(viewSource, /ReplayPlaybookPanel/u);
+    assert.doesNotMatch(viewSource, /ReplayHistoryPanel/u);
+    assert.doesNotMatch(viewSource, /executionSettingsOpen|>\s*执行参数\s*</u);
   });
 
   it("uses a dedicated replay history API and source state", () => {
@@ -85,7 +82,7 @@ describe("replay history tracking surface", () => {
   });
 
   it("keeps history container, filters, list and detail focused", () => {
-    for (const url of [panelUrl, recordsUrl, filtersUrl, listUrl, detailUrl]) {
+    for (const url of [recordsUrl, filtersUrl, listUrl, detailUrl]) {
       assert.equal(existsSync(url), true, url.pathname);
     }
     const recordsSource = sourceIfPresent(recordsUrl);
@@ -173,9 +170,10 @@ describe("replay history tracking surface", () => {
     assert.match(scorePresentationSource, /暂无指数数据/u);
     assert.match(recordsSource, /@media \(max-width: 900px\)/u);
     assert.match(recordsSource, /grid-template-columns: 300px minmax\(0, 1fr\)/u);
-    assert.match(recordsSource, /window\.confirm/u);
+    assert.doesNotMatch(recordsSource, /window\.confirm/u);
+    assert.match(recordsSource, /ConfirmDialog/u);
     assert.match(recordsSource, /api\.deleteReplaySession/u);
-    assert.match(recordsSource, /@delete="deleteReplay"/u);
+    assert.match(recordsSource, /@delete="requestDeleteReplay"/u);
     assert.match(detailSource, /删除记录/u);
     assert.match(detailSource, /replay-history-detail__reviews/u);
     assert.match(detailSource, /replay-history-detail__order-columns/u);

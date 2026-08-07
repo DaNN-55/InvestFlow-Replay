@@ -3189,16 +3189,48 @@ export function createApp(options = {}) {
     const event = normalizeTradeExecutionEvent(normalizeBody(body));
     const events = normalizeTradeExecutionEvents(record.executionEvents);
     const nextEvents = [...events, event];
-    const ledger = calculateTradeLedger(nextEvents);
     const hasPriorTrades = calculateTradeLedger(events).tradeEventCount > 0;
-    const nextStatus = ledger.state === "closed"
-      ? "exited"
-      : ledger.state === "open"
-        ? hasPriorTrades ? "holding" : "entered"
-        : record.status;
+    const nextStatus = resolveTradeRecordStatus(nextEvents, hasPriorTrades ? "holding" : "entered");
     return saveTradeRecordFile({
       executionEvents: nextEvents,
       status: nextStatus,
+    }, record);
+  }
+
+  function resolveTradeRecordStatus(events, firstOpenStatus = "entered") {
+    const ledger = calculateTradeLedger(events);
+    if (ledger.state === "closed") {
+      return "exited";
+    }
+    if (ledger.state === "open") {
+      return ledger.tradeEventCount > 1 ? "holding" : firstOpenStatus;
+    }
+    return "draft";
+  }
+
+  function updateTradeExecutionEvent(record, eventId, body) {
+    const events = normalizeTradeExecutionEvents(record.executionEvents);
+    const eventIndex = events.findIndex((event) => event.id === eventId);
+    assertCondition(eventIndex >= 0, "找不到成交或动作记录", 404);
+    const nextEvents = [...events];
+    nextEvents[eventIndex] = normalizeTradeExecutionEvent({
+      ...events[eventIndex],
+      ...normalizeBody(body),
+      id: eventId,
+    });
+    return saveTradeRecordFile({
+      executionEvents: nextEvents,
+      status: resolveTradeRecordStatus(nextEvents),
+    }, record);
+  }
+
+  function deleteTradeExecutionEvent(record, eventId) {
+    const events = normalizeTradeExecutionEvents(record.executionEvents);
+    assertCondition(events.some((event) => event.id === eventId), "找不到成交或动作记录", 404);
+    const nextEvents = events.filter((event) => event.id !== eventId);
+    return saveTradeRecordFile({
+      executionEvents: nextEvents,
+      status: resolveTradeRecordStatus(nextEvents),
     }, record);
   }
 
@@ -5427,6 +5459,22 @@ export function createApp(options = {}) {
     },
   );
 
+  app.delete(
+    "/api/quant/replay/playbooks/:playbookId/versions/:versionId",
+    (req, res, next) => {
+      try {
+        const deleted = database.deleteReplayPlaybookVersion({
+          playbookId: String(req.params.playbookId ?? ""),
+          versionId: String(req.params.versionId ?? ""),
+        });
+        assertCondition(Boolean(deleted), "找不到战法版本", 404);
+        res.status(204).end();
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   app.post("/api/quant/replay/playbook-candidates", (req, res, next) => {
     try {
       const normalized = normalizeReplayPlaybookCandidateCreate(
@@ -6992,6 +7040,26 @@ export function createApp(options = {}) {
       const record = findTradeRecordById(req.params.id);
       assertCondition(Boolean(record), "找不到交易追踪单", 404);
       res.json(recordTradeExecutionEvent(record, req.body));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch("/api/quant/decision/trade-records/:id/execution-events/:eventId", (req, res, next) => {
+    try {
+      const record = findTradeRecordById(req.params.id);
+      assertCondition(Boolean(record), "找不到交易追踪单", 404);
+      res.json(updateTradeExecutionEvent(record, req.params.eventId, req.body));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/quant/decision/trade-records/:id/execution-events/:eventId", (req, res, next) => {
+    try {
+      const record = findTradeRecordById(req.params.id);
+      assertCondition(Boolean(record), "找不到交易追踪单", 404);
+      res.json(deleteTradeExecutionEvent(record, req.params.eventId));
     } catch (error) {
       next(error);
     }

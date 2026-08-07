@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --no-warnings src/standalone-server.js",
     "start": "node --no-warnings src/standalone-server.js",
-    "test": "node --no-warnings --test --test-concurrency=1 src/replay-*.test.js src/trade-license*.test.js"
+    "test": "node --no-warnings --test --test-concurrency=1 src/replay-*.test.js src/standalone-*.test.js src/trade-license*.test.js"
   },
   "dependencies": {
     "express": "^4.21.2"

@@ -113,12 +113,21 @@ export function aggregateReplayBars(bars, period = "day") {
   return result;
 }
 
-export function mapReplayExecutionsToTrades(executions, bars) {
+export function mapReplayExecutionsToTrades(executions, bars, options = {}) {
   const safeBars = Array.isArray(bars) ? bars : [];
+  const observationBars = Number(options.observationBars);
+  const barsPerDay = Math.floor(240 / Math.max(1, Number(options.stepMinutes) || 1));
   return (Array.isArray(executions) ? executions : [])
     .filter((execution) => execution?.status === "filled")
     .map((execution) => {
-      const sequence = Number(execution.sequence);
+      const sourceSequence = Number(execution.sequence);
+      const sequence = options.sessionInterval === "hybrid" &&
+          Number.isFinite(observationBars) &&
+          sourceSequence > observationBars
+        ? observationBars + Math.floor(
+            (sourceSequence - observationBars - 1) / barsPerDay,
+          ) + 1
+        : sourceSequence;
       const bar = safeBars.find(
         (item) =>
           sequence >= Number(item.startSequence) &&
@@ -133,7 +142,7 @@ export function mapReplayExecutionsToTrades(executions, bars) {
         direction: execution.side,
         price: Number(execution.price),
         quantity: Number(execution.quantity),
-        sequence,
+        sequence: sourceSequence,
       };
     })
     .filter(Boolean);

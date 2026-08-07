@@ -2474,6 +2474,45 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
     );
   }
 
+  function countReplayPlaybookVersionReferences(versionId) {
+    const row = db.prepare(
+      `
+      SELECT
+        (
+          SELECT COUNT(*)
+          FROM replay_sessions
+          WHERE json_extract(training_config_json, '$.playbookVersionId') = ?
+        ) + (
+          SELECT COUNT(*)
+          FROM replay_reviews
+          WHERE json_extract(blind_json, '$.playbookVersionId') = ?
+        ) + (
+          SELECT COUNT(*)
+          FROM replay_review_corrections
+          WHERE json_extract(full_review_json, '$.playbookVersionId') = ?
+        ) + (
+          SELECT COUNT(*)
+          FROM replay_playbook_candidates
+          WHERE source_version_id = ? OR accepted_version_id = ?
+        ) AS reference_count
+      `,
+    ).get(versionId, versionId, versionId, versionId, versionId);
+    return Number(row?.reference_count ?? 0);
+  }
+
+  function addReplayPlaybookVersionDeletionState(version, currentVersionId) {
+    const referenceCount = countReplayPlaybookVersionReferences(version.id);
+    const isCurrent = version.id === currentVersionId;
+    return {
+      ...version,
+      referenceCount,
+      canDelete: !isCurrent && referenceCount === 0,
+      deletionBlockReason: isCurrent
+        ? "current"
+        : referenceCount > 0 ? "referenced" : null,
+    };
+  }
+
   function readReplayPlaybookCandidate(candidateId) {
     return rowToReplayPlaybookCandidate(
       db
@@ -3758,7 +3797,11 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           `,
         )
         .all(playbookId)
-        .map(rowToReplayPlaybookVersion);
+        .map(rowToReplayPlaybookVersion)
+        .map((version) => addReplayPlaybookVersionDeletionState(
+          version,
+          playbook.currentVersionId,
+        ));
       const candidates = db
         .prepare(
           `
@@ -3960,6 +4003,32 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         const version = readReplayPlaybookVersion(id);
         db.exec("COMMIT");
         return { playbook, version };
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+
+    deleteReplayPlaybookVersion({ playbookId, versionId }) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const playbook = readReplayPlaybook(playbookId);
+        const version = readReplayPlaybookVersion(versionId);
+        if (!playbook || !version || version.playbookId !== playbookId) {
+          db.exec("COMMIT");
+          return null;
+        }
+        if (playbook.currentVersionId === versionId) {
+          throw createReplayStateError("当前生效版本不能删除", 409);
+        }
+        if (countReplayPlaybookVersionReferences(versionId) > 0) {
+          throw createReplayStateError("该版本已被历史记录引用，不能删除", 409);
+        }
+        db.prepare(
+          "DELETE FROM replay_playbook_versions WHERE id = ? AND playbook_id = ?",
+        ).run(versionId, playbookId);
+        db.exec("COMMIT");
+        return true;
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;

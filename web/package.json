@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@tanstack/vue-table": "^8.21.3",
+    "klinecharts": "9.8.12",
     "lucide-vue-next": "^1.0.0",
     "pinia": "^3.0.3",
     "reka-ui": "^2.10.1",

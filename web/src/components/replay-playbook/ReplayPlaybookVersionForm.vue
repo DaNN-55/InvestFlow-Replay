@@ -63,7 +63,11 @@ watch(() => props.draft, syncDraft, { immediate: true, deep: true });
 </script>
 
 <template>
-  <form class="replay-playbook-version-form" @submit.prevent="submit">
+  <form
+    class="replay-playbook-version-form"
+    :aria-label="title"
+    @submit.prevent="submit"
+  >
     <header>
       <div>
         <h4>{{ title }}</h4>

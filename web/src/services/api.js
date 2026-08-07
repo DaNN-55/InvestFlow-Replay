@@ -43,6 +43,7 @@ export const api = {
   deleteReplayPlaybook(id) { return request(`/api/quant/replay/playbooks/${encodeURIComponent(id)}`, json("DELETE")); },
   getReplayPlaybook(id) { return request(`/api/quant/replay/playbooks/${encodeURIComponent(id)}`); },
   createReplayPlaybookVersion(id, payload) { return request(`/api/quant/replay/playbooks/${encodeURIComponent(id)}/versions`, json("POST", payload)); },
+  deleteReplayPlaybookVersion(id, versionId) { return request(`/api/quant/replay/playbooks/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`, json("DELETE")); },
   createReplayPlaybookCandidate(payload) { return request("/api/quant/replay/playbook-candidates", json("POST", payload)); },
   acceptReplayPlaybookCandidate(id, payload) { return request(`/api/quant/replay/playbook-candidates/${encodeURIComponent(id)}/accept`, json("POST", payload)); },
   rejectReplayPlaybookCandidate(id, payload = {}) { return request(`/api/quant/replay/playbook-candidates/${encodeURIComponent(id)}/reject`, json("POST", payload)); },
@@ -67,13 +68,18 @@ export const api = {
   saveTradeRecord: (payload = {}) => request("/api/quant/decision/trade-records", json("POST", payload)),
   updateTradeRecord: (id, payload = {}) => request(tradeRecordPath(id), json("PATCH", payload)),
   deleteTradeRecord: (id) => request(tradeRecordPath(id), json("DELETE", {})),
+  searchDecisionStocks(queryText) {
+    const query = new URLSearchParams({ query: String(queryText ?? "").trim() });
+    return request(`/api/quant/decision/stocks/search?${query}`);
+  },
   getDecisionExecutionSettings: () => request("/api/quant/decision/execution-settings"),
   saveDecisionExecutionSettings: (payload = {}) => request("/api/quant/decision/execution-settings", json("PUT", payload)),
   issueTradeLicense: (id) => request(`${tradeRecordPath(id)}/license`, json("POST", {})),
   recordTradeEntry: (id, payload = {}) => request(`${tradeRecordPath(id)}/entry`, json("POST", payload)),
   recordTradePriceObservation: (id, payload = {}) => request(`${tradeRecordPath(id)}/price-observation`, json("POST", payload)),
   recordTradeExecutionEvent: (id, payload = {}) => request(`${tradeRecordPath(id)}/execution-events`, json("POST", payload)),
-  recordViolationEntry: (id, payload = {}) => request(`${tradeRecordPath(id)}/violation-entry`, json("POST", payload)),
+  updateTradeExecutionEvent: (id, eventId, payload = {}) => request(`${tradeRecordPath(id)}/execution-events/${encodeURIComponent(eventId)}`, json("PATCH", payload)),
+  deleteTradeExecutionEvent: (id, eventId) => request(`${tradeRecordPath(id)}/execution-events/${encodeURIComponent(eventId)}`, json("DELETE", {})),
   recordTradeExit: (id, payload = {}) => request(`${tradeRecordPath(id)}/exit`, json("POST", payload)),
   cancelTradeRecord: (id) => request(`${tradeRecordPath(id)}/cancel`, json("POST", {})),
 };

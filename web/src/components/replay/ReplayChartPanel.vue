@@ -26,17 +26,21 @@ const props = defineProps({
     type: String,
     default: "1d",
   },
+  observationBars: {
+    type: Number,
+    default: 0,
+  },
+  stepMinutes: {
+    type: Number,
+    default: 1,
+  },
 });
 
 const period = shallowRef("day");
-const visibleRange = shallowRef({
-  start: 0,
-  endExclusive: 0,
-  visibleCount: 0,
-  total: 0,
+const chartIndicators = shallowRef({
+  builtins: { main: ["MA"], panes: ["MACD", "RSI"] },
+  custom: [],
 });
-const sharedHoverIndex = shallowRef(null);
-const mainOverlays = shallowRef([]);
 const periodOptions = computed(() =>
   props.sessionInterval === "1m"
     ? [
@@ -61,26 +65,14 @@ const chartBars = computed(() =>
   aggregateReplayBars(props.bars, period.value),
 );
 const chartTrades = computed(() =>
-  mapReplayExecutionsToTrades(props.executions, chartBars.value),
+  mapReplayExecutionsToTrades(props.executions, chartBars.value, {
+    sessionInterval: props.sessionInterval,
+    observationBars: props.observationBars,
+    stepMinutes: props.stepMinutes,
+  }),
 );
 const latestBar = computed(() => props.bars.at(-1) ?? null);
 const chartResetKey = computed(() => `${period.value}-chart`);
-
-function handleViewportChange(range) {
-  visibleRange.value = range;
-  if (
-    sharedHoverIndex.value !== null &&
-    (sharedHoverIndex.value < range.start ||
-      sharedHoverIndex.value >= range.endExclusive)
-  ) {
-    sharedHoverIndex.value = null;
-  }
-}
-
-function handleHoverIndexChange(index) {
-  sharedHoverIndex.value =
-    Number.isInteger(index) && index >= 0 ? index : null;
-}
 
 function formatPrice(value) {
   return Number(value ?? 0).toFixed(2);
@@ -148,24 +140,18 @@ function formatAmount(value) {
       <span>额 <strong>{{ formatAmount(latestBar.amount) }}</strong></span>
     </div>
 
+    <ReplayIndicatorWorkspace
+      :bars="chartBars"
+      @chart-indicators-change="chartIndicators = $event"
+    />
     <div class="replay-chart-panel__chart">
       <CandlestickChart
         :key="chartResetKey"
         :bars="chartBars"
         :trades="chartTrades"
-        :main-overlays="mainOverlays"
-        :shared-hover-index="sharedHoverIndex"
-        @viewport-change="handleViewportChange"
-        @hover-index-change="handleHoverIndexChange"
+        :indicators="chartIndicators"
       />
     </div>
-    <ReplayIndicatorWorkspace
-      :bars="chartBars"
-      :visible-range="visibleRange"
-      :shared-hover-index="sharedHoverIndex"
-      @main-overlays-change="mainOverlays = $event"
-      @hover-index-change="handleHoverIndexChange"
-    />
   </section>
 </template>
 

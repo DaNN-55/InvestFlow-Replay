@@ -145,6 +145,17 @@ export function useReplayPlaybooks(options = {}) {
     );
   }
 
+  function deleteVersion(versionId) {
+    if (!selectedId.value) {
+      return null;
+    }
+    return runAction(
+      `delete-version:${versionId}`,
+      () => api.deleteReplayPlaybookVersion(selectedId.value, versionId),
+      "历史版本已删除。",
+    );
+  }
+
   function renamePlaybook(playbookId, payload) {
     return runAction(
       `rename:${playbookId}`,
@@ -200,6 +211,7 @@ export function useReplayPlaybooks(options = {}) {
     selectPlaybook,
     createPlaybook,
     createVersion,
+    deleteVersion,
     renamePlaybook,
     deletePlaybook,
     acceptCandidate,

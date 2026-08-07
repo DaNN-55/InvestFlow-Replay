@@ -346,6 +346,8 @@ onBeforeUnmount(() => {
               :executions="session.executions"
               :reveal="session.reveal"
               :session-interval="session.interval"
+              :observation-bars="session.observationBars"
+              :step-minutes="session.stepMinutes"
             />
           </div>
           <aside

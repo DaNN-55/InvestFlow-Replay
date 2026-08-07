@@ -4,19 +4,14 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 
 import { createApp } from "./app.js";
+import { isStandalonePathAllowed } from "./standalone-access.js";
 
 const projectRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const port = Number(process.env.INVESTFLOW_REPLAY_BACKEND_PORT ?? 3110);
 const engineUrl = process.env.INVESTFLOW_REPLAY_ENGINE_URL ?? "http://127.0.0.1:8775";
-const allowedPaths = [
-  /^\/api\/quant\/replay(?:\/|$)/,
-  /^\/api\/quant\/decision\/execution-settings(?:\/|$)/,
-  /^\/api\/quant\/decision\/trade-records(?:\/|$)/,
-];
-
 const app = express();
 app.use((req, res, next) => {
-  if (allowedPaths.some((pattern) => pattern.test(req.path))) {
+  if (isStandalonePathAllowed(req.path)) {
     next();
     return;
   }

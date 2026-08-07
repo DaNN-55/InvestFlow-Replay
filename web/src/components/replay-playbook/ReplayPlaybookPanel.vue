@@ -27,6 +27,7 @@ const {
   selectPlaybook,
   createPlaybook,
   createVersion,
+  deleteVersion,
   renamePlaybook,
   deletePlaybook,
   acceptCandidate,
@@ -38,6 +39,7 @@ const createSuccessToken = shallowRef(0);
 const renameTarget = shallowRef(null);
 const renameName = shallowRef("");
 const deleteTarget = shallowRef(null);
+const deleteVersionTarget = shallowRef(null);
 const renameReady = computed(
   () =>
     renameName.value.trim().length >= 1 &&
@@ -106,6 +108,16 @@ async function confirmDelete() {
     deleteTarget.value = null;
   }
 }
+
+async function confirmDeleteVersion() {
+  if (!deleteVersionTarget.value) {
+    return;
+  }
+  const result = await deleteVersion(deleteVersionTarget.value.id);
+  if (result !== null) {
+    deleteVersionTarget.value = null;
+  }
+}
 </script>
 
 <template>
@@ -156,6 +168,7 @@ async function confirmDelete() {
         :loading="loadingDetail"
         :active-action="activeAction"
         @create-version="createVersion"
+        @delete-version="deleteVersionTarget = $event"
         @accept-candidate="handleAccept"
         @reject-candidate="handleReject"
         @open-source="openSource"
@@ -189,6 +202,16 @@ async function confirmDelete() {
         </div>
       </form>
     </UiModal>
+
+    <ConfirmDialog
+      :open="Boolean(deleteVersionTarget)"
+      title="删除战法历史版本"
+      :message="`确认删除 v${deleteVersionTarget?.versionNumber || ''}？删除后无法恢复，但不会影响其他不可变版本。`"
+      confirm-text="删除版本"
+      :busy="activeAction.startsWith('delete-version:')"
+      @cancel="deleteVersionTarget = null"
+      @confirm="confirmDeleteVersion"
+    />
 
     <ConfirmDialog
       :open="Boolean(deleteTarget)"

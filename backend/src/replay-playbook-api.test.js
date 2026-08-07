@@ -567,6 +567,64 @@ describe("replay playbook API", () => {
       .expect(409);
   });
 
+  it("deletes only unreferenced non-current playbook versions", async () => {
+    const detail = await request(app)
+      .get(`/api/quant/replay/playbooks/${customPlaybook.id}`)
+      .expect(200);
+    const current = detail.body.versions.find(
+      (version) => version.id === detail.body.playbook.currentVersion.id,
+    );
+    const referenced = detail.body.versions.find(
+      (version) => version.id === customVersionTwo.id,
+    );
+    const unreferenced = detail.body.versions.find(
+      (version) => version.id === customVersionOne.id,
+    );
+
+    assert.deepEqual(
+      {
+        canDelete: current.canDelete,
+        deletionBlockReason: current.deletionBlockReason,
+      },
+      { canDelete: false, deletionBlockReason: "current" },
+    );
+    assert.equal(referenced.canDelete, false);
+    assert.equal(referenced.deletionBlockReason, "referenced");
+    assert.ok(referenced.referenceCount >= 1);
+    assert.deepEqual(
+      {
+        canDelete: unreferenced.canDelete,
+        deletionBlockReason: unreferenced.deletionBlockReason,
+        referenceCount: unreferenced.referenceCount,
+      },
+      { canDelete: true, deletionBlockReason: null, referenceCount: 0 },
+    );
+
+    await request(app)
+      .delete(
+        `/api/quant/replay/playbooks/${customPlaybook.id}/versions/${current.id}`,
+      )
+      .expect(409);
+    await request(app)
+      .delete(
+        `/api/quant/replay/playbooks/${customPlaybook.id}/versions/${referenced.id}`,
+      )
+      .expect(409);
+    await request(app)
+      .delete(
+        `/api/quant/replay/playbooks/${customPlaybook.id}/versions/${unreferenced.id}`,
+      )
+      .expect(204);
+
+    const refreshed = await request(app)
+      .get(`/api/quant/replay/playbooks/${customPlaybook.id}`)
+      .expect(200);
+    assert.equal(
+      refreshed.body.versions.some((version) => version.id === unreferenced.id),
+      false,
+    );
+  });
+
   it("stores no market snapshot in playbook domain tables", () => {
     const inspection = new DatabaseSync(dbPath, { readOnly: true });
     for (const table of [
@@ -595,7 +653,6 @@ describe("replay playbook API", () => {
     assert.deepEqual(
       storedVersions.map((row) => row.content),
       [
-        "v1：突破后观察。",
         "v2：突破后观察次日承接。",
         "v3：突破后观察次日承接，并增加大盘强弱过滤。",
       ],

@@ -9,9 +9,7 @@ function read(relativePath) {
 }
 
 const apiSource = read("../../src/services/api.js");
-const historyPanelSource = read(
-  "../../src/components/replay-history/ReplayHistoryPanel.vue",
-);
+const tradeRecordsViewSource = read("../../src/views/TradeRecordsView.vue");
 const historyRecordsSource = read(
   "../../src/components/replay-history/ReplayHistoryRecords.vue",
 );
@@ -37,13 +35,12 @@ const reviewSource = read(
 const marketViewSource = read("../../src/views/MarketReplayView.vue");
 
 describe("replay playbook frontend surface", () => {
-  it("keeps record and playbook state behind separate secondary tabs", () => {
-    assert.match(historyPanelSource, /const activeTab = shallowRef\("records"\)/u);
-    assert.match(historyPanelSource, /演练记录/u);
-    assert.match(historyPanelSource, /战法库/u);
-    assert.match(historyPanelSource, /ReplayHistoryRecords v-if/u);
-    assert.match(historyPanelSource, /ReplayPlaybookPanel v-else/u);
-    assert.doesNotMatch(historyPanelSource, /useReplayHistory|useReplayPlaybooks/u);
+  it("places the playbook library beside replay history in the primary tabs", () => {
+    assert.match(tradeRecordsViewSource, /primaryTab === 'replay'/u);
+    assert.match(tradeRecordsViewSource, /primaryTab === 'playbooks'/u);
+    assert.match(tradeRecordsViewSource, /ReplayHistoryRecords/u);
+    assert.match(tradeRecordsViewSource, /ReplayPlaybookPanel/u);
+    assert.doesNotMatch(tradeRecordsViewSource, /ReplayHistoryPanel/u);
   });
 
   it("exposes the full playbook API and readonly action composable", () => {
@@ -54,6 +51,7 @@ describe("replay playbook frontend surface", () => {
       "deleteReplayPlaybook",
       "getReplayPlaybook",
       "createReplayPlaybookVersion",
+      "deleteReplayPlaybookVersion",
       "createReplayPlaybookCandidate",
       "acceptReplayPlaybookCandidate",
       "rejectReplayPlaybookCandidate",
@@ -63,6 +61,7 @@ describe("replay playbook frontend surface", () => {
     assert.match(composableSource, /readonly\(playbooks\)/u);
     assert.match(composableSource, /async function loadPlaybooks/u);
     assert.match(composableSource, /function createVersion/u);
+    assert.match(composableSource, /function deleteVersion/u);
     assert.match(composableSource, /function renamePlaybook/u);
     assert.match(composableSource, /function deletePlaybook/u);
     assert.match(composableSource, /function acceptCandidate/u);
@@ -80,6 +79,8 @@ describe("replay playbook frontend surface", () => {
     assert.match(listSource, /删除战法/u);
     assert.match(detailSource, /当前正文/u);
     assert.match(detailSource, /版本历史/u);
+    assert.match(detailSource, /基于此版本修改/u);
+    assert.match(detailSource, /删除此版本/u);
     assert.match(detailSource, /候选改进/u);
     assert.match(detailSource, /采纳并生成版本/u);
     assert.match(detailSource, /打开源演练/u);

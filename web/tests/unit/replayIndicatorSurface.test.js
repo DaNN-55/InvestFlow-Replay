@@ -8,133 +8,115 @@ function read(relativePath) {
   return readFileSync(url, "utf8");
 }
 
-const chartSource = read(
-  "../../src/components/replay/ReplayChartPanel.vue",
-);
-const workspaceSource = read(
-  "../../src/components/replay/ReplayIndicatorWorkspace.vue",
-);
-const toolbarSource = read(
-  "../../src/components/replay/ReplayIndicatorToolbar.vue",
-);
-const editorSource = read(
-  "../../src/components/replay/ReplayIndicatorEditor.vue",
-);
-const panelSource = read(
-  "../../src/components/replay/ReplayIndicatorPanel.vue",
-);
-const composableSource = read(
-  "../../src/composables/useReplayIndicators.js",
-);
-const candlestickSource = read(
-  "../../src/components/CandlestickChart.vue",
-);
+const chartSource = read("../../src/components/replay/ReplayChartPanel.vue");
+const workspaceSource = read("../../src/components/replay/ReplayIndicatorWorkspace.vue");
+const toolbarSource = read("../../src/components/replay/ReplayIndicatorToolbar.vue");
+const editorSource = read("../../src/components/replay/ReplayIndicatorEditor.vue");
+const composableSource = read("../../src/composables/useReplayIndicators.js");
+const lifecycleSource = read("../../src/composables/useReplayKlineChart.js");
+const candlestickSource = read("../../src/components/CandlestickChart.vue");
+const viewSource = read("../../src/views/MarketReplayView.vue");
+const drawingSource = read("../../src/utils/replayKlineDrawings.js");
+const indicatorSource = read("../../src/utils/replayKlineIndicators.js");
 
 describe("replay indicator frontend surface", () => {
-  it("calculates indicators from the same revealed and aggregated chart bars", () => {
+  it("sends one indicator model and the same revealed bars to KLineChart", () => {
     assert.match(chartSource, /const chartBars = computed/u);
-    assert.match(
-      chartSource,
-      /<ReplayIndicatorWorkspace[\s\S]*?:bars="chartBars"/u,
-    );
-    assert.match(workspaceSource, /calculateMacd\(props\.bars\)/u);
-    assert.match(workspaceSource, /calculateRsi\(props\.bars\)/u);
-    assert.match(workspaceSource, /calculateKdj\(props\.bars\)/u);
-    assert.match(workspaceSource, /calculateMa\(props\.bars\)/u);
-    assert.match(workspaceSource, /calculateBoll\(props\.bars\)/u);
-    assert.match(
-      workspaceSource,
-      /evaluateReplayIndicator\(indicator\.expression, props\.bars\)/u,
-    );
+    assert.match(chartSource, /:indicators="chartIndicators"/u);
+    assert.match(workspaceSource, /chartIndicatorModel/u);
+    assert.match(workspaceSource, /builtins:[\s\S]*?main:[\s\S]*?panes:/u);
+    assert.match(workspaceSource, /evaluateReplayIndicator/u);
+    assert.match(workspaceSource, /evaluateReplayAdvancedIndicator/u);
+    assert.match(workspaceSource, /chart-indicators-change/u);
     assert.match(workspaceSource, /仅根据当前已揭示的/u);
+    assert.ok(
+      chartSource.indexOf("<ReplayIndicatorWorkspace") <
+        chartSource.indexOf('class="replay-chart-panel__chart"'),
+      "指标工具栏应位于 K 线图上方",
+    );
   });
 
-  it("keeps default visibility and custom indicator actions explicit", () => {
-    assert.match(toolbarSource, /MACD/u);
-    assert.match(toolbarSource, /RSI/u);
-    assert.match(toolbarSource, /KDJ/u);
-    assert.match(toolbarSource, /BOLL/u);
-    assert.match(toolbarSource, /MA/u);
-    assert.match(toolbarSource, /自定义指标/u);
+  it("keeps default visibility, limits and local preferences", () => {
+    for (const label of ["MACD", "RSI", "KDJ", "BOLL", "MA", "自定义指标"]) {
+      assert.match(toolbarSource, new RegExp(label, "u"));
+    }
     assert.match(composableSource, /investflow\.replay\.indicator-preferences\.v1/u);
-    assert.match(composableSource, /function toggleDefaultIndicator/u);
-    assert.match(composableSource, /function saveCustomIndicator/u);
-    assert.match(composableSource, /function removeCustomIndicator/u);
-    assert.match(composableSource, /visiblePanelIds/u);
     assert.match(composableSource, /MAX_REPLAY_SUBCHARTS = 3/u);
     assert.match(composableSource, /最多同时显示 3 个副图/u);
-    assert.match(composableSource, /localStorage/u);
   });
 
-  it("shares one global viewport and hover index across main and subcharts", () => {
-    assert.match(chartSource, /const visibleRange = shallowRef/u);
-    assert.match(chartSource, /const sharedHoverIndex = shallowRef\(null\)/u);
-    assert.match(chartSource, /:visible-range="visibleRange"/u);
-    assert.match(chartSource, /:shared-hover-index="sharedHoverIndex"/u);
-    assert.match(chartSource, /@viewport-change="handleViewportChange"/u);
-    assert.match(
-      candlestickSource,
-      /defineEmits\(\["viewport-change", "hover-index-change"\]\)/u,
-    );
-    assert.match(
-      candlestickSource,
-      /resolveReplayChartPointer/u,
-    );
-    assert.match(candlestickSource, /emit\("hover-index-change", pointer\.globalIndex\)/u);
-    assert.match(panelSource, /normalizedRange/u);
-    assert.match(panelSource, /props\.sharedHoverIndex - normalizedRange\.value\.start/u);
-    assert.match(panelSource, /emit\("hover-index-change", index\)/u);
-    assert.match(panelSource, /tickLabels/u);
+  it("owns the complete KLineChart lifecycle in one composable", () => {
+    assert.match(lifecycleSource, /init\(host\.value/u);
+    assert.match(lifecycleSource, /applyNewData/u);
+    assert.match(lifecycleSource, /updateData/u);
+    assert.match(lifecycleSource, /dispose\(chart\.value\)/u);
+    assert.match(lifecycleSource, /ResizeObserver/u);
+    assert.match(lifecycleSource, /MutationObserver/u);
+    assert.match(lifecycleSource, /OnVisibleRangeChange/u);
+    assert.match(lifecycleSource, /OnCrosshairChange/u);
+    assert.match(lifecycleSource, /scrollToRealTime/u);
+    assert.match(lifecycleSource, /addEventListener\("wheel"/u);
+    assert.match(candlestickSource, /Ctrl\/⌘ \+ 滚轮缩放/u);
+    assert.match(candlestickSource, /shallowRef/u);
+    assert.match(candlestickSource, /replay-klinecharts-host/u);
   });
 
-  it("offers a minimal editable formula and isolates calculation errors", () => {
+  it("uses native built-ins, VOL and isolated custom indicator errors", () => {
+    assert.match(lifecycleSource, /createIndicator\("VOL"/u);
+    assert.match(indicatorSource, /MA: \[5, 10, 30, 60\]/u);
+    assert.match(indicatorSource, /BOLL: \[20, 2\]/u);
+    assert.match(indicatorSource, /MACD: \[12, 26, 9\]/u);
+    assert.match(indicatorSource, /RSI: \[6, 12, 24\]/u);
+    assert.match(indicatorSource, /KDJ: \[9, 3, 3\]/u);
+    assert.match(lifecycleSource, /if \(custom\.error \|\| !custom\.series\?\.length\)/u);
+    assert.match(workspaceSource, /indicatorErrors/u);
+  });
+
+  it("exposes native drawing controls and hybrid trade mapping context", () => {
+    for (const label of ["趋势线", "水平线", "射线", "矩形", "斐波那契", "撤销", "删除选中", "清空画图"]) {
+      assert.match(`${candlestickSource}\n${drawingSource}`, new RegExp(label, "u"));
+    }
+    assert.match(lifecycleSource, /startDrawing/u);
+    assert.match(lifecycleSource, /undoDrawing/u);
+    assert.match(lifecycleSource, /deleteSelectedDrawing/u);
+    assert.match(lifecycleSource, /clearDrawings/u);
+    assert.match(viewSource, /:observation-bars="session\.observationBars"/u);
+    assert.match(viewSource, /:step-minutes="session\.stepMinutes"/u);
+  });
+
+  it("renders the drawing toolbar as icons without visible text labels", () => {
+    assert.doesNotMatch(candlestickSource, /<span>\{\{ tool\.label \}\}<\/span>/u);
+    assert.doesNotMatch(candlestickSource, /<span>撤销<\/span>/u);
+    assert.doesNotMatch(candlestickSource, /<span>删除选中<\/span>/u);
+    assert.doesNotMatch(candlestickSource, /<span>清空画图<\/span>/u);
+    assert.match(candlestickSource, /:aria-label="tool\.label"/u);
+    assert.match(candlestickSource, /title="撤销最后一笔画图"/u);
+  });
+
+  it("retains formula editing and advanced range bars", () => {
     assert.match(editorSource, /函数表达式/u);
     assert.match(editorSource, /MA\(close, 5\) - MA\(close, 20\)/u);
-    assert.match(editorSource, /REF、MA、EMA、MAX、MIN/u);
-    assert.match(workspaceSource, /result\.error \?\? ""/u);
-    assert.match(panelSource, /表达式无法计算/u);
-    assert.match(panelSource, /v-if="error"/u);
-    assert.match(panelSource, /编辑指标/u);
-    assert.match(panelSource, /删除指标/u);
-    assert.match(
-      panelSource,
-      /value !== null && value !== undefined && value !== ""/u,
-    );
-    assert.match(panelSource, /\.map\(Number\)[\s\S]*?\.filter\(Number\.isFinite\)/u);
-  });
-
-  it("offers advanced formulas and renders range bars in subcharts", () => {
     assert.match(editorSource, /高级公式/u);
-    assert.match(editorSource, /计算步骤/u);
     assert.match(editorSource, /区间柱/u);
     assert.match(editorSource, /HHV、LLV、SMA、IF/u);
-    assert.match(workspaceSource, /evaluateReplayAdvancedIndicator/u);
-    assert.match(panelSource, /rangeBar/u);
-    assert.match(panelSource, /fromValues/u);
-    assert.match(panelSource, /risingColor/u);
-    assert.match(panelSource, /fallingColor/u);
   });
 
-  it("uses constrained mobile layouts without horizontal fixed-width panels", () => {
+  it("places the simple formula color after placement on the first row", () => {
+    const placement = editorSource.indexOf('id="replay-indicator-placement"');
+    const color = editorSource.indexOf('id="replay-indicator-color"');
+    const actions = editorSource.indexOf('class="replay-indicator-editor__actions"');
+    assert.ok(placement >= 0 && placement < color);
+    assert.ok(color < actions);
+  });
+
+  it("uses responsive layouts without the old SVG panel or navigator", () => {
     assert.match(workspaceSource, /min-width: 0/u);
     assert.match(workspaceSource, /@media \(max-width: 640px\)/u);
-    assert.match(editorSource, /@media \(max-width: 760px\)/u);
-    assert.match(panelSource, /width: 100%/u);
-    assert.doesNotMatch(
-      `${workspaceSource}\n${editorSource}\n${panelSource}`,
-      /min-width:\s*[4-9]\d{2}px/u,
+    assert.match(candlestickSource, /min-width: 0/u);
+    assert.doesNotMatch(candlestickSource, /<svg|navigator/u);
+    assert.equal(
+      existsSync(new URL("../../src/components/replay/ReplayIndicatorPanel.vue", import.meta.url)),
+      false,
     );
-  });
-
-  it("uses theme tokens for the custom indicator editor surface", () => {
-    assert.match(
-      editorSource,
-      /background:\s*var\(--ql-color-bg-muted\)/u,
-    );
-    assert.match(
-      editorSource,
-      /border:\s*1px solid var\(--ql-line-strong\)/u,
-    );
-    assert.doesNotMatch(editorSource, /rgba\(239, 246, 255, 0\.55\)/u);
   });
 });

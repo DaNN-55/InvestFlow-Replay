@@ -210,6 +210,67 @@ describe("trade license API", () => {
     assert.match(oversold.body.error.message, /超过当前持仓/);
   });
 
+  it("updates and deletes one execution event while recalculating the ledger and stage", async () => {
+    const created = await request(app)
+      .post("/api/quant/decision/trade-records")
+      .send({
+        stockCode: "600000",
+        stockName: "浦发银行",
+        accountType: "simulated",
+        tradeType: "subjective",
+        status: "draft",
+      });
+    const bought = await request(app)
+      .post(`/api/quant/decision/trade-records/${created.body.id}/execution-events`)
+      .send({
+        eventAt: "2026-07-15 09:45",
+        action: "buy",
+        price: 10,
+        quantity: 100,
+        fee: 0,
+        planStatus: "planned",
+        source: "盘中",
+      });
+    const buyEventId = bought.body.executionEvents[0].id;
+    const sold = await request(app)
+      .post(`/api/quant/decision/trade-records/${created.body.id}/execution-events`)
+      .send({
+        eventAt: "2026-07-16 10:00",
+        action: "sell",
+        price: 12,
+        quantity: 100,
+        fee: 0,
+        planStatus: "planned",
+        source: "盘中",
+      });
+    const sellEventId = sold.body.executionEvents[1].id;
+    assert.equal(sold.body.status, "exited");
+
+    const updated = await request(app)
+      .patch(`/api/quant/decision/trade-records/${created.body.id}/execution-events/${buyEventId}`)
+      .send({ price: 11, note: "更正买入价格" });
+    assert.equal(updated.status, 200);
+    assert.equal(updated.body.executionEvents[0].id, buyEventId);
+    assert.equal(updated.body.executionEvents[0].price, 11);
+    assert.equal(updated.body.executionEvents[0].note, "更正买入价格");
+    assert.equal(updated.body.ledger.totalPnl, 100);
+    assert.equal(updated.body.status, "exited");
+
+    const reopened = await request(app)
+      .delete(`/api/quant/decision/trade-records/${created.body.id}/execution-events/${sellEventId}`);
+    assert.equal(reopened.status, 200);
+    assert.equal(reopened.body.executionEvents.length, 1);
+    assert.equal(reopened.body.ledger.positionQuantity, 100);
+    assert.equal(reopened.body.status, "entered");
+
+    const reset = await request(app)
+      .delete(`/api/quant/decision/trade-records/${created.body.id}/execution-events/${buyEventId}`);
+    assert.equal(reset.status, 200);
+    assert.equal(reset.body.executionEvents.length, 0);
+    assert.equal(reset.body.ledger.state, "not_started");
+    assert.equal(reset.body.status, "draft");
+  });
+
   it("creates a standalone trade record without diagnosis data and validates its required identity", async () => {
     const created = await request(app)
       .post("/api/quant/decision/trade-records")

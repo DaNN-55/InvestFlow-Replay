@@ -1,9 +1,10 @@
 <script setup>
-import { reactive } from "vue";
+import { computed, reactive, shallowRef } from "vue";
 import { useRouter } from "vue-router";
 
 import { useReplayHistory } from "../../composables/useReplayHistory.js";
 import { api } from "../../services/api.js";
+import ConfirmDialog from "../ConfirmDialog.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiCard from "../ui/UiCard.vue";
 import ReplayHistoryDetail from "./ReplayHistoryDetail.vue";
@@ -36,6 +37,12 @@ const {
 const candidateStates = reactive({});
 const retrainStates = reactive({});
 const deleteStates = reactive({});
+const pendingDeleteItem = shallowRef(null);
+const pendingDeleteIdentity = computed(() => {
+  const item = pendingDeleteItem.value;
+  if (!item) return "这条演练记录";
+  return item.reveal?.name || item.reveal?.tsCode || `演练 ${item.id.slice(0, 8)}`;
+});
 
 function openReplay(item) {
   window.localStorage.setItem(
@@ -57,17 +64,15 @@ function deleteStateFor(sessionId) {
   return deleteStates[sessionId] ?? {};
 }
 
-async function deleteReplay(item) {
+function requestDeleteReplay(item) {
+  pendingDeleteItem.value = item;
+}
+
+async function deleteReplay() {
+  const item = pendingDeleteItem.value;
+  if (!item) return;
   const current = deleteStateFor(item.id);
   if (current.loading) {
-    return;
-  }
-  const identity = item.reveal?.name || item.reveal?.tsCode || `演练 ${item.id.slice(0, 8)}`;
-  if (
-    !window.confirm(
-      `删除“${identity}”的演练记录？\n\n删除后不会再出现在演练历史中，且无法从页面恢复。`,
-    )
-  ) {
     return;
   }
   deleteStates[item.id] = { loading: true, error: "" };
@@ -80,6 +85,7 @@ async function deleteReplay(item) {
       window.localStorage.removeItem("investflow.replay.active-session-id");
     }
     delete deleteStates[item.id];
+    pendingDeleteItem.value = null;
     await refresh();
   } catch (deleteError) {
     deleteStates[item.id] = {
@@ -192,7 +198,7 @@ async function addCandidate(item) {
         @open="openReplay"
         @add-candidate="addCandidate"
         @retrain="retrainReplay"
-        @delete="deleteReplay"
+        @delete="requestDeleteReplay"
       />
       <div
         v-else-if="detailError"
@@ -227,6 +233,15 @@ async function addCandidate(item) {
         正在加载历史演练…
       </div>
     </div>
+    <ConfirmDialog
+      :open="Boolean(pendingDeleteItem)"
+      title="删除演练记录"
+      :message="`确认删除“${pendingDeleteIdentity}”的演练记录？删除后不会再出现在演练历史中，且无法从页面恢复。`"
+      confirm-text="确认删除"
+      :busy="pendingDeleteItem ? Boolean(deleteStateFor(pendingDeleteItem.id).loading) : false"
+      @cancel="pendingDeleteItem = null"
+      @confirm="deleteReplay"
+    />
   </div>
 </template>
 

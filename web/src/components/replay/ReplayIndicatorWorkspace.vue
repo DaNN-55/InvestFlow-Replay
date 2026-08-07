@@ -6,16 +6,10 @@ import {
   useReplayIndicators,
 } from "../../composables/useReplayIndicators";
 import {
-  calculateBoll,
-  calculateKdj,
-  calculateMa,
-  calculateMacd,
-  calculateRsi,
   evaluateReplayAdvancedIndicator,
   evaluateReplayIndicator,
 } from "../../utils/replayIndicatorEngine";
 import ReplayIndicatorEditor from "./ReplayIndicatorEditor.vue";
-import ReplayIndicatorPanel from "./ReplayIndicatorPanel.vue";
 import ReplayIndicatorToolbar from "./ReplayIndicatorToolbar.vue";
 
 const props = defineProps({
@@ -23,17 +17,9 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
-  visibleRange: {
-    type: Object,
-    default: null,
-  },
-  sharedHoverIndex: {
-    type: [Number, null],
-    default: null,
-  },
 });
 
-const emit = defineEmits(["main-overlays-change", "hover-index-change"]);
+const emit = defineEmits(["chart-indicators-change"]);
 
 const {
   defaultVisibility,
@@ -50,206 +36,58 @@ const editorOpen = shallowRef(false);
 const editingIndicator = shallowRef(null);
 const selectionMessage = shallowRef("");
 
-const customMainResults = computed(() =>
-  customIndicators.value
-    .filter(
-      (indicator) =>
-        indicator.placement === "main" && indicator.mode !== "advanced",
-    )
-    .map((indicator) => ({
-      indicator,
-      result: evaluateReplayIndicator(indicator.expression, props.bars),
-    })),
-);
-
-const mainOverlays = computed(() => {
-  const overlays = [];
-  if (defaultVisibility.value.ma) {
-    const ma = calculateMa(props.bars);
-    for (const [period, color] of [
-      [5, "#ef4444"],
-      [10, "#f59e0b"],
-      [20, "#2563eb"],
-      [60, "#7c3aed"],
-    ]) {
-      overlays.push({
-        id: `ma${period}`,
-        label: `MA${period}`,
-        color,
-        values: ma[`ma${period}`] ?? [],
-      });
-    }
-  }
-  if (defaultVisibility.value.boll) {
-    const boll = calculateBoll(props.bars);
-    overlays.push(
-      {
-        id: "boll-upper",
-        label: "BOLL 上轨",
-        color: "#0f766e",
-        values: boll.upper,
-      },
-      {
-        id: "boll-middle",
-        label: "BOLL 中轨",
-        color: "#64748b",
-        values: boll.middle,
-      },
-      {
-        id: "boll-lower",
-        label: "BOLL 下轨",
-        color: "#0f766e",
-        values: boll.lower,
-      },
-    );
-  }
-  overlays.push(
-    ...customMainResults.value
-      .filter(({ indicator }) =>
-        visibleMainIndicatorIds.value.includes(indicator.id),
-      )
-      .map(({ indicator, result }) => ({
-        id: indicator.id,
+function evaluateCustomIndicator(indicator) {
+  const result = indicator.mode === "advanced"
+    ? evaluateReplayAdvancedIndicator(indicator.advanced, props.bars)
+    : evaluateReplayIndicator(indicator.expression, props.bars);
+  const sourceSeries = indicator.mode === "advanced"
+    ? result.series
+    : [{
         label: indicator.name,
         color: indicator.color,
+        type: "line",
         values: result.values,
-      })),
-  );
-  return overlays;
-});
+      }];
+  return {
+    id: indicator.id,
+    name: indicator.name,
+    placement: indicator.placement,
+    series: sourceSeries.map((series, index) => ({
+      ...series,
+      key: `series${index + 1}`,
+    })),
+    error: result.error ?? "",
+  };
+}
 
-const mainIndicatorErrors = computed(() =>
-  customMainResults.value
-    .filter(
-      ({ indicator, result }) =>
-        visibleMainIndicatorIds.value.includes(indicator.id) && result.error,
+const chartIndicatorModel = computed(() => ({
+  builtins: {
+    main: [
+      ...(defaultVisibility.value.ma ? ["MA"] : []),
+      ...(defaultVisibility.value.boll ? ["BOLL"] : []),
+    ],
+    panes: visiblePanelIds.value
+      .filter((id) => ["macd", "rsi", "kdj"].includes(id))
+      .map((id) => id.toUpperCase()),
+  },
+  custom: customIndicators.value
+    .filter((indicator) =>
+      indicator.placement === "main"
+        ? visibleMainIndicatorIds.value.includes(indicator.id)
+        : visiblePanelIds.value.includes(indicator.id),
     )
-    .map(({ indicator, result }) => `${indicator.name}：${result.error}`),
+    .map(evaluateCustomIndicator),
+}));
+
+const indicatorErrors = computed(() =>
+  chartIndicatorModel.value.custom
+    .filter((indicator) => indicator.error)
+    .map((indicator) => `${indicator.name}：${indicator.error}`),
 );
 
-const macdPanel = computed(() => {
-  try {
-    const result = calculateMacd(props.bars);
-    return {
-      id: "macd",
-      title: "MACD（12, 26, 9）",
-      series: [
-        { label: "DIF", color: "#2563eb", values: result.dif },
-        { label: "DEA", color: "#f59e0b", values: result.dea },
-        {
-          label: "MACD",
-          color: "#64748b",
-          values: result.histogram,
-          type: "histogram",
-        },
-      ],
-      error: "",
-    };
-  } catch (error) {
-    return {
-      id: "macd",
-      title: "MACD（12, 26, 9）",
-      series: [],
-      error: error?.message ?? "MACD 计算失败",
-    };
-  }
+watch(chartIndicatorModel, (value) => emit("chart-indicators-change", value), {
+  immediate: true,
 });
-
-const rsiPanel = computed(() => {
-  try {
-    return {
-      id: "rsi",
-      title: "RSI（14）",
-      series: [
-        {
-          label: "RSI",
-          color: "#7c3aed",
-          values: calculateRsi(props.bars),
-        },
-      ],
-      error: "",
-    };
-  } catch (error) {
-    return {
-      id: "rsi",
-      title: "RSI（14）",
-      series: [],
-      error: error?.message ?? "RSI 计算失败",
-    };
-  }
-});
-
-const kdjPanel = computed(() => {
-  try {
-    const result = calculateKdj(props.bars);
-    return {
-      id: "kdj",
-      title: "KDJ（9, 3, 3）",
-      series: [
-        { label: "K", color: "#2563eb", values: result.k },
-        { label: "D", color: "#f59e0b", values: result.d },
-        { label: "J", color: "#7c3aed", values: result.j },
-      ],
-      error: "",
-    };
-  } catch (error) {
-    return {
-      id: "kdj",
-      title: "KDJ（9, 3, 3）",
-      series: [],
-      error: error?.message ?? "KDJ 计算失败",
-    };
-  }
-});
-
-const customPanels = computed(() =>
-  customIndicators.value
-    .filter(
-      (indicator) =>
-        indicator.placement !== "main" &&
-        visiblePanelIds.value.includes(indicator.id),
-    )
-    .map((indicator) => {
-      if (indicator.mode === "advanced") {
-        const result = evaluateReplayAdvancedIndicator(
-          indicator.advanced,
-          props.bars,
-        );
-        return {
-          ...indicator,
-          title: indicator.name,
-          series: result.series,
-          error: result.error ?? "",
-        };
-      }
-      const result = evaluateReplayIndicator(indicator.expression, props.bars);
-      return {
-        ...indicator,
-        title: indicator.name,
-        series: [
-          {
-            label: indicator.name,
-            color: indicator.color,
-            values: result.values,
-          },
-        ],
-        error: result.error ?? "",
-      };
-    }),
-);
-
-const visiblePanels = computed(() => [
-  ...(visiblePanelIds.value.includes("macd") ? [macdPanel.value] : []),
-  ...(visiblePanelIds.value.includes("rsi") ? [rsiPanel.value] : []),
-  ...(visiblePanelIds.value.includes("kdj") ? [kdjPanel.value] : []),
-  ...customPanels.value,
-]);
-
-watch(
-  mainOverlays,
-  (value) => emit("main-overlays-change", value),
-  { immediate: true },
-);
 
 function openCreateEditor() {
   editingIndicator.value = null;
@@ -319,7 +157,7 @@ function handleToggleCustom(id) {
     </p>
 
     <p
-      v-for="error in mainIndicatorErrors"
+      v-for="error in indicatorErrors"
       :key="error"
       class="replay-indicator-workspace__error"
       role="status"
@@ -333,29 +171,6 @@ function handleToggleCustom(id) {
       @save="handleSave"
       @cancel="closeEditor"
     />
-
-    <div class="replay-indicator-workspace__panels">
-      <ReplayIndicatorPanel
-        v-for="panel in visiblePanels"
-        :key="panel.id"
-        :title="panel.title"
-        :bars="bars"
-        :series="panel.series"
-        :error="panel.error"
-        :visible-range="visibleRange"
-        :shared-hover-index="sharedHoverIndex"
-        :editable="!['macd', 'rsi', 'kdj'].includes(panel.id)"
-        @hover-index-change="emit('hover-index-change', $event)"
-        @edit="openEditEditor(panel)"
-        @remove="removeCustomIndicator(panel.id)"
-      />
-      <div
-        v-if="visiblePanels.length === 0"
-        class="replay-indicator-workspace__empty"
-      >
-        暂未显示指标，可开启默认指标或新建自定义指标。
-      </div>
-    </div>
   </section>
 </template>
 
@@ -366,7 +181,7 @@ function handleToggleCustom(id) {
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  border-top: 1px solid var(--ql-line);
+  border-bottom: 1px solid var(--ql-line);
   background: var(--ql-paper-soft);
 }
 
@@ -388,22 +203,6 @@ function handleToggleCustom(id) {
   margin: 3px 0 0;
   color: var(--ql-color-text-muted);
   font-size: 10px;
-}
-
-.replay-indicator-workspace__panels {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.replay-indicator-workspace__empty {
-  padding: 18px;
-  border: 1px dashed var(--ql-line-strong);
-  border-radius: 8px;
-  color: var(--ql-color-text-muted);
-  text-align: center;
-  font-size: 11px;
 }
 
 .replay-indicator-workspace__limit {

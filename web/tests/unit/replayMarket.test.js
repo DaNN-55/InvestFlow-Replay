@@ -161,6 +161,24 @@ describe("replay market aggregation", () => {
     ]);
   });
 
+  it("maps hybrid minute execution sequences back to their daily candles", () => {
+    const dailyBars = Array.from({ length: 5 }, (_, index) => ({
+      datetime: `第${index + 251}日`,
+      startSequence: index + 251,
+      endSequence: index + 251,
+    }));
+    const trades = mapReplayExecutionsToTrades(
+      [
+        { orderId: "buy-1", status: "filled", side: "buy", sequence: 270, price: 3.32, quantity: 100 },
+        { orderId: "sell-1", status: "filled", side: "sell", sequence: 443, price: 3.3, quantity: 100 },
+      ],
+      dailyBars,
+      { sessionInterval: "hybrid", observationBars: 250, stepMinutes: 5 },
+    );
+
+    assert.deepEqual(trades.map((trade) => trade.datetime), ["第251日", "第255日"]);
+  });
+
   it("uses real trading dates only when revealed bars include them", () => {
     const days = aggregateReplayBars(
       [

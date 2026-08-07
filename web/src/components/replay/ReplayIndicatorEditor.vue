@@ -183,6 +183,19 @@ watch(
       <div v-else class="replay-indicator-editor__fixed-value">副图展示</div>
     </div>
 
+    <div
+      v-if="form.mode === 'simple'"
+      class="replay-indicator-editor__field replay-indicator-editor__color"
+    >
+      <label for="replay-indicator-color">颜色</label>
+      <input
+        id="replay-indicator-color"
+        v-model="form.color"
+        type="color"
+        aria-label="指标颜色"
+      />
+    </div>
+
     <div class="replay-indicator-editor__actions">
       <button type="button" @click="emit('cancel')">取消</button>
       <button type="submit" class="replay-indicator-editor__save">
@@ -203,15 +216,6 @@ watch(
         <span v-if="fieldErrors.expression" class="replay-indicator-editor__error">
           {{ fieldErrors.expression }}
         </span>
-      </div>
-      <div class="replay-indicator-editor__field replay-indicator-editor__color">
-        <label for="replay-indicator-color">颜色</label>
-        <input
-          id="replay-indicator-color"
-          v-model="form.color"
-          type="color"
-          aria-label="指标颜色"
-        />
       </div>
       <p class="replay-indicator-editor__help">
         可用字段：open、high、low、close、volume、amount；函数：REF、MA、EMA、MAX、MIN。
@@ -337,7 +341,7 @@ watch(
 <style scoped>
 .replay-indicator-editor {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) 110px 110px auto;
+  grid-template-columns: minmax(130px, 1fr) 110px 110px 60px auto;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--ql-line-strong);
@@ -419,6 +423,7 @@ watch(
 
 .replay-indicator-editor__actions {
   display: flex;
+  grid-column: -2 / -1;
   align-items: flex-end;
   justify-content: flex-end;
   gap: 6px;

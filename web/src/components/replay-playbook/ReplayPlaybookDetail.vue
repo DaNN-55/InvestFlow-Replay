@@ -30,12 +30,14 @@ const props = defineProps({
 
 const emit = defineEmits([
   "createVersion",
+  "deleteVersion",
   "acceptCandidate",
   "rejectCandidate",
   "openSource",
 ]);
 
 const mode = shallowRef("");
+const baseVersion = shallowRef(null);
 const activeCandidate = shallowRef(null);
 const rejectReasons = reactive({});
 
@@ -50,6 +52,20 @@ const manualDraft = computed(() => ({
 const candidateDraft = computed(() =>
   buildCandidateVersionDraft(playbook.value, activeCandidate.value),
 );
+const historicalDraft = computed(() => ({
+  expectedVersionNumber: getPlaybookVersionNumber(playbook.value),
+  content: baseVersion.value?.content ?? "",
+  changeSummary: baseVersion.value
+    ? `基于 v${baseVersion.value.versionNumber} 修改`
+    : "",
+}));
+const versionFormTitle = computed(() => {
+  if (mode.value === "candidate") return "采纳候选并创建新版本";
+  if (mode.value === "historical") {
+    return `基于 v${baseVersion.value?.versionNumber ?? ""} 创建新版本`;
+  }
+  return "手工创建新版本";
+});
 
 function startAccept(candidate) {
   activeCandidate.value = candidate;
@@ -59,6 +75,20 @@ function startAccept(candidate) {
 function cancelVersionForm() {
   mode.value = "";
   activeCandidate.value = null;
+  baseVersion.value = null;
+}
+
+function startVersionEdit(version) {
+  activeCandidate.value = null;
+  baseVersion.value = version;
+  mode.value = "historical";
+}
+
+function versionDeleteHint(version) {
+  if (version.deletionBlockReason === "referenced") {
+    return `该版本已被 ${version.referenceCount || 1} 条历史记录引用，不能删除`;
+  }
+  return "";
 }
 
 function submitVersion(payload) {
@@ -115,9 +145,9 @@ watch(
 
       <section v-if="mode" class="replay-playbook-detail__section">
         <ReplayPlaybookVersionForm
-          :title="mode === 'candidate' ? '采纳候选并创建新版本' : '手工创建新版本'"
+          :title="versionFormTitle"
           :submit-label="mode === 'candidate' ? '确认采纳并创建版本' : '创建新版本'"
-          :draft="mode === 'candidate' ? candidateDraft : manualDraft"
+          :draft="mode === 'candidate' ? candidateDraft : mode === 'historical' ? historicalDraft : manualDraft"
           :loading="
             activeAction === 'create-version' ||
             activeAction === `accept:${activeCandidate?.id}`
@@ -133,18 +163,47 @@ watch(
           <span>{{ versions.length }} 个不可变版本</span>
         </header>
         <div v-if="versions.length" class="replay-playbook-detail__versions">
-          <details
+          <article
             v-for="version in versions"
             :key="version.id"
-            :open="version.id === playbook.currentVersion?.id"
+            class="replay-playbook-detail__version"
           >
-            <summary>
-              <strong>v{{ version.versionNumber }}</strong>
-              <span>{{ version.changeSummary || "未填写变更说明" }}</span>
-              <small>{{ formatPlaybookTime(version.createdAt) }}</small>
-            </summary>
-            <pre>{{ version.content }}</pre>
-          </details>
+            <details :open="version.id === playbook.currentVersion?.id">
+              <summary>
+                <strong>v{{ version.versionNumber }}</strong>
+                <span>{{ version.changeSummary || "未填写变更说明" }}</span>
+                <small>{{ formatPlaybookTime(version.createdAt) }}</small>
+              </summary>
+              <pre>{{ version.content }}</pre>
+            </details>
+            <div class="replay-playbook-detail__version-actions">
+              <UiButton
+                type="button"
+                size="sm"
+                variant="secondary"
+                :aria-label="`基于 v${version.versionNumber} 修改`"
+                :disabled="Boolean(activeAction)"
+                @click="startVersionEdit(version)"
+              >
+                基于此版本修改
+              </UiButton>
+              <UiButton
+                v-if="version.id !== playbook.currentVersion?.id"
+                type="button"
+                size="sm"
+                variant="danger"
+                :aria-label="`删除 v${version.versionNumber}`"
+                :title="versionDeleteHint(version)"
+                :disabled="!version.canDelete || Boolean(activeAction)"
+                @click="emit('deleteVersion', version)"
+              >
+                删除此版本
+              </UiButton>
+              <small v-if="version.deletionBlockReason === 'referenced'">
+                已被历史记录引用，不能删除
+              </small>
+            </div>
+          </article>
         </div>
         <p v-else class="replay-playbook-detail__empty">
           暂无版本历史。
@@ -294,6 +353,19 @@ watch(
   white-space: pre-wrap;
 }
 
+.replay-playbook-detail__version-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.replay-playbook-detail__version-actions small {
+  color: var(--ql-color-text-muted);
+  font-size: 0.6875rem;
+}
+
 .replay-playbook-detail__section > p {
   color: var(--ql-color-text-muted);
   font-size: 0.75rem;
@@ -319,13 +391,17 @@ watch(
   gap: 0.75rem;
 }
 
-.replay-playbook-detail__versions details,
+.replay-playbook-detail__version,
 .replay-playbook-detail__candidate {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 8px;
   min-width: 0;
   padding: 0.75rem;
   background: var(--ql-color-bg-muted);
+}
+
+.replay-playbook-detail__version details {
+  min-width: 0;
 }
 
 .replay-playbook-detail__versions summary {

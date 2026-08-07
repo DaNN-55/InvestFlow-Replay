@@ -1,23 +1,21 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Plus, RefreshCw, Save, Settings2, Trash2 } from "lucide-vue-next";
+import { Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-vue-next";
 
-import ReplayHistoryPanel from "../components/replay-history/ReplayHistoryPanel.vue";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
+import ReplayHistoryRecords from "../components/replay-history/ReplayHistoryRecords.vue";
+import ReplayPlaybookPanel from "../components/replay-playbook/ReplayPlaybookPanel.vue";
+import TradeExecutionEventDialog from "../components/TradeExecutionEventDialog.vue";
 import TradeExecutionEventsPanel from "../components/TradeExecutionEventsPanel.vue";
-import TradeExecutionSettingsDrawer from "../components/TradeExecutionSettingsDrawer.vue";
 import TradeRecordCreateDrawer from "../components/TradeRecordCreateDrawer.vue";
+import TradeRecordList from "../components/TradeRecordList.vue";
 import UiButton from "../components/ui/UiButton.vue";
 import UiCard from "../components/ui/UiCard.vue";
-import UiDataTable from "../components/ui/UiDataTable.vue";
 import UiInput from "../components/ui/UiInput.vue";
 import UiSelect from "../components/ui/UiSelect.vue";
 import UiTextarea from "../components/ui/UiTextarea.vue";
 import { api } from "../services/api";
-import {
-  buildDiagnosisSnapshotSections,
-  buildTradeReviewOverview,
-} from "../utils/tradeRecordPresentation.js";
 import { buildTradeRecordAnalytics } from "../utils/tradeRecordAnalytics.js";
 import {
   buildTradeRecordDraftSavePayload,
@@ -30,6 +28,8 @@ const router = useRouter();
 const primaryTab = ref("records");
 
 const editableFields = [
+  "stockName",
+  "stockCode",
   "accountType",
   "tradeType",
   "status",
@@ -62,7 +62,6 @@ const editableFields = [
   "finalReview",
   "entryNotes",
   "exitReason",
-  "violationReason",
 ];
 
 const accountTypeOptions = [
@@ -90,9 +89,6 @@ const selectedId = ref("");
 const selectedRecord = ref(null);
 const strategyProfile = reactive(createEmptyStrategyProfile());
 const executionEvents = ref([]);
-const reviewPanelTab = ref("review");
-const reviewExpanded = ref(true);
-const snapshotExpanded = ref(false);
 const form = ref(createEmptyForm());
 const loading = ref(false);
 const detailLoading = ref(false);
@@ -100,64 +96,19 @@ const saving = ref(false);
 const deleting = ref(false);
 const statusText = ref("");
 const errorText = ref("");
-const executionSettingsOpen = ref(false);
 const createDrawerOpen = ref(false);
+const createDrawerMode = ref("create");
 const creating = ref(false);
 const createErrorText = ref("");
 const executionSettings = ref(null);
+const executionEventEditorOpen = ref(false);
+const selectedExecutionEvent = ref(null);
+const executionEventErrorText = ref("");
+const pendingExecutionEventDelete = ref(null);
+const deletingExecutionEvent = ref(false);
+const recordDeleteConfirmOpen = ref(false);
 
-const tableColumns = [
-  {
-    key: "stock",
-    header: "股票",
-    cell: (row) => formatStock(row),
-    sortable: true,
-    class: "trade-record-table__stock",
-    headerClass: "trade-record-table__stock",
-  },
-  {
-    key: "tradeType",
-    header: "类型",
-    cell: (row) => tradeTypeLabel(row?.tradeType),
-    sortable: true,
-    class: "trade-record-table__type",
-    headerClass: "trade-record-table__type",
-  },
-  {
-    key: "strategy",
-    header: "战法",
-    cell: (row) => row?.strategyProfile?.name || "未指定",
-    sortable: true,
-    class: "trade-record-table__strategy",
-    headerClass: "trade-record-table__strategy",
-  },
-  {
-    key: "status",
-    header: "阶段",
-    cell: (row) => statusLabel(row?.status),
-    sortable: true,
-    class: "trade-record-table__status",
-    headerClass: "trade-record-table__status",
-  },
-  {
-    key: "profitPct",
-    header: "盈亏比例",
-    cell: (row) => formatRecordProfitPct(row),
-    class: "trade-record-table__profit",
-    headerClass: "trade-record-table__profit",
-  },
-  { key: "updatedAt", header: "更新", cell: (row) => formatDate(row?.updatedAt || row?.createdAt), sortable: true },
-];
-
-const selectedRowKeys = computed(() => (selectedId.value ? [selectedId.value] : []));
 const selectedViolations = computed(() => normalizeViolations(selectedRecord.value));
-const selectedSnapshot = computed(() =>
-  selectedRecord.value?.frozenSnapshot
-    ?? selectedRecord.value?.evaluationSnapshot
-    ?? selectedRecord.value?.diagnosisSnapshot
-    ?? selectedRecord.value?.snapshot
-    ?? {},
-);
 const selectedStage = computed(() => String(form.value.status || selectedRecord.value?.status || ""));
 const isLegacyLicense = computed(() => selectedStage.value === "planned" && !selectedRecord.value?.licenseSnapshot);
 const isLegacyPositionCap = computed(() =>
@@ -210,33 +161,19 @@ const licensePreview = computed(() => calculateTradeLicense({
   maxPositionPct: selectedMaxPositionPct.value,
   lotSize: executionSettings.value?.lotSize ?? 100,
 }));
-const selectedTradeFlags = computed(() => {
-  const flags = [];
-  const type = String(form.value.tradeType || selectedRecord.value?.tradeType || "").toLowerCase();
-  if (type.includes("subjective") || type.includes("主观") || selectedRecord.value?.isSubjective) {
-    flags.push("主观单");
-  }
-  if (type.includes("violation") || type.includes("违规") || selectedRecord.value?.isViolation || selectedViolations.value.length) {
-    flags.push("违规单");
-  }
-  return flags;
-});
-const diagnosisSnapshotSections = computed(() =>
-  buildDiagnosisSnapshotSections(selectedSnapshot.value, selectedRecord.value),
-);
-const tradeReviewOverview = computed(() =>
-  buildTradeReviewOverview({
-    stage: selectedStage.value,
-    form: form.value,
-    record: selectedRecord.value,
-    snapshot: selectedSnapshot.value,
-    violations: selectedViolations.value,
-  }),
-);
 const tradeAnalytics = computed(() => buildTradeRecordAnalytics(records.value));
-const activeReviewPanelExpanded = computed(() =>
-  reviewPanelTab.value === "review" ? reviewExpanded.value : snapshotExpanded.value,
-);
+const tradeRecordListItems = computed(() => records.value.map((record) => {
+  const profit = formatRecordProfitPct(record);
+  return {
+    id: recordId(record),
+    title: formatStock(record),
+    status: statusLabel(record?.status),
+    meta: `${accountTypeLabel(record?.accountType)} · ${tradeTypeLabel(record?.tradeType)} · ${record?.strategyProfile?.name || "未指定"}`,
+    profit: profit === "--" ? "" : profit,
+    profitTone: profit.startsWith("-") ? "negative" : "positive",
+    updatedAt: formatCompactDate(record?.updatedAt || record?.createdAt),
+  };
+}));
 
 function createEmptyForm() {
   return Object.fromEntries(editableFields.map((field) => [field, ""]));
@@ -301,8 +238,13 @@ function applyRecordToForm(record) {
 }
 
 function buildSavePayload() {
+  const identity = {
+    stockName: String(form.value.stockName ?? "").trim() || null,
+    stockCode: String(form.value.stockCode ?? "").trim(),
+  };
   if (stageIs("draft")) {
     return {
+      ...identity,
       ...buildTradeRecordDraftSavePayload(form.value, {
         legacyPositionCap: isLegacyPositionCap.value,
       }),
@@ -311,8 +253,9 @@ function buildSavePayload() {
     };
   }
   const fields = ["t1Review", "t3Review", "t5Review", "finalReview", "entryNotes", "exitReason"];
-  return Object.fromEntries(
-    [
+  return {
+    ...identity,
+    ...Object.fromEntries([
       ...fields.map((field) => {
         const value = form.value[field];
         if (value === "") {
@@ -321,8 +264,8 @@ function buildSavePayload() {
         return [field, String(value)];
       }),
       ["executionEvents", executionEvents.value],
-    ],
-  );
+    ]),
+  };
 }
 
 function applyUpdatedRecord(record) {
@@ -349,6 +292,11 @@ function formatDate(value) {
     return "--";
   }
   return String(value).replace("T", " ").slice(0, 16);
+}
+
+function formatCompactDate(value) {
+  if (!value) return "";
+  return String(value).slice(5, 10);
 }
 
 function formatRange(low, high) {
@@ -406,14 +354,6 @@ function formatTradePercent(value) {
   return `${sign}${parsed.toFixed(2)}%`;
 }
 
-function toggleActiveReviewPanel() {
-  if (reviewPanelTab.value === "review") {
-    reviewExpanded.value = !reviewExpanded.value;
-    return;
-  }
-  snapshotExpanded.value = !snapshotExpanded.value;
-}
-
 function formatAnalyticsPercent(value, { signed = false } = {}) {
   if (value == null) return "--";
   const sign = signed && value > 0 ? "+" : "";
@@ -447,6 +387,48 @@ async function createStandaloneTradeRecord(payload) {
     statusText.value = "独立交易追踪单已创建";
   } catch (error) {
     createErrorText.value = error?.message ?? "交易追踪单创建失败";
+  } finally {
+    creating.value = false;
+  }
+}
+
+function openCreateDrawer() {
+  createErrorText.value = "";
+  createDrawerMode.value = "create";
+  createDrawerOpen.value = true;
+}
+
+function openEditDrawer() {
+  if (!selectedRecord.value) return;
+  createErrorText.value = "";
+  createDrawerMode.value = "edit";
+  createDrawerOpen.value = true;
+}
+
+async function updateSelectedIdentity(payload) {
+  if (!selectedId.value) return;
+  const updates = {
+    ...payload,
+    strategyProfile: payload.strategyProfile
+      ? { ...(selectedRecord.value?.strategyProfile ?? {}), ...payload.strategyProfile }
+      : null,
+  };
+  creating.value = true;
+  createErrorText.value = "";
+  statusText.value = "";
+  errorText.value = "";
+  try {
+    const returnedRecord = extractRecord(await api.updateTradeRecord(selectedId.value, updates));
+    const record = {
+      ...(selectedRecord.value ?? {}),
+      ...updates,
+      ...(hasRecordContent(returnedRecord) ? returnedRecord : {}),
+    };
+    applyUpdatedRecord(record);
+    createDrawerOpen.value = false;
+    statusText.value = "交易信息已修改";
+  } catch (error) {
+    createErrorText.value = error?.message ?? "交易信息修改失败";
   } finally {
     creating.value = false;
   }
@@ -497,7 +479,6 @@ async function loadRecords(preferredId = "") {
       Object.assign(strategyProfile, createEmptyStrategyProfile());
       executionEvents.value = [];
     }
-    statusText.value = "交易追踪列表已刷新";
   } catch (error) {
     records.value = [];
     selectedRecord.value = null;
@@ -510,8 +491,7 @@ async function loadRecords(preferredId = "") {
   }
 }
 
-async function selectRecord(row) {
-  const id = recordId(row);
+async function selectRecord(id) {
   if (!id) {
     return;
   }
@@ -521,9 +501,6 @@ async function selectRecord(row) {
 
 async function selectRecordById(id, useListFallback = true) {
   selectedId.value = id;
-  reviewPanelTab.value = "review";
-  reviewExpanded.value = true;
-  snapshotExpanded.value = false;
   const fallback = records.value.find((record) => recordId(record) === id) ?? null;
   if (useListFallback && fallback) {
     selectedRecord.value = fallback;
@@ -555,6 +532,11 @@ async function selectRecordById(id, useListFallback = true) {
 async function saveSelectedRecord() {
   if (!selectedId.value) {
     errorText.value = "请先选择一条交易追踪单";
+    return;
+  }
+  if (!/^\d{6}$/u.test(String(form.value.stockCode ?? "").trim())) {
+    statusText.value = "";
+    errorText.value = "股票代码必须是 6 位数字";
     return;
   }
   saving.value = true;
@@ -595,6 +577,66 @@ async function addExecutionEvent(event) {
     errorText.value = error?.message ?? "动作记录添加失败";
   } finally {
     saving.value = false;
+  }
+}
+
+function openExecutionEventEditor(event) {
+  selectedExecutionEvent.value = event ? { ...event } : null;
+  executionEventErrorText.value = "";
+  executionEventEditorOpen.value = Boolean(event);
+}
+
+function closeExecutionEventEditor() {
+  if (saving.value) return;
+  executionEventEditorOpen.value = false;
+  selectedExecutionEvent.value = null;
+  executionEventErrorText.value = "";
+}
+
+async function saveExecutionEvent(event) {
+  if (!selectedId.value || !selectedExecutionEvent.value?.id) return;
+  saving.value = true;
+  executionEventErrorText.value = "";
+  statusText.value = "";
+  errorText.value = "";
+  try {
+    const record = extractRecord(await api.updateTradeExecutionEvent(
+      selectedId.value,
+      selectedExecutionEvent.value.id,
+      event,
+    ));
+    applyUpdatedRecord(record);
+    executionEventEditorOpen.value = false;
+    selectedExecutionEvent.value = null;
+    statusText.value = "成交或动作记录已修改";
+  } catch (error) {
+    executionEventErrorText.value = error?.message ?? "成交或动作记录修改失败";
+  } finally {
+    saving.value = false;
+  }
+}
+
+function requestDeleteExecutionEvent(event) {
+  pendingExecutionEventDelete.value = event ? { ...event } : null;
+}
+
+async function deleteExecutionEvent() {
+  if (!selectedId.value || !pendingExecutionEventDelete.value?.id) return;
+  deletingExecutionEvent.value = true;
+  statusText.value = "";
+  errorText.value = "";
+  try {
+    const record = extractRecord(await api.deleteTradeExecutionEvent(
+      selectedId.value,
+      pendingExecutionEventDelete.value.id,
+    ));
+    applyUpdatedRecord(record);
+    pendingExecutionEventDelete.value = null;
+    statusText.value = "成交或动作记录已删除";
+  } catch (error) {
+    errorText.value = error?.message ?? "成交或动作记录删除失败";
+  } finally {
+    deletingExecutionEvent.value = false;
   }
 }
 
@@ -639,26 +681,6 @@ async function recordSelectedEntry() {
   }
 }
 
-async function recordSelectedViolationEntry() {
-  saving.value = true;
-  statusText.value = "";
-  errorText.value = "";
-  try {
-    const record = extractRecord(await api.recordViolationEntry(selectedId.value, {
-      actualEntryDate: form.value.actualEntryDate,
-      actualEntryPrice: form.value.actualEntryPrice,
-      actualEntryQuantity: form.value.actualEntryQuantity,
-      violationReason: form.value.violationReason,
-    }));
-    applyUpdatedRecord(record);
-    statusText.value = "违规买入已单独记录";
-  } catch (error) {
-    errorText.value = error?.message ?? "违规买入记录失败";
-  } finally {
-    saving.value = false;
-  }
-}
-
 async function cancelSelectedPlan() {
   saving.value = true;
   statusText.value = "";
@@ -678,9 +700,6 @@ async function deleteSelectedRecord() {
   if (!selectedId.value || !selectedRecord.value) {
     return;
   }
-  if (!window.confirm(`删除 ${formatStock(selectedRecord.value)} 的交易追踪单？`)) {
-    return;
-  }
   deleting.value = true;
   statusText.value = "";
   errorText.value = "";
@@ -698,6 +717,7 @@ async function deleteSelectedRecord() {
       Object.assign(strategyProfile, createEmptyStrategyProfile());
       executionEvents.value = [];
     }
+    recordDeleteConfirmOpen.value = false;
     statusText.value = "交易追踪单已删除";
   } catch (error) {
     errorText.value = error?.message ?? "交易追踪单删除失败";
@@ -731,17 +751,13 @@ onMounted(() => {
         <p class="ql-page-eyebrow">Decision</p>
         <h1 class="ql-page-title">交易追踪</h1>
         <p class="ql-page-description">
-          从买入许可证到最终复盘，记录模拟/实盘、系统/主观/违规交易的执行过程。
+          记录模拟与实盘的逐笔成交、持仓结果和复盘备注；交易计划与风控按需使用。
         </p>
       </div>
       <div v-if="primaryTab === 'records'" class="ql-page-actions">
-        <UiButton type="button" size="sm" @click="createErrorText = ''; createDrawerOpen = true">
+        <UiButton type="button" size="sm" @click="openCreateDrawer">
           <template #prefix><Plus :size="16" /></template>
           新建交易
-        </UiButton>
-        <UiButton type="button" variant="secondary" size="sm" @click="executionSettingsOpen = true">
-          <template #prefix><Settings2 :size="16" /></template>
-          执行参数
         </UiButton>
         <UiButton
           type="button"
@@ -770,6 +786,13 @@ onMounted(() => {
         @click="primaryTab = 'replay'"
       >
         历史演练
+      </button>
+      <button
+        type="button"
+        :class="{ 'trade-records-primary-tabs__button--active': primaryTab === 'playbooks' }"
+        @click="primaryTab = 'playbooks'"
+      >
+        战法库
       </button>
     </nav>
 
@@ -800,16 +823,11 @@ onMounted(() => {
           </div>
         </template>
 
-        <UiDataTable
-          class="trade-record-table"
-          :rows="records"
-          :columns="tableColumns"
+        <TradeRecordList
+          :items="tradeRecordListItems"
           :loading="loading"
-          :selected-keys="selectedRowKeys"
-          :row-key="recordId"
-          min-width="620px"
-          empty-text="暂无交易追踪单"
-          @row-click="selectRecord"
+          :selected-id="selectedId"
+          @select="selectRecord"
         />
       </UiCard>
 
@@ -827,13 +845,13 @@ onMounted(() => {
             <div class="ql-flex ql-flex-wrap ql-gap-2">
               <UiButton
                 type="button"
+                variant="secondary"
                 size="sm"
-                :loading="saving"
                 :disabled="!selectedRecord || detailLoading"
-                @click="saveSelectedRecord"
+                @click="openEditDrawer"
               >
-                <template #prefix><Save v-if="!saving" :size="16" /></template>
-                保存
+                <template #prefix><Pencil :size="16" /></template>
+                修改
               </UiButton>
               <UiButton
                 type="button"
@@ -841,7 +859,7 @@ onMounted(() => {
                 size="sm"
                 :loading="deleting"
                 :disabled="!selectedRecord || detailLoading"
-                @click="deleteSelectedRecord"
+                @click="recordDeleteConfirmOpen = true"
               >
                 <template #prefix><Trash2 v-if="!deleting" :size="16" /></template>
                 删除
@@ -853,140 +871,6 @@ onMounted(() => {
         <div v-if="detailLoading" class="trade-record-state">正在读取详情...</div>
         <div v-else-if="!selectedRecord" class="trade-record-state">暂无选中的交易追踪单。</div>
         <template v-else>
-          <div class="trade-record-tags">
-            <span class="trade-record-tag trade-record-tag--neutral">{{ tradeTypeLabel(form.tradeType) }}</span>
-            <span
-              v-for="flag in selectedTradeFlags"
-              :key="flag"
-              class="trade-record-tag"
-              :class="flag === '违规单' ? 'trade-record-tag--danger' : 'trade-record-tag--warning'"
-            >
-              {{ flag }}
-            </span>
-            <span
-              v-for="violation in selectedViolations"
-              :key="violation"
-              class="trade-record-tag trade-record-tag--danger"
-            >
-              {{ violation }}
-            </span>
-            <span v-if="!selectedViolations.length" class="trade-record-tag trade-record-tag--muted">无违规标签</span>
-          </div>
-
-          <section class="trade-review-panel">
-            <div class="trade-review-panel__toolbar">
-              <div class="trade-review-panel__tabs" role="tablist" aria-label="交易追踪内容">
-                <button
-                  type="button"
-                  role="tab"
-                  :aria-selected="reviewPanelTab === 'review'"
-                  :class="{ 'trade-review-panel__tab--active': reviewPanelTab === 'review' }"
-                  @click="reviewPanelTab = 'review'"
-                >
-                  交易复盘
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  :aria-selected="reviewPanelTab === 'snapshot'"
-                  :class="{ 'trade-review-panel__tab--active': reviewPanelTab === 'snapshot' }"
-                  @click="reviewPanelTab = 'snapshot'"
-                >
-                  当日诊断快照
-                </button>
-              </div>
-              <button
-                type="button"
-                class="trade-review-panel__toggle"
-                :aria-expanded="activeReviewPanelExpanded"
-                @click="toggleActiveReviewPanel"
-              >
-                {{ activeReviewPanelExpanded ? '收起' : '展开' }}
-              </button>
-            </div>
-
-            <div v-if="reviewPanelTab === 'review' && reviewExpanded" class="trade-review-overview">
-              <header class="trade-review-overview__header">
-              <div>
-                <h3>{{ tradeReviewOverview.title }}</h3>
-                <p>{{ tradeReviewOverview.description }}</p>
-              </div>
-              </header>
-
-            <div class="trade-review-overview__metrics">
-              <div
-                v-for="metric in tradeReviewOverview.metrics"
-                :key="metric.label"
-                class="trade-review-overview__metric"
-                :class="`trade-review-overview__metric--${metric.tone}`"
-              >
-                <span>{{ metric.label }}</span>
-                <strong>{{ metric.value }}</strong>
-              </div>
-            </div>
-
-            <div class="trade-review-overview__grid">
-              <section
-                v-for="section in tradeReviewOverview.sections"
-                :key="section.key"
-                class="trade-review-overview__section"
-              >
-                <h4>{{ section.title }}</h4>
-                <dl>
-                  <div v-for="row in section.rows" :key="`${section.key}-${row.label}`">
-                    <dt>{{ row.label }}</dt>
-                    <dd :class="row.tone ? `trade-review-overview__value--${row.tone}` : ''">{{ row.value }}</dd>
-                  </div>
-                </dl>
-              </section>
-            </div>
-
-            <section class="trade-review-overview__section trade-review-overview__section--wide">
-              <h4>过程复盘</h4>
-              <div v-if="tradeReviewOverview.processNotes.length" class="trade-review-overview__notes">
-                <article v-for="note in tradeReviewOverview.processNotes" :key="note.label">
-                  <span>{{ note.label }}</span>
-                  <p>{{ note.value }}</p>
-                </article>
-              </div>
-              <p v-else class="trade-review-overview__empty">暂无过程复盘内容。</p>
-            </section>
-
-            <section v-if="tradeReviewOverview.violations.length" class="trade-review-overview__section trade-review-overview__section--wide">
-              <h4>纪律偏差</h4>
-              <div class="trade-review-overview__tags">
-                <span v-for="violation in tradeReviewOverview.violations" :key="violation">
-                  {{ violation }}
-                </span>
-              </div>
-            </section>
-            </div>
-
-            <div v-else-if="reviewPanelTab === 'snapshot' && snapshotExpanded" class="trade-record-diagnosis">
-              <p class="trade-record-diagnosis__summary">候选来源、模式判断、个股证据与诊断结论</p>
-              <div class="trade-record-diagnosis__grid">
-                <section
-                  v-for="section in diagnosisSnapshotSections"
-                  :key="section.key"
-                  class="trade-record-diagnosis__section"
-                  :class="`trade-record-diagnosis__section--${section.key}`"
-                >
-                  <h3>{{ section.title }}</h3>
-                  <dl v-if="section.items.length">
-                    <div v-for="item in section.items" :key="item.label">
-                      <dt>{{ item.label }}</dt>
-                      <dd>{{ item.value }}</dd>
-                    </div>
-                  </dl>
-                  <ul v-if="section.notes.length">
-                    <li v-for="note in section.notes" :key="note">{{ note }}</li>
-                  </ul>
-                  <p v-if="!section.items.length && !section.notes.length" class="trade-record-diagnosis__empty">--</p>
-                </section>
-              </div>
-            </div>
-          </section>
-
           <form class="trade-record-form" @submit.prevent="saveSelectedRecord">
             <section class="trade-record-form__section">
               <h3>基本信息</h3>
@@ -1012,72 +896,85 @@ onMounted(() => {
               </div>
             </section>
 
+            <div v-if="selectedViolations.length" class="trade-record-violation-alert" role="alert">
+              <strong>纪律偏差：</strong>{{ selectedViolations.join("、") }}
+            </div>
+
+            <div v-if="statusText" class="trade-record-message trade-record-message--success">{{ statusText }}</div>
+            <div v-if="errorText" class="trade-record-message trade-record-message--error">{{ errorText }}</div>
+
             <TradeExecutionEventsPanel
               :events="executionEvents"
               :ledger="selectedRecord?.ledger"
               :saving="saving"
               :disabled="!selectedId"
               @add="addExecutionEvent"
+              @edit="openExecutionEventEditor"
+              @delete="requestDeleteExecutionEvent"
             />
 
-            <section v-if="stageIs('draft')" class="trade-record-form__section">
-              <h3>决策草稿</h3>
-              <div class="trade-record-form__grid trade-record-form__grid--four">
-                <label>
-                  <span>单笔风险预算（%）</span>
-                  <UiInput v-model="form.manualMaxAccountRiskPct" size="sm" type="text" inputmode="decimal" placeholder="留空使用执行参数" />
-                  <small class="trade-record-form__hint">
-                    {{ selectedAccountRiskSource }}：{{ selectedMaxAccountRiskPct ?? '--' }}%
-                  </small>
-                </label>
-                <label>
-                  <span>单票最大仓位（%）</span>
-                  <UiInput v-model="form.manualMaxPositionPct" size="sm" type="text" inputmode="decimal" placeholder="必填，0-100" />
-                </label>
-                <label>
-                  <span>计划交易日</span>
-                  <UiInput v-model="form.validForTradeDate" size="sm" type="date" />
-                </label>
-                <label>
-                  <span>触发价 T</span>
-                  <UiInput v-model="form.triggerPrice" size="sm" type="text" inputmode="decimal" />
-                </label>
-                <label>
-                  <span>失败价 S</span>
-                  <UiInput v-model="form.failurePrice" size="sm" type="text" inputmode="decimal" />
-                </label>
-                <label>
-                  <span>目标价 G</span>
-                  <UiInput v-model="form.targetPrice" size="sm" type="text" inputmode="decimal" />
-                </label>
+            <details v-if="stageIs('draft')" class="trade-record-form__section trade-plan-details">
+              <summary>
+                <span>交易计划与风控（可选）</span>
+                <small>风险预算、仓位和 T / S / G</small>
+              </summary>
+              <div class="trade-plan-details__body">
+                <div class="trade-record-form__grid trade-record-form__grid--four">
+                  <label>
+                    <div class="trade-record-form__label-title">
+                      <span>单笔风险预算（%）</span>
+                      <small>{{ selectedAccountRiskSource }}：{{ selectedMaxAccountRiskPct ?? '--' }}%</small>
+                    </div>
+                    <UiInput v-model="form.manualMaxAccountRiskPct" size="sm" type="text" inputmode="decimal" placeholder="留空使用执行参数" />
+                  </label>
+                  <label>
+                    <span>单票最大仓位（%）</span>
+                    <UiInput v-model="form.manualMaxPositionPct" size="sm" type="text" inputmode="decimal" placeholder="必填，0-100" />
+                  </label>
+                  <label>
+                    <span>计划交易日</span>
+                    <UiInput v-model="form.validForTradeDate" size="sm" type="date" />
+                  </label>
+                  <label>
+                    <span>触发价 T</span>
+                    <UiInput v-model="form.triggerPrice" size="sm" type="text" inputmode="decimal" />
+                  </label>
+                  <label>
+                    <span>失败价 S</span>
+                    <UiInput v-model="form.failurePrice" size="sm" type="text" inputmode="decimal" />
+                  </label>
+                  <label>
+                    <span>目标价 G</span>
+                    <UiInput v-model="form.targetPrice" size="sm" type="text" inputmode="decimal" />
+                  </label>
+                </div>
+                <dl v-if="licensePreview.valid" class="trade-license-metrics">
+                  <div><dt>单笔风险预算</dt><dd>{{ selectedMaxAccountRiskPct }}% / {{ licensePreview.riskBudgetAmount }}</dd></div>
+                  <div><dt>允许买入区间</dt><dd>{{ formatRange(licensePreview.plannedEntryLow, licensePreview.plannedEntryHigh) }}</dd></div>
+                  <div><dt>不追价</dt><dd>{{ licensePreview.noChasePrice }}</dd></div>
+                  <div><dt>止损 / 止盈</dt><dd>{{ licensePreview.stopLossPrice }} / {{ licensePreview.takeProfitPrice }}</dd></div>
+                  <div><dt>建议股数</dt><dd>{{ licensePreview.plannedQuantity }} 股</dd></div>
+                  <div><dt>计划金额</dt><dd>{{ licensePreview.plannedAmount }}</dd></div>
+                  <div><dt>预计最大亏损</dt><dd>{{ licensePreview.estimatedMaxLossAmount }}</dd></div>
+                </dl>
+                <ul v-else class="trade-license-checks">
+                  <li v-for="item in licensePreview.errors" :key="item.code">{{ item.message }}</li>
+                </ul>
+                <ul v-if="!diagnosisAllowsLicense" class="trade-license-checks">
+                  <li>当前诊断结论不允许开仓，不能生成买入许可证。</li>
+                </ul>
+                <div class="trade-record-form__grid trade-record-form__grid--one trade-record-form__grid--spaced">
+                  <label>
+                    <span>结构判断备注</span>
+                    <UiTextarea v-model="form.entryNotes" />
+                  </label>
+                </div>
+                <div class="trade-license-actions">
+                  <UiButton type="button" :loading="saving" :disabled="!licensePreview.valid || !diagnosisAllowsLicense" @click="issueSelectedLicense">生成买入许可证</UiButton>
+                  <UiButton type="button" variant="danger" :disabled="saving" @click="cancelSelectedPlan">取消计划</UiButton>
+                </div>
               </div>
-              <dl v-if="licensePreview.valid" class="trade-license-metrics">
-                <div><dt>单笔风险预算</dt><dd>{{ selectedMaxAccountRiskPct }}% / {{ licensePreview.riskBudgetAmount }}</dd></div>
-                <div><dt>允许买入区间</dt><dd>{{ formatRange(licensePreview.plannedEntryLow, licensePreview.plannedEntryHigh) }}</dd></div>
-                <div><dt>不追价</dt><dd>{{ licensePreview.noChasePrice }}</dd></div>
-                <div><dt>止损 / 止盈</dt><dd>{{ licensePreview.stopLossPrice }} / {{ licensePreview.takeProfitPrice }}</dd></div>
-                <div><dt>建议股数</dt><dd>{{ licensePreview.plannedQuantity }} 股</dd></div>
-                <div><dt>计划金额</dt><dd>{{ licensePreview.plannedAmount }}</dd></div>
-                <div><dt>预计最大亏损</dt><dd>{{ licensePreview.estimatedMaxLossAmount }}</dd></div>
-              </dl>
-              <ul v-else class="trade-license-checks">
-                <li v-for="item in licensePreview.errors" :key="item.code">{{ item.message }}</li>
-              </ul>
-              <ul v-if="!diagnosisAllowsLicense" class="trade-license-checks">
-                <li>当前诊断结论不允许开仓，不能生成买入许可证。</li>
-              </ul>
-              <div class="trade-record-form__grid trade-record-form__grid--one trade-record-form__grid--spaced">
-                <label>
-                  <span>结构判断备注</span>
-                  <UiTextarea v-model="form.entryNotes" />
-                </label>
-              </div>
-              <div class="trade-license-actions">
-                <UiButton type="button" variant="secondary" :loading="saving" @click="saveSelectedRecord">保存草稿</UiButton>
-                <UiButton type="button" :loading="saving" :disabled="!licensePreview.valid || !diagnosisAllowsLicense" @click="issueSelectedLicense">生成买入许可证</UiButton>
-                <UiButton type="button" variant="danger" :disabled="saving" @click="cancelSelectedPlan">取消计划</UiButton>
-              </div>
-            </section>
+            </details>
 
             <section v-else-if="stageIs('planned')" class="trade-record-form__section">
               <h3>买入许可证</h3>
@@ -1179,41 +1076,55 @@ onMounted(() => {
               </div>
             </section>
 
-            <details v-if="stageIs('draft', 'planned', 'expired')" class="trade-record-form__section trade-violation-entry">
-              <summary>记录系统外违规买入</summary>
-              <p>此入口不会补发许可证，记录会永久标记为违规交易。</p>
-              <div class="trade-record-form__grid trade-record-form__grid--three">
-                <label><span>实际买入日期</span><UiInput v-model="form.actualEntryDate" size="sm" type="date" /></label>
-                <label><span>实际买入价格</span><UiInput v-model="form.actualEntryPrice" size="sm" type="number" min="0" step="0.01" /></label>
-                <label><span>实际买入数量</span><UiInput v-model="form.actualEntryQuantity" size="sm" type="number" min="0" step="100" /></label>
-              </div>
-              <label class="trade-violation-entry__reason">
-                <span>违规原因</span>
-                <UiTextarea v-model="form.violationReason" />
-              </label>
-              <UiButton type="button" variant="danger" :loading="saving" @click="recordSelectedViolationEntry">确认记录违规买入</UiButton>
-            </details>
+            <div v-if="!stageIs('entered', 'holding')" class="trade-record-form__actions">
+              <UiButton type="submit" :loading="saving" :disabled="detailLoading">
+                <template #prefix><Save v-if="!saving" :size="16" /></template>
+                保存
+              </UiButton>
+            </div>
           </form>
         </template>
-
-        <div v-if="statusText" class="trade-record-message trade-record-message--success">{{ statusText }}</div>
-        <div v-if="errorText" class="trade-record-message trade-record-message--error">{{ errorText }}</div>
       </UiCard>
       </div>
-      <TradeExecutionSettingsDrawer
-        :open="executionSettingsOpen"
-        @close="executionSettingsOpen = false"
-        @saved="(settings) => { executionSettings = settings; executionSettingsOpen = false; }"
-      />
       <TradeRecordCreateDrawer
         :open="createDrawerOpen"
+        :mode="createDrawerMode"
+        :initial-values="selectedRecord"
         :saving="creating"
         :error="createErrorText"
         @close="createDrawerOpen = false"
         @create="createStandaloneTradeRecord"
+        @update="updateSelectedIdentity"
+      />
+      <TradeExecutionEventDialog
+        :open="executionEventEditorOpen"
+        :event="selectedExecutionEvent"
+        :saving="saving"
+        :error="executionEventErrorText"
+        @close="closeExecutionEventEditor"
+        @save="saveExecutionEvent"
+      />
+      <ConfirmDialog
+        :open="Boolean(pendingExecutionEventDelete)"
+        title="删除成交或动作记录"
+        message="删除后将重新计算持仓、成本、盈亏和交易阶段，且无法恢复。"
+        confirm-text="确认删除"
+        :busy="deletingExecutionEvent"
+        @cancel="pendingExecutionEventDelete = null"
+        @confirm="deleteExecutionEvent"
+      />
+      <ConfirmDialog
+        :open="recordDeleteConfirmOpen"
+        title="删除交易追踪单"
+        :message="`确认删除 ${selectedRecord ? formatStock(selectedRecord) : '这条记录'}？删除后无法从页面恢复。`"
+        confirm-text="确认删除"
+        :busy="deleting"
+        @cancel="recordDeleteConfirmOpen = false"
+        @confirm="deleteSelectedRecord"
       />
     </template>
-    <ReplayHistoryPanel v-else />
+    <ReplayHistoryRecords v-else-if="primaryTab === 'replay'" />
+    <ReplayPlaybookPanel v-else />
   </section>
 </template>
 
@@ -1359,63 +1270,6 @@ onMounted(() => {
   margin-top: 0.25rem;
 }
 
-.trade-violation-entry {
-  margin-top: 1rem;
-}
-
-.trade-violation-entry summary {
-  color: #b91c1c;
-  cursor: pointer;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.trade-violation-entry p {
-  color: var(--ql-color-text-muted);
-  font-size: 0.75rem;
-  margin: 0.75rem 0;
-}
-
-.trade-violation-entry__reason {
-  display: grid;
-  gap: 0.375rem;
-  margin: 0.75rem 0;
-}
-
-.trade-record-table :deep(.trade-record-table__stock) {
-  max-width: 110px;
-  min-width: 110px;
-  width: 110px;
-}
-
-.trade-record-table :deep(.trade-record-table__profit) {
-  max-width: 85px;
-  min-width: 85px;
-  width: 85px;
-}
-
-.trade-record-table :deep(.trade-record-table__type) {
-  min-width: 6.25rem;
-}
-
-.trade-record-table :deep(.trade-record-table__status) {
-  min-width: 6.75rem;
-}
-
-.trade-record-table :deep(.ql-ui-data-table__header-cell) {
-  padding-bottom: 0.625rem;
-  padding-top: 0.625rem;
-  vertical-align: middle;
-}
-
-.trade-record-table :deep(.ql-ui-data-table__sort-button) {
-  min-height: 0;
-}
-
-.trade-record-table :deep(.ql-ui-data-table__cell) {
-  vertical-align: middle;
-}
-
 .trade-record-state {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 8px;
@@ -1425,375 +1279,16 @@ onMounted(() => {
   padding: 1rem;
 }
 
-.trade-record-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-bottom: 0.75rem;
-}
-
-.trade-record-tag {
-  border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 0.5rem;
-  padding: 0.25rem 0.625rem;
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
-.trade-record-tag--neutral {
-  background: var(--ql-color-primary-soft);
-  border-color: #bfdbfe;
-  color: #1e3a8a;
-}
-
-.trade-record-tag--warning {
-  background: var(--ql-color-warning-soft);
-  border-color: #fdba74;
-  color: #92400e;
-}
-
-.trade-record-tag--danger {
-  background: var(--ql-color-danger-soft);
-  border-color: #fda4af;
-  color: #9f1239;
-}
-
-.trade-record-tag--muted {
-  background: var(--ql-color-bg-muted-strong);
-  border-color: #cbd5e1;
-  color: var(--ql-color-text-muted);
-}
-
-.trade-review-panel {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
-  background: var(--ql-color-bg-surface-strong);
-  margin-bottom: 0.75rem;
-  overflow: hidden;
-}
-
-.trade-review-panel__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: var(--ql-color-bg-muted);
-  padding: 0.375rem 0.5rem;
-}
-
-.trade-review-panel__tabs {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.trade-review-panel__tabs button {
-  border: 1px solid transparent;
-  border-radius: 0.5rem;
-  background: transparent;
-  color: var(--ql-color-text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 800;
-  padding: 0.45rem 0.75rem;
-}
-
-.trade-review-panel__tabs button:hover {
-  background: #eef2f7;
-  color: var(--ql-color-text-body);
-}
-
-.trade-review-panel__tabs .trade-review-panel__tab--active {
-  border-color: #bfdbfe;
-  background: var(--ql-color-primary-soft);
-  color: #1d4ed8;
-}
-
-.trade-review-panel__toggle {
-  border: 0;
-  background: transparent;
-  color: var(--ql-color-text-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 800;
-  padding: 0.45rem 0.625rem;
-}
-
-.trade-review-panel__toggle:hover {
-  color: #1d4ed8;
-}
-
-.trade-record-diagnosis {
-  padding: 1rem;
-}
-
-.trade-record-diagnosis__summary {
-  color: var(--ql-color-text-muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.trade-record-diagnosis summary {
-  align-items: center;
-  color: var(--ql-color-text-strong);
-  cursor: pointer;
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-between;
-  list-style: none;
-}
-
-.trade-record-diagnosis summary::-webkit-details-marker {
-  display: none;
-}
-
-.trade-record-diagnosis summary span {
-  font-size: 0.875rem;
-  font-weight: 800;
-}
-
-.trade-record-diagnosis summary small {
-  color: var(--ql-color-text-muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.trade-record-diagnosis__grid {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 0.75rem;
-}
-
-.trade-record-diagnosis__section {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
-  background: var(--ql-color-bg-surface-strong);
-  min-width: 0;
-  padding: 0.75rem;
-}
-
-.trade-record-diagnosis__section h3 {
-  color: var(--ql-color-text-strong);
-  font-size: 0.8125rem;
-  font-weight: 800;
-  margin-bottom: 0.5rem;
-}
-
-.trade-record-diagnosis__section dl {
-  display: grid;
-  gap: 0.375rem;
-}
-
-.trade-record-diagnosis__section dl div {
-  display: grid;
-  gap: 0.25rem;
-  grid-template-columns: 4.5rem minmax(0, 1fr);
-}
-
-.trade-record-diagnosis__section dt {
-  color: var(--ql-color-text-muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.trade-record-diagnosis__section dd,
-.trade-record-diagnosis__section li,
-.trade-record-diagnosis__empty {
-  color: var(--ql-color-text-body);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.trade-record-diagnosis__section dd {
-  font-weight: 700;
-}
-
-.trade-record-diagnosis__section ul {
-  display: grid;
-  gap: 0.25rem;
-  list-style: disc;
-  margin-top: 0.5rem;
-  padding-left: 1rem;
-}
-
-.trade-review-overview {
-  display: grid;
-  gap: 0.875rem;
-  padding: 1rem;
-}
-
-.trade-review-overview__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  list-style: none;
-}
-
-.trade-review-overview__header h3 {
-  color: var(--ql-color-text-strong);
-  font-size: 0.9375rem;
-  font-weight: 800;
-}
-
-.trade-review-overview__header p {
-  margin-top: 0.25rem;
-  color: var(--ql-color-text-muted);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
-.trade-review-overview__metrics {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 0.375rem;
-}
-
-.trade-review-overview__metric {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
-  background: var(--ql-color-bg-muted);
-  padding: 0.75rem;
-}
-
-.trade-review-overview__metric span {
-  display: block;
-  color: var(--ql-color-text-muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.trade-review-overview__metric strong {
-  display: block;
-  margin-top: 0.25rem;
-  color: var(--ql-color-text-strong);
-  font-size: 1rem;
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
-.trade-review-overview__metric--positive {
-  background: var(--ql-color-success-soft);
-  border-color: #bbf7d0;
-}
-
-.trade-review-overview__metric--positive strong {
-  color: #047857;
-}
-
-.trade-review-overview__metric--negative {
-  background: var(--ql-color-danger-soft);
-  border-color: #fecdd3;
-}
-
-.trade-review-overview__metric--negative strong {
-  color: #be123c;
-}
-
-.trade-review-overview__grid {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 0.125rem;
-}
-
-.trade-review-overview__section {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
-  background: var(--ql-color-bg-muted);
-  padding: 0.75rem;
-}
-
-.trade-review-overview__section--wide {
-  background: var(--ql-color-bg-surface-strong);
-}
-
-.trade-review-overview__section h4 {
-  color: var(--ql-color-text-strong);
-  font-size: 0.8125rem;
-  font-weight: 800;
-  margin-bottom: 0.625rem;
-}
-
-.trade-review-overview__section dl {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.trade-review-overview__section dl div {
-  display: grid;
-  grid-template-columns: 5rem minmax(0, 1fr);
-  gap: 0.5rem;
-}
-
-.trade-review-overview__section dt,
-.trade-review-overview__notes span {
-  color: var(--ql-color-text-muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.trade-review-overview__section dd,
-.trade-review-overview__notes p,
-.trade-review-overview__empty {
-  color: var(--ql-color-text-body);
-  font-size: 0.75rem;
-  font-weight: 650;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-
-.trade-review-overview__value--positive {
-  color: #047857 !important;
-}
-
-.trade-review-overview__value--negative {
-  color: #be123c !important;
-}
-
-.trade-review-overview__notes {
-  display: grid;
-  gap: 0.625rem;
-}
-
-.trade-review-overview__notes article {
-  border-radius: 8px;
-  background: var(--ql-color-bg-muted);
-  padding: 0.625rem 0.75rem;
-}
-
-.trade-review-overview__notes p {
-  margin-top: 0.25rem;
-  white-space: pre-wrap;
-}
-
-.trade-review-overview__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.trade-review-overview__tags span {
-  border-radius: 999px;
-  background: #ffe4e6;
-  color: #be123c;
-  font-size: 0.75rem;
-  font-weight: 800;
-  padding: 0.25rem 0.625rem;
-}
-
 .trade-record-form {
   display: grid;
   gap: 0.75rem;
+}
+
+.trade-record-form__actions {
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 1rem;
 }
 
 .trade-record-form__section {
@@ -1806,6 +1301,50 @@ onMounted(() => {
   font-size: 0.875rem;
   font-weight: 800;
   margin-bottom: 0.5rem;
+}
+
+.trade-record-violation-alert {
+  border: 1px solid #fda4af;
+  border-radius: 0.5rem;
+  background: var(--ql-color-danger-soft);
+  color: #9f1239;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  padding: 0.625rem 0.75rem;
+}
+
+.trade-plan-details {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 0.625rem;
+  background: var(--ql-color-bg-muted);
+  padding: 0;
+}
+
+.trade-plan-details summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  color: var(--ql-color-text-strong);
+  cursor: pointer;
+}
+
+.trade-plan-details summary span {
+  font-size: 0.875rem;
+  font-weight: 800;
+}
+
+.trade-plan-details summary small {
+  color: var(--ql-color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.trade-plan-details__body {
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 0.75rem;
 }
 
 .trade-record-form__grid {
@@ -1842,6 +1381,26 @@ onMounted(() => {
   color: var(--ql-color-text-muted);
   font-size: 0.75rem;
   font-weight: 700;
+}
+
+.trade-record-form__label-title {
+  align-items: baseline;
+  display: flex;
+  gap: 0.375rem;
+  justify-content: space-between;
+}
+
+.trade-record-form__label-title span {
+  color: var(--ql-color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.trade-record-form__label-title small {
+  color: var(--ql-color-text-muted);
+  font-size: 0.625rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .trade-record-form__hint {
@@ -1915,10 +1474,7 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
-  .trade-record-diagnosis__grid,
   .trade-record-analytics__metrics,
-  .trade-review-overview__metrics,
-  .trade-review-overview__grid,
   .trade-record-final-summary,
   .trade-record-form__grid--two,
   .trade-record-form__grid--three,
@@ -1926,13 +1482,10 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .trade-review-overview__section dl div {
-    grid-template-columns: 1fr;
-  }
-
-  .trade-record-diagnosis summary {
+  .trade-plan-details summary {
     align-items: flex-start;
     flex-direction: column;
+    gap: 0.125rem;
   }
 }
 </style>

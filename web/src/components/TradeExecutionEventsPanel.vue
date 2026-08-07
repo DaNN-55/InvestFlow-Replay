@@ -1,4 +1,5 @@
 <script setup>
+import { Pencil, Trash2 } from "lucide-vue-next";
 import { reactive } from "vue";
 
 import UiButton from "./ui/UiButton.vue";
@@ -25,7 +26,7 @@ defineProps({
   },
 });
 
-const emit = defineEmits(["add"]);
+const emit = defineEmits(["add", "edit", "delete"]);
 
 const ACTION_OPTIONS = [
   { value: "buy", label: "买入" },
@@ -134,9 +135,19 @@ function formatSigned(value, suffix = "") {
 
     <div v-if="events.length" class="trade-execution-events__list">
       <article v-for="event in events" :key="event.id || `${event.eventAt}-${event.action}`">
-        <div class="trade-execution-events__event-main">
-          <strong>{{ formatEvent(event) }}</strong>
-          <small>{{ event.eventAt }} · {{ planStatusLabel(event.planStatus) }}<span v-if="event.source"> · {{ event.source }}</span></small>
+        <div class="trade-execution-events__event-row">
+          <div class="trade-execution-events__event-main">
+            <strong>{{ formatEvent(event) }}</strong>
+            <small>{{ event.eventAt }} · {{ planStatusLabel(event.planStatus) }}<span v-if="event.source"> · {{ event.source }}</span></small>
+          </div>
+          <div class="trade-execution-events__event-actions">
+            <button type="button" aria-label="修改成交记录" title="修改" :disabled="saving" @click="emit('edit', event)">
+              <Pencil :size="14" />
+            </button>
+            <button type="button" aria-label="删除成交记录" title="删除" :disabled="saving" @click="emit('delete', event)">
+              <Trash2 :size="14" />
+            </button>
+          </div>
         </div>
         <p v-if="event.note">{{ event.note }}</p>
       </article>
@@ -272,8 +283,16 @@ function formatSigned(value, suffix = "") {
 
 .trade-execution-events__event-main {
   display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
   align-items: baseline;
   justify-content: space-between;
+  gap: 10px;
+}
+
+.trade-execution-events__event-row {
+  display: flex;
+  align-items: flex-start;
   gap: 10px;
 }
 
@@ -287,6 +306,35 @@ function formatSigned(value, suffix = "") {
   margin: 0;
   font-family: var(--ql-font-mono, monospace);
   font-size: 10px;
+}
+
+.trade-execution-events__event-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.trade-execution-events__event-actions button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--ql-color-border-soft);
+  border-radius: 7px;
+  color: var(--ql-color-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.trade-execution-events__event-actions button:hover:not(:disabled) {
+  border-color: var(--ql-color-border-strong);
+  color: var(--ql-color-text-strong);
+  background: var(--ql-color-bg-muted);
+}
+
+.trade-execution-events__event-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .trade-execution-events__list article p {
