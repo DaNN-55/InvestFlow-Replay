@@ -32,6 +32,7 @@ import { DEFAULT_APP_CONFIG } from "./config-defaults.js";
 import { createDatabase } from "./db.js";
 import { createMainlineRankingStore } from "./mainline-ranking-store.js";
 import { createEngineClient, EngineClientError } from "./engine-client.js";
+import { createReplayLifecycle } from "./replay-lifecycle.js";
 import {
   applyRuntimeEnvironmentUpdates,
   buildRuntimeEnvironmentUpdates,
@@ -2960,6 +2961,7 @@ function buildPdfReportLines(run, metrics) {
 export function createApp(options = {}) {
   const clock = typeof options.clock === "function" ? options.clock : () => new Date();
   const database = createDatabase(options.dbPath);
+  const replayLifecycle = createReplayLifecycle({ database, now: isoNow });
   const mainlineRankingStore = createMainlineRankingStore(options.rankingDbPath);
   const engine = createEngineClient(options.engineUrl);
   const workspace = createWorkspaceService(options.workspaceRoot);
@@ -6025,13 +6027,12 @@ export function createApp(options = {}) {
   app.post("/api/quant/replay/sessions/:sessionId/orders", (req, res, next) => {
     try {
       const normalized = normalizeReplayOrder(normalizeBody(req.body));
-      const result = database.submitReplayOrder({
+      const result = replayLifecycle.submitOrder({
         sessionId: String(req.params.sessionId ?? ""),
         actionId: normalized.actionId,
         expectedRevision: normalized.expectedRevision,
         order: normalized.order,
         requestPayload: normalized.requestPayload,
-        updatedAt: isoNow(),
       });
       assertCondition(Boolean(result), "找不到行情演练会话", 404);
       res.status(result.created ? 201 : 200).json({
@@ -6051,49 +6052,13 @@ export function createApp(options = {}) {
         const body = normalizeBody(req.body);
         const action = normalizeReplayAction(body);
         const mode = body.mode === "day" ? "day" : "minute";
-        const requestPayload = {
+        const result = replayLifecycle.advanceSession({
+          sessionId: String(req.params.sessionId ?? ""),
+          actionId: action.actionId,
           expectedRevision: action.expectedRevision,
           mode,
-        };
-        let result = database.advanceReplaySession({
-          sessionId: String(req.params.sessionId ?? ""),
-          actionId: `${action.actionId}:0`,
-          expectedRevision: action.expectedRevision,
-          requestPayload,
-          updatedAt: isoNow(),
         });
         assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        const isHybrid = result.session?.snapshot?.interval === "hybrid";
-        if (mode === "day" && isHybrid && result.advanced && !result.idempotent) {
-          const firstSequence =
-            Number(result.session.observationBars) +
-            Number(result.session.revealedFutureBars);
-          const targetTradeDate = String(
-            result.session.snapshot?.bars?.[firstSequence - 1]?.tradeDate ?? "",
-          );
-          let step = 1;
-          while (
-            result.session.status !== "completed" &&
-            String(
-              result.session.snapshot?.bars?.[
-                Number(result.session.observationBars) +
-                  Number(result.session.revealedFutureBars)
-              ]?.tradeDate ?? "",
-            ) === targetTradeDate
-          ) {
-            result = database.advanceReplaySession({
-              sessionId: String(req.params.sessionId ?? ""),
-              actionId: `${action.actionId}:${step}`,
-              expectedRevision: Number(result.session.revision),
-              requestPayload: {
-                expectedRevision: Number(result.session.revision),
-                mode,
-              },
-              updatedAt: isoNow(),
-            });
-            step += 1;
-          }
-        }
         res.json({
           advanced: result.advanced,
           idempotent: result.idempotent,
@@ -6122,13 +6087,12 @@ export function createApp(options = {}) {
           expectedRevision: action.expectedRevision,
           ...(body.reason == null ? {} : { reason: completionReason }),
         };
-        const result = database.finishReplaySession({
+        const result = replayLifecycle.finishSession({
           sessionId: String(req.params.sessionId ?? ""),
           actionId: action.actionId,
           expectedRevision: action.expectedRevision,
           completionReason,
           requestPayload,
-          updatedAt: isoNow(),
         });
         assertCondition(Boolean(result), "找不到行情演练会话", 404);
         res.json({
