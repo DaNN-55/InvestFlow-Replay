@@ -120,4 +120,87 @@ describe("replay lifecycle", () => {
     assert.equal(calls[0][1].updatedAt, "2026-08-09T00:00:00.000Z");
     assert.equal(calls[1][1].updatedAt, "2026-08-09T00:00:00.000Z");
   });
+
+  it("freezes linked playbook identity inside blind reviews", () => {
+    let saved;
+    const lifecycle = createReplayLifecycle({
+      database: {
+        getReplaySession: () => ({ id: "session-1" }),
+        getReplayPlaybookVersionLink: () => ({
+          playbookName: "龙头战法",
+          versionNumber: 3,
+        }),
+        saveReplayBlindReview(command) {
+          saved = command;
+          return { saved: true };
+        },
+      },
+    });
+    const review = { playbookId: "p1", playbookVersionId: "v3" };
+    const normalized = {
+      actionId: "blind-1",
+      expectedRevision: 4,
+      review,
+      requestPayload: { expectedRevision: 4, review },
+    };
+
+    lifecycle.saveBlindReview({ sessionId: "session-1", normalized });
+
+    assert.equal(saved.review.strategyName, "龙头战法");
+    assert.equal(saved.review.playbookVersionNumber, 3);
+    assert.equal(saved.requestPayload.review, saved.review);
+  });
+
+  it("requires playbook fit only when the blind review linked a version", () => {
+    const saved = [];
+    const database = {
+      getReplaySession: () => ({
+        review: { blindReview: { playbookId: "p1", playbookVersionId: "v1" } },
+      }),
+      saveReplayPostReview(command) {
+        saved.push(command);
+        return { saved: true };
+      },
+    };
+    const lifecycle = createReplayLifecycle({ database });
+    const normalized = {
+      actionId: "post-1",
+      expectedRevision: 5,
+      review: {},
+      requestPayload: { expectedRevision: 5, review: {} },
+    };
+
+    assert.throws(
+      () => lifecycle.savePostReview({ sessionId: "session-1", normalized }),
+      /必须提供 playbookFitScore/u,
+    );
+    normalized.review.playbookFitScore = 4;
+    lifecycle.savePostReview({ sessionId: "session-1", normalized });
+    assert.equal(saved[0].review.playbookFitScore, 4);
+  });
+
+  it("removes inapplicable playbook fields from free post reviews", () => {
+    let saved;
+    const lifecycle = createReplayLifecycle({
+      database: {
+        getReplaySession: () => ({ review: { blindReview: {} } }),
+        saveReplayPostReview(command) {
+          saved = command;
+          return { saved: true };
+        },
+      },
+    });
+    const review = { playbookFitScore: 5, strategyAdjustment: "保留" };
+    const normalized = {
+      actionId: "post-1",
+      expectedRevision: 5,
+      review,
+      requestPayload: { expectedRevision: 5, review },
+    };
+
+    lifecycle.savePostReview({ sessionId: "session-1", normalized });
+
+    assert.equal("playbookFitScore" in saved.review, false);
+    assert.equal(saved.review.strategyAdjustment, "");
+  });
 });

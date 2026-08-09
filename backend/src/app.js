@@ -6113,47 +6113,9 @@ export function createApp(options = {}) {
         const normalized = normalizeReplayBlindReview(
           normalizeBody(req.body),
         );
-        const frozenSession = database.getReplaySession(
-          String(req.params.sessionId ?? ""),
-        );
-        assertCondition(Boolean(frozenSession), "找不到行情演练会话", 404);
-        if (frozenSession.trainingConfig?.mode === "playbook") {
-          const frozen = frozenSession.trainingConfig;
-          if (normalized.review.playbookId) {
-            assertCondition(
-              normalized.review.playbookId === frozen.playbookId &&
-                normalized.review.playbookVersionId ===
-                  frozen.playbookVersionId,
-              "专项演练只能使用开局时冻结的战法版本",
-              409,
-            );
-          }
-          normalized.review.playbookId = frozen.playbookId;
-          normalized.review.playbookVersionId = frozen.playbookVersionId;
-          normalized.review.strategyName = frozen.playbookName;
-          normalized.review.playbookVersionNumber =
-            frozen.playbookVersionNumber;
-          normalized.requestPayload.review = normalized.review;
-        } else if (normalized.review.playbookId) {
-          const link = database.getReplayPlaybookVersionLink(
-            normalized.review.playbookId,
-            normalized.review.playbookVersionId,
-          );
-          assertCondition(
-            Boolean(link),
-            "playbookVersionId 不属于指定的 playbookId",
-          );
-          normalized.review.strategyName = link.playbookName;
-          normalized.review.playbookVersionNumber = link.versionNumber;
-          normalized.requestPayload.review = normalized.review;
-        }
-        const result = database.saveReplayBlindReview({
+        const result = replayLifecycle.saveBlindReview({
           sessionId: String(req.params.sessionId ?? ""),
-          actionId: normalized.actionId,
-          expectedRevision: normalized.expectedRevision,
-          review: normalized.review,
-          requestPayload: normalized.requestPayload,
-          updatedAt: isoNow(),
+          normalized,
         });
         assertCondition(Boolean(result), "找不到行情演练会话", 404);
         res.json({
@@ -6176,12 +6138,10 @@ export function createApp(options = {}) {
             normalizeBody(req.body),
             stage,
           );
-          const session = database.saveReplayReviewDraft({
+          const session = replayLifecycle.saveReviewDraft({
             sessionId: String(req.params.sessionId ?? ""),
             stage,
-            draft: normalized.draft,
-            expectedRevision: normalized.expectedRevision,
-            updatedAt: isoNow(),
+            normalized,
           });
           assertCondition(Boolean(session), "找不到行情演练会话", 404);
           res.json({
@@ -6202,11 +6162,10 @@ export function createApp(options = {}) {
           const normalized = normalizeReplayReviewDraftDeleteRequest(
             normalizeBody(req.body),
           );
-          const result = database.deleteReplayReviewDraft({
+          const result = replayLifecycle.deleteReviewDraft({
             sessionId: String(req.params.sessionId ?? ""),
             stage,
             expectedRevision: normalized.expectedRevision,
-            updatedAt: isoNow(),
           });
           assertCondition(Boolean(result), "找不到行情演练会话", 404);
           res.json({
@@ -6227,36 +6186,9 @@ export function createApp(options = {}) {
         const normalized = normalizeReplayPostReview(
           normalizeBody(req.body),
         );
-        const currentSession = database.getReplaySession(
-          String(req.params.sessionId ?? ""),
-        );
-        assertCondition(Boolean(currentSession), "找不到行情演练会话", 404);
-        const requiresPlaybookFit =
-          currentSession.trainingConfig?.mode === "playbook" &&
-          Boolean(
-            String(
-              currentSession.trainingConfig?.playbookVersionId ?? "",
-            ).trim(),
-          ) &&
-          String(
-            currentSession.trainingConfig?.playbookContent ?? "",
-          ).trim().length > 0;
-        if (requiresPlaybookFit) {
-          assertCondition(
-            Number.isSafeInteger(normalized.review.playbookFitScore),
-            "非空战法专项复盘必须提供 playbookFitScore",
-          );
-        } else {
-          delete normalized.review.playbookFitScore;
-          normalized.requestPayload.review = normalized.review;
-        }
-        const result = database.saveReplayPostReview({
+        const result = replayLifecycle.savePostReview({
           sessionId: String(req.params.sessionId ?? ""),
-          actionId: normalized.actionId,
-          expectedRevision: normalized.expectedRevision,
-          review: normalized.review,
-          requestPayload: normalized.requestPayload,
-          updatedAt: isoNow(),
+          normalized,
         });
         assertCondition(Boolean(result), "找不到行情演练会话", 404);
         res.json({
@@ -6279,47 +6211,10 @@ export function createApp(options = {}) {
           "blind",
         );
         const sessionId = String(req.params.sessionId ?? "");
-        const currentSession = database.getReplaySession(sessionId);
-        assertCondition(Boolean(currentSession), "找不到行情演练会话", 404);
-        if (currentSession.trainingConfig?.mode === "playbook") {
-          const frozen = currentSession.trainingConfig;
-          if (normalized.review.playbookId) {
-            assertCondition(
-              normalized.review.playbookId === frozen.playbookId &&
-                normalized.review.playbookVersionId ===
-                  frozen.playbookVersionId,
-              "专项演练只能使用开局时冻结的战法版本",
-              409,
-            );
-          }
-          normalized.review.playbookId = frozen.playbookId;
-          normalized.review.playbookVersionId = frozen.playbookVersionId;
-          normalized.review.strategyName = frozen.playbookName;
-          normalized.review.playbookVersionNumber =
-            frozen.playbookVersionNumber;
-          normalized.requestPayload.review = normalized.review;
-        } else if (normalized.review.playbookId) {
-          const link = database.getReplayPlaybookVersionLink(
-            normalized.review.playbookId,
-            normalized.review.playbookVersionId,
-          );
-          assertCondition(
-            Boolean(link),
-            "playbookVersionId 不属于指定的 playbookId",
-          );
-          normalized.review.strategyName = link.playbookName;
-          normalized.review.playbookVersionNumber = link.versionNumber;
-          normalized.requestPayload.review = normalized.review;
-        }
-        const result = database.appendReplayReviewCorrection({
+        const result = replayLifecycle.appendReviewCorrection({
           sessionId,
           stage: "blind",
-          actionId: normalized.actionId,
-          expectedRevision: normalized.expectedRevision,
-          review: normalized.review,
-          changeNote: normalized.changeNote,
-          requestPayload: normalized.requestPayload,
-          createdAt: isoNow(),
+          normalized,
         });
         assertCondition(Boolean(result), "找不到行情演练会话", 404);
         res.json({
@@ -6343,36 +6238,10 @@ export function createApp(options = {}) {
           "post",
         );
         const sessionId = String(req.params.sessionId ?? "");
-        const currentSession = database.getReplaySession(sessionId);
-        assertCondition(Boolean(currentSession), "找不到行情演练会话", 404);
-        const requiresPlaybookFit =
-          currentSession.trainingConfig?.mode === "playbook" &&
-          Boolean(
-            String(
-              currentSession.trainingConfig?.playbookVersionId ?? "",
-            ).trim(),
-          ) &&
-          String(
-            currentSession.trainingConfig?.playbookContent ?? "",
-          ).trim().length > 0;
-        if (requiresPlaybookFit) {
-          assertCondition(
-            Number.isSafeInteger(normalized.review.playbookFitScore),
-            "非空战法专项复盘必须提供 playbookFitScore",
-          );
-        } else {
-          delete normalized.review.playbookFitScore;
-          normalized.requestPayload.review = normalized.review;
-        }
-        const result = database.appendReplayReviewCorrection({
+        const result = replayLifecycle.appendReviewCorrection({
           sessionId,
           stage: "post",
-          actionId: normalized.actionId,
-          expectedRevision: normalized.expectedRevision,
-          review: normalized.review,
-          changeNote: normalized.changeNote,
-          requestPayload: normalized.requestPayload,
-          createdAt: isoNow(),
+          normalized,
         });
         assertCondition(Boolean(result), "找不到行情演练会话", 404);
         res.json({
@@ -6387,21 +6256,65 @@ export function createApp(options = {}) {
     },
   );
 
+  app.patch(
+    "/api/quant/replay/sessions/:sessionId/reviews/:stage/corrections/:correctionId",
+    (req, res, next) => {
+      try {
+        const stage = String(req.params.stage ?? "");
+        assertCondition(["blind", "post"].includes(stage), "修正阶段无效");
+        const normalized = normalizeReplayReviewCorrection(
+          normalizeBody(req.body),
+          stage,
+        );
+        const sessionId = String(req.params.sessionId ?? "");
+        const result = replayLifecycle.updateReviewCorrection({
+          sessionId,
+          correctionId: String(req.params.correctionId ?? ""),
+          stage,
+          normalized,
+        });
+        assertCondition(Boolean(result), "找不到行情演练会话", 404);
+        assertCondition(Boolean(result.correction), "找不到复盘修正记录", 404);
+        res.json({ correction: result.correction, session: toPublicReplaySession(result.session) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.delete(
+    "/api/quant/replay/sessions/:sessionId/reviews/:stage/corrections/:correctionId",
+    (req, res, next) => {
+      try {
+        const stage = String(req.params.stage ?? "");
+        assertCondition(["blind", "post"].includes(stage), "修正阶段无效");
+        const action = normalizeReplayAction(normalizeBody(req.body));
+        const result = replayLifecycle.deleteReviewCorrection({
+          sessionId: String(req.params.sessionId ?? ""),
+          correctionId: String(req.params.correctionId ?? ""),
+          stage,
+          actionId: action.actionId,
+          expectedRevision: action.expectedRevision,
+        });
+        assertCondition(Boolean(result), "找不到行情演练会话", 404);
+        assertCondition(result.deleted, "找不到复盘修正记录", 404);
+        res.json({ deleted: true, session: toPublicReplaySession(result.session) });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   app.post(
     "/api/quant/replay/sessions/:sessionId/reveal",
     (req, res, next) => {
       try {
         const body = normalizeBody(req.body);
         const action = normalizeReplayAction(body);
-        const requestPayload = {
-          expectedRevision: action.expectedRevision,
-        };
-        const result = database.revealReplaySession({
+        const result = replayLifecycle.revealSession({
           sessionId: String(req.params.sessionId ?? ""),
           actionId: action.actionId,
           expectedRevision: action.expectedRevision,
-          requestPayload,
-          updatedAt: isoNow(),
         });
         assertCondition(Boolean(result), "找不到行情演练会话", 404);
         res.json({
