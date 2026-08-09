@@ -17,71 +17,20 @@ import ReplayReviewPanel from "../components/replay/ReplayReviewPanel.vue";
 import ReplayOrderDecisionDialog from "../components/replay/ReplayOrderDecisionDialog.vue";
 import ReplaySetupPanel from "../components/replay/ReplaySetupPanel.vue";
 import ReplayTradingPanel from "../components/replay/ReplayTradingPanel.vue";
-import ReplayTrainingContext from "../components/replay/ReplayTrainingContext.vue";
 import UiButton from "../components/ui/UiButton.vue";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
 import UiModal from "../components/ui/UiModal.vue";
-import { useReplayAutoplay } from "../composables/useReplayAutoplay.js";
-import { useReplayReviewDrafts } from "../composables/useReplayReviewDrafts.js";
-import { useReplaySession } from "../composables/useReplaySession";
+import { useReplayAttempt } from "../composables/useReplayAttempt.js";
 import { api } from "../services/api.js";
 
 const {
   session,
-  hasSession,
-  isCompleted,
-  isBusy,
-  isRestoring,
-  isCreating,
-  isSubmitting,
-  isAdvancing,
-  isFinishing,
-  isRevealing,
-  isSavingBlindReview,
-  isSavingPostReview,
-  isSavingBlindCorrection,
-  isSavingPostCorrection,
-  errorMessage,
-  statusMessage,
-  createSession,
-  submitOrder,
-  advanceSession,
-  finishSession,
-  skipSessionAndRestart,
-  revealSession,
-  saveBlindReview,
-  savePostReview,
-  addBlindReviewCorrection,
-  addPostReviewCorrection,
-  syncStoredSession,
-  startNewSession,
-  clearMessages,
-} = useReplaySession();
-
-const {
-  drafts: reviewDrafts,
-  statuses: reviewDraftStatuses,
-  queueDraft: queueReviewDraft,
-  deleteDraft: deleteReviewDraft,
-  prepareFinal: prepareReviewFinal,
-  finishFinal: finishReviewFinal,
-} = useReplayReviewDrafts({ session });
-const currentBlindDraft = computed(() => reviewDrafts.value.blind);
-
-const {
-  playing: autoplayPlaying,
-  speed: autoplaySpeed,
-  message: autoplayMessage,
-  pause: pauseAutoplay,
-  toggle: toggleAutoplay,
-  setSpeed: setAutoplaySpeed,
-} = useReplayAutoplay({
-  session,
-  isBusy,
-  errorMessage,
-  statusMessage,
-  advanceSession,
-  blindDraft: currentBlindDraft,
-});
+  state: attemptState,
+  messages,
+  review,
+  autoplay,
+  commands,
+} = useReplayAttempt();
 
 const playbooks = shallowRef([]);
 const playbooksLoading = shallowRef(false);
@@ -95,6 +44,7 @@ const orderPanelOpen = shallowRef(false);
 const orderPanelSide = shallowRef("buy");
 const orderDraftResetToken = shallowRef(0);
 const reviewDialogOpen = shallowRef(false);
+const cancelRetrainOpen = shallowRef(false);
 let benchmarkRequestSequence = 0;
 let benchmarkPollTimer = null;
 
@@ -195,16 +145,15 @@ function shouldIgnoreShortcut(event) {
 function handleShortcut(event) {
   if (
     shouldIgnoreShortcut(event) ||
-    !hasSession.value ||
-    isBusy.value ||
-    isCompleted.value ||
+    !attemptState.value.hasSession ||
+    attemptState.value.isBusy ||
+    attemptState.value.isCompleted ||
     !["Space", "ArrowRight"].includes(event.code)
   ) {
     return;
   }
   event.preventDefault();
-  pauseAutoplay();
-  advanceSession();
+  commands.advance();
 }
 
 function openOrderDialog(side) {
@@ -213,8 +162,7 @@ function openOrderDialog(side) {
 }
 
 async function handleSubmitOrder(order) {
-  pauseAutoplay();
-  const updated = await submitOrder(order);
+  const updated = await commands.submitOrder(order);
   if (updated) {
     orderPanelOpen.value = false;
     orderDraftResetToken.value += 1;
@@ -224,41 +172,36 @@ async function handleSubmitOrder(order) {
 function handleStartNewSession() {
   orderPanelOpen.value = false;
   orderDraftResetToken.value += 1;
-  startNewSession();
+  commands.startNew();
 }
 
 function handleManualAdvance(mode = "minute") {
-  pauseAutoplay();
-  advanceSession(mode);
+  commands.advance(mode);
 }
 
 function handleFinish() {
-  pauseAutoplay();
-  finishSession();
+  commands.finish();
 }
 
 function handleSkipAndRestart() {
-  pauseAutoplay();
   orderPanelOpen.value = false;
   orderDraftResetToken.value += 1;
-  skipSessionAndRestart();
+  commands.skipAndRestart();
+}
+
+async function cancelRetrain() {
+  const restored = await commands.cancelRetrain();
+  if (restored) {
+    cancelRetrainOpen.value = false;
+  }
 }
 
 function handleReviewDraftChange({ stage, draft }) {
-  queueReviewDraft(stage, draft);
+  commands.queueReviewDraft(stage, draft);
 }
 
-async function handleSaveBlind(review) {
-  await prepareReviewFinal("blind");
-  const savedSession = await saveBlindReview(review);
-  finishReviewFinal("blind", Boolean(savedSession));
-}
-
-async function handleSavePost(review) {
-  await prepareReviewFinal("post");
-  const savedSession = await savePostReview(review);
-  finishReviewFinal("post", Boolean(savedSession));
-}
+const handleSaveBlind = commands.saveBlindReview;
+const handleSavePost = commands.savePostReview;
 
 function attachShortcut() {
   window.removeEventListener("keydown", handleShortcut);
@@ -273,7 +216,7 @@ onMounted(attachShortcut);
 onActivated(attachShortcut);
 onActivated(loadReplayPlaybooks);
 onActivated(loadReplayBenchmarks);
-onActivated(syncStoredSession);
+onActivated(commands.sync);
 onDeactivated(() => {
   detachShortcut();
   stopBenchmarkPolling();
@@ -286,33 +229,33 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="market-replay">
-    <div v-if="isRestoring" class="market-replay__loading">
+    <div v-if="attemptState.activity === 'restoring'" class="market-replay__loading">
       <RefreshCw :size="18" class="market-replay__spinner" />
       正在恢复上次行情演练…
     </div>
 
     <template v-else>
       <div
-        v-if="errorMessage || statusMessage"
+        v-if="messages.primary"
         class="market-replay__message"
-        :class="{ 'market-replay__message--error': errorMessage }"
+        :class="{ 'market-replay__message--error': messages.error }"
         role="status"
       >
         <AlertCircle :size="15" />
-        <span>{{ errorMessage || statusMessage }}</span>
-        <button type="button" aria-label="关闭提示" @click="clearMessages">
+        <span>{{ messages.primary }}</span>
+        <button type="button" aria-label="关闭提示" @click="commands.clearMessages">
           <X :size="14" />
         </button>
       </div>
 
       <ReplaySetupPanel
-        v-if="!hasSession"
-        :loading="isCreating"
+        v-if="!attemptState.hasSession"
+        :loading="attemptState.activity === 'creating'"
         :benchmarks="benchmarks"
         :benchmarks-loading="benchmarksLoading"
         :benchmarks-error="benchmarksError"
         :benchmark-initialization="benchmarkInitialization"
-        @create="createSession"
+        @create="commands.create"
         @retry-benchmarks="retryReplayBenchmarks"
       />
 
@@ -325,7 +268,7 @@ onBeforeUnmount(() => {
           <UiButton
             variant="secondary"
             size="sm"
-            :disabled="isBusy"
+            :disabled="attemptState.isBusy"
             @click="handleStartNewSession"
           >
             新开一局
@@ -333,8 +276,11 @@ onBeforeUnmount(() => {
         </header>
 
         <ReplayAccountSummary :session="session" />
-        <ReplayAttemptContext :attempt-info="session.attemptInfo" />
-        <ReplayTrainingContext :training-config="session.trainingConfig" />
+        <ReplayAttemptContext
+          :attempt-info="session.attemptInfo"
+          :cancelling="attemptState.activity === 'cancellingRetrain'"
+          @cancel-retrain="cancelRetrainOpen = true"
+        />
 
         <div
           class="market-replay__workspace"
@@ -368,34 +314,34 @@ onBeforeUnmount(() => {
               :session-interval="session.interval"
               :step-minutes="session.stepMinutes"
               :reset-token="orderDraftResetToken"
-              :submitting="isSubmitting"
+              :submitting="attemptState.activity === 'submitting'"
               @close="orderPanelOpen = false"
               @submit="handleSubmitOrder"
             />
             <ReplayTradingPanel
               v-if="!orderPanelOpen"
               :session="session"
-              :submitting="isSubmitting"
-              :advancing="isAdvancing"
-              :finishing="isFinishing"
-              :revealing="isRevealing"
-              :autoplay-playing="autoplayPlaying"
-              :autoplay-speed="autoplaySpeed"
-              :autoplay-message="autoplayMessage"
+              :submitting="attemptState.activity === 'submitting'"
+              :advancing="attemptState.activity === 'advancing'"
+              :finishing="attemptState.activity === 'finishing'"
+              :revealing="attemptState.activity === 'revealing'"
+              :autoplay-playing="autoplay.playing"
+              :autoplay-speed="autoplay.speed"
+              :autoplay-message="autoplay.message"
               @open-order="openOrderDialog"
               @open-review="reviewDialogOpen = true"
               @advance="handleManualAdvance"
               @finish="handleFinish"
               @skip="handleSkipAndRestart"
-              @reveal="revealSession"
-              @toggle-autoplay="toggleAutoplay"
-              @change-autoplay-speed="setAutoplaySpeed"
+              @reveal="commands.reveal"
+              @toggle-autoplay="commands.toggleAutoplay"
+              @change-autoplay-speed="commands.setAutoplaySpeed"
             />
           </aside>
         </div>
         <UiModal
           :open="reviewDialogOpen"
-          :busy="isSavingBlindReview || isSavingPostReview"
+          :busy="['savingBlindReview', 'savingPostReview'].includes(attemptState.activity)"
           title="两阶段复盘 · 决策记录与评分"
           description="逐笔委托记录回答每次为什么操作；这里负责整局盲评、揭晓后复盘和评分。"
           panel-class="market-replay-review-dialog"
@@ -407,22 +353,34 @@ onBeforeUnmount(() => {
             :playbooks="playbooks"
             :playbooks-loading="playbooksLoading"
             :playbooks-error="playbooksError"
-            :saving-blind="isSavingBlindReview"
-            :saving-post="isSavingPostReview"
-            :saving-blind-correction="isSavingBlindCorrection"
-            :saving-post-correction="isSavingPostCorrection"
-            :review-drafts="reviewDrafts"
-            :draft-statuses="reviewDraftStatuses"
+            :saving-blind="attemptState.activity === 'savingBlindReview'"
+            :saving-post="attemptState.activity === 'savingPostReview'"
+            :saving-blind-correction="attemptState.activity === 'savingBlindCorrection'"
+            :saving-post-correction="attemptState.activity === 'savingPostCorrection'"
+            :review-drafts="review.drafts"
+            :draft-statuses="review.statuses"
             @draft-change="handleReviewDraftChange"
-            @delete-draft="deleteReviewDraft"
+            @delete-draft="commands.deleteReviewDraft"
             @save-blind="handleSaveBlind"
             @save-post="handleSavePost"
-            @add-blind-correction="addBlindReviewCorrection"
-            @add-post-correction="addPostReviewCorrection"
+            @add-blind-correction="commands.addBlindCorrection"
+            @add-post-correction="commands.addPostCorrection"
+            @update-correction="commands.updateCorrection"
+            @delete-correction="commands.deleteCorrection"
           />
         </UiModal>
       </template>
     </template>
+    <ConfirmDialog
+      :open="cancelRetrainOpen"
+      title="取消本次复练？"
+      message="这次复练记录会被删除，并返回对应的首次演练结果；首次成绩和复盘不会改变。"
+      confirm-text="取消复练并返回"
+      variant="danger"
+      :busy="attemptState.activity === 'cancellingRetrain'"
+      @cancel="cancelRetrainOpen = false"
+      @confirm="cancelRetrain"
+    />
   </div>
 </template>
 
@@ -439,11 +397,16 @@ onBeforeUnmount(() => {
   width: min(1040px, calc(100vw - 32px));
 }
 
+:global(.market-replay-review-dialog .ui-modal__body) {
+  padding-block: 4px;
+}
+
 .market-replay__header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
+  margin-top: 10px;
 }
 
 .market-replay__eyebrow {

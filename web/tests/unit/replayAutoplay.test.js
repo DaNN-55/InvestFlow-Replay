@@ -23,6 +23,10 @@ const viewSource = readFileSync(
   new URL("../../src/views/MarketReplayView.vue", import.meta.url),
   "utf8",
 );
+const attemptSource = readFileSync(
+  new URL("../../src/composables/useReplayAttempt.js", import.meta.url),
+  "utf8",
+);
 
 describe("replay autoplay", () => {
   it("provides distinct slow, normal and fast delays", () => {
@@ -181,16 +185,11 @@ describe("replay autoplay", () => {
     assert.match(tradingPanelSource, /REPLAY_AUTOPLAY_SPEEDS/u);
     assert.match(tradingPanelSource, /emit\('changeAutoplaySpeed'/u);
     assert.match(tradingPanelSource, /emit\('toggleAutoplay'\)/u);
-    assert.match(viewSource, /useReplayAutoplay/u);
-    assert.match(viewSource, /@toggle-autoplay="toggleAutoplay"/u);
-    assert.match(viewSource, /@change-autoplay-speed="setAutoplaySpeed"/u);
-    assert.match(
-      viewSource,
-      /function handleManualAdvance\(mode = "minute"\)[\s\S]*?pauseAutoplay\(\);[\s\S]*?advanceSession\(mode\);/u,
-    );
-    assert.match(
-      viewSource,
-      /function handleSubmitOrder\(order\)[\s\S]*?pauseAutoplay\(\);[\s\S]*?submitOrder\(order\);/u,
-    );
+    assert.match(viewSource, /useReplayAttempt/u);
+    assert.match(viewSource, /@toggle-autoplay="commands\.toggleAutoplay"/u);
+    assert.match(viewSource, /@change-autoplay-speed="commands\.setAutoplaySpeed"/u);
+    assert.match(attemptSource, /autoplayController\.pause\(\)/u);
+    assert.match(attemptSource, /sessionController\.advanceSession\(mode\)/u);
+    assert.match(attemptSource, /sessionController\.submitOrder\(order\)/u);
   });
 });

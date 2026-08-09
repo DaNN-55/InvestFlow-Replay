@@ -5,7 +5,7 @@ import {
   shallowRef,
 } from "vue";
 
-import { api } from "../services/api";
+import { api } from "../services/api.js";
 import { buildReplayRestartOptions } from "../utils/replayRestart.js";
 
 const REPLAY_SESSION_STORAGE_KEY = "investflow.replay.active-session-id";
@@ -17,25 +17,25 @@ function createActionId() {
   return `replay-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function readStoredSessionId() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  return window.localStorage.getItem(REPLAY_SESSION_STORAGE_KEY) ?? "";
+function browserStorage() {
+  return typeof window === "undefined" ? null : window.localStorage;
 }
 
-function storeSessionId(sessionId) {
-  if (typeof window === "undefined") {
-    return;
-  }
+function readStoredSessionId(storage) {
+  return storage?.getItem(REPLAY_SESSION_STORAGE_KEY) ?? "";
+}
+
+function storeSessionId(storage, sessionId) {
   if (sessionId) {
-    window.localStorage.setItem(REPLAY_SESSION_STORAGE_KEY, sessionId);
+    storage?.setItem(REPLAY_SESSION_STORAGE_KEY, sessionId);
     return;
   }
-  window.localStorage.removeItem(REPLAY_SESSION_STORAGE_KEY);
+  storage?.removeItem(REPLAY_SESSION_STORAGE_KEY);
 }
 
-export function useReplaySession() {
+export function useReplaySession(options = {}) {
+  const client = options.client ?? api;
+  const storage = options.storage ?? browserStorage();
   const session = shallowRef(null);
   const isRestoring = shallowRef(false);
   const isCreating = shallowRef(false);
@@ -47,6 +47,7 @@ export function useReplaySession() {
   const isSavingPostReview = shallowRef(false);
   const isSavingBlindCorrection = shallowRef(false);
   const isSavingPostCorrection = shallowRef(false);
+  const isCancellingRetrain = shallowRef(false);
   const errorMessage = shallowRef("");
   const statusMessage = shallowRef("");
 
@@ -64,12 +65,13 @@ export function useReplaySession() {
       isSavingBlindReview.value ||
       isSavingPostReview.value ||
       isSavingBlindCorrection.value ||
-      isSavingPostCorrection.value,
+      isSavingPostCorrection.value ||
+      isCancellingRetrain.value,
   );
 
   function setSession(nextSession) {
     session.value = nextSession ?? null;
-    storeSessionId(nextSession?.id ?? "");
+    storeSessionId(storage, nextSession?.id ?? "");
   }
 
   function clearMessages() {
@@ -79,12 +81,12 @@ export function useReplaySession() {
 
   async function refreshSession(options = {}) {
     const sessionId =
-      options.sessionId ?? session.value?.id ?? readStoredSessionId();
+      options.sessionId ?? session.value?.id ?? readStoredSessionId(storage);
     if (!sessionId) {
       return null;
     }
     try {
-      const payload = await api.getReplaySession(sessionId);
+      const payload = await client.getReplaySession(sessionId);
       setSession(payload.session);
       if (options.conflict) {
         statusMessage.value =
@@ -103,7 +105,7 @@ export function useReplaySession() {
   }
 
   async function restoreSession() {
-    const sessionId = readStoredSessionId();
+    const sessionId = readStoredSessionId(storage);
     if (!sessionId) {
       return;
     }
@@ -117,7 +119,7 @@ export function useReplaySession() {
   }
 
   async function syncStoredSession() {
-    const sessionId = readStoredSessionId();
+    const sessionId = readStoredSessionId(storage);
     if (
       !sessionId ||
       sessionId === session.value?.id ||
@@ -141,7 +143,7 @@ export function useReplaySession() {
     isCreating.value = true;
     clearMessages();
     try {
-      const payload = await api.createReplaySession(options);
+      const payload = await client.createReplaySession(options);
       setSession(payload.session);
       statusMessage.value = payload.session.interval === "hybrid"
         ? `日内模拟已创建：主图保留 250 根日线，分时区按${Number(payload.session.stepMinutes ?? 1)}分钟推进。`
@@ -164,7 +166,7 @@ export function useReplaySession() {
     isSubmitting.value = true;
     clearMessages();
     try {
-      const payload = await api.submitReplayOrder(session.value.id, {
+      const payload = await client.submitReplayOrder(session.value.id, {
         actionId: createActionId(),
         expectedRevision: session.value.revision,
         ...order,
@@ -197,7 +199,7 @@ export function useReplaySession() {
     isAdvancing.value = true;
     clearMessages();
     try {
-      const payload = await api.advanceReplaySession(session.value.id, {
+      const payload = await client.advanceReplaySession(session.value.id, {
         actionId: createActionId(),
         expectedRevision: session.value.revision,
         mode,
@@ -244,7 +246,7 @@ export function useReplaySession() {
     isFinishing.value = true;
     clearMessages();
     try {
-      const payload = await api.finishReplaySession(session.value.id, {
+      const payload = await client.finishReplaySession(session.value.id, {
         actionId: createActionId(),
         expectedRevision: session.value.revision,
       });
@@ -278,7 +280,7 @@ export function useReplaySession() {
     clearMessages();
     let finishedSession = null;
     try {
-      const finished = await api.finishReplaySession(session.value.id, {
+      const finished = await client.finishReplaySession(session.value.id, {
         actionId: createActionId(),
         expectedRevision: session.value.revision,
         reason: "no_opportunity",
@@ -286,7 +288,7 @@ export function useReplaySession() {
       finishedSession = finished.session;
       setSession(finishedSession);
 
-      const created = await api.createReplaySession(restartOptions);
+      const created = await client.createReplaySession(restartOptions);
       setSession(created.session);
       statusMessage.value = "上一局已记录为无交易机会，并按相同配置换了一局。";
       return created.session;
@@ -317,7 +319,7 @@ export function useReplaySession() {
     isRevealing.value = true;
     clearMessages();
     try {
-      const payload = await api.revealReplaySession(session.value.id, {
+      const payload = await client.revealReplaySession(session.value.id, {
         actionId: createActionId(),
         expectedRevision: session.value.revision,
       });
@@ -349,7 +351,7 @@ export function useReplaySession() {
     isSavingBlindReview.value = true;
     clearMessages();
     try {
-      const payload = await api.saveReplayBlindReview(session.value.id, {
+      const payload = await client.saveReplayBlindReview(session.value.id, {
         actionId: createActionId(),
         expectedRevision: session.value.revision,
         ...review,
@@ -382,7 +384,7 @@ export function useReplaySession() {
     isSavingPostReview.value = true;
     clearMessages();
     try {
-      const payload = await api.saveReplayPostReview(session.value.id, {
+      const payload = await client.saveReplayPostReview(session.value.id, {
         actionId: createActionId(),
         expectedRevision: session.value.revision,
         ...review,
@@ -423,8 +425,8 @@ export function useReplaySession() {
     clearMessages();
     try {
       const apiMethod = isBlind
-        ? api.addReplayBlindReviewCorrection
-        : api.addReplayPostReviewCorrection;
+        ? client.addReplayBlindReviewCorrection
+        : client.addReplayPostReviewCorrection;
       const payload = await apiMethod(session.value.id, {
         actionId: createActionId(),
         expectedRevision: session.value.revision,
@@ -455,6 +457,88 @@ export function useReplaySession() {
     return addReviewCorrection("post", correction);
   }
 
+  async function updateReviewCorrection(correctionId, stage, correction) {
+    const savingState = stage === "blind"
+      ? isSavingBlindCorrection
+      : isSavingPostCorrection;
+    if (!session.value || isBusy.value || savingState.value) return null;
+    savingState.value = true;
+    clearMessages();
+    try {
+      const payload = await client.updateReplayReviewCorrection(
+        session.value.id,
+        stage,
+        correctionId,
+        {
+          actionId: createActionId(),
+          expectedRevision: session.value.revision,
+          ...correction,
+        },
+      );
+      setSession(payload.session);
+      statusMessage.value = "复盘修正记录已更新。";
+      return payload.session;
+    } catch (error) {
+      if (error?.status === 409) {
+        await refreshSession({ conflict: true });
+        return null;
+      }
+      errorMessage.value = error?.message ?? "复盘修正记录更新失败";
+      return null;
+    } finally {
+      savingState.value = false;
+    }
+  }
+
+  async function deleteReviewCorrection(correctionId, stage) {
+    if (!session.value || isBusy.value) return null;
+    clearMessages();
+    try {
+      const payload = await client.deleteReplayReviewCorrection(
+        session.value.id,
+        stage,
+        correctionId,
+        {
+          actionId: createActionId(),
+          expectedRevision: session.value.revision,
+        },
+      );
+      setSession(payload.session);
+      statusMessage.value = "复盘修正记录已删除。";
+      return payload.session;
+    } catch (error) {
+      if (error?.status === 409) {
+        await refreshSession({ conflict: true });
+        return null;
+      }
+      errorMessage.value = error?.message ?? "复盘修正记录删除失败";
+      return null;
+    }
+  }
+
+  async function cancelRetrain() {
+    const retrainId = session.value?.id;
+    const sourceSessionId = session.value?.attemptInfo?.sourceSessionId;
+    if (!retrainId || !sourceSessionId || isBusy.value) {
+      return null;
+    }
+    isCancellingRetrain.value = true;
+    clearMessages();
+    try {
+      await client.deleteReplaySession(retrainId);
+      const restored = await refreshSession({ sessionId: sourceSessionId });
+      if (restored) {
+        statusMessage.value = "本次复练已取消，已返回首次演练结果。";
+      }
+      return restored;
+    } catch (error) {
+      errorMessage.value = error?.message ?? "取消复练失败";
+      return null;
+    } finally {
+      isCancellingRetrain.value = false;
+    }
+  }
+
   function startNewSession() {
     if (isBusy.value) {
       return;
@@ -463,7 +547,9 @@ export function useReplaySession() {
     clearMessages();
   }
 
-  onMounted(restoreSession);
+  if (options.restoreOnMount !== false) {
+    onMounted(restoreSession);
+  }
 
   return {
     session: readonly(session),
@@ -481,6 +567,7 @@ export function useReplaySession() {
     isSavingPostReview: readonly(isSavingPostReview),
     isSavingBlindCorrection: readonly(isSavingBlindCorrection),
     isSavingPostCorrection: readonly(isSavingPostCorrection),
+    isCancellingRetrain: readonly(isCancellingRetrain),
     errorMessage: readonly(errorMessage),
     statusMessage: readonly(statusMessage),
     createSession,
@@ -493,6 +580,9 @@ export function useReplaySession() {
     savePostReview,
     addBlindReviewCorrection,
     addPostReviewCorrection,
+    updateReviewCorrection,
+    deleteReviewCorrection,
+    cancelRetrain,
     refreshSession,
     syncStoredSession,
     startNewSession,

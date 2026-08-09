@@ -14,6 +14,9 @@ const composableSource = read("../../src/composables/useReplayHistory.js");
 const sessionComposableSource = read(
   "../../src/composables/useReplaySession.js",
 );
+const attemptComposableSource = read(
+  "../../src/composables/useReplayAttempt.js",
+);
 const recordsSource = read(
   "../../src/components/replay-history/ReplayHistoryRecords.vue",
 );
@@ -73,7 +76,7 @@ describe("replay retrain frontend surface", () => {
       composableSource,
       /attemptKind\.value = filters\.attemptKind \?\? attemptKind\.value/u,
     );
-    assert.match(filtersSource, /全部训练/u);
+    assert.match(filtersSource, /全部次数/u);
     assert.match(filtersSource, /首次盲测/u);
     assert.match(filtersSource, /已知复练/u);
     assert.match(recordsSource, /:attempt-kind="attemptKind"/u);
@@ -91,14 +94,22 @@ describe("replay retrain frontend surface", () => {
     assert.match(recordsSource, /@retrain="retrainReplay"/u);
     assert.match(detailSource, /v-if="item\.revealed"/u);
     assert.match(detailSource, /复练此行情/u);
-    assert.match(detailSource, /:loading="retrainState\.loading"/u);
+    assert.match(detailSource, /演练记录操作/u);
     assert.match(detailSource, /retrainState\.error/u);
     assert.match(sessionComposableSource, /async function syncStoredSession/u);
     assert.match(
       sessionComposableSource,
       /refreshSession\(\{ sessionId \}\)/u,
     );
-    assert.match(viewSource, /onActivated\(syncStoredSession\)/u);
+    assert.match(viewSource, /onActivated\(commands\.sync\)/u);
+  });
+
+  it("can delete an accidental explicit retrain and restore its first result", () => {
+    assert.match(contextSource, /取消复练并返回首次结果/u);
+    assert.match(contextSource, /attemptInfo\?\.sourceSessionId/u);
+    assert.doesNotMatch(viewSource, /localStorage/u);
+    assert.match(attemptComposableSource, /sessionController\.cancelRetrain\(\)/u);
+    assert.match(viewSource, /首次成绩和复盘不会改变/u);
   });
 
   it("labels retrain scores without hiding them in list and detail", () => {
