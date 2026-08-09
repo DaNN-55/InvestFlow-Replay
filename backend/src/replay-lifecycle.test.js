@@ -24,6 +24,56 @@ function hybridSession({ revealedFutureBars, revision, status = "active" }) {
 }
 
 describe("replay lifecycle", () => {
+  it("creates a session through the scenario and persistence ports", async () => {
+    let created;
+    let prefetched;
+    const bars = Array.from({ length: 270 }, (_, index) => ({
+      tradeDate: `2026-08-${String(index + 1).padStart(2, "0")}`,
+    }));
+    const lifecycle = createReplayLifecycle({
+      store: {
+        getScenarioUsage: () => ({
+          usedTsCodes: ["000001.SZ"],
+          recentWindowEndDates: ["2026-07-31"],
+        }),
+        createSession(session) {
+          created = session;
+          return session;
+        },
+      },
+      scenarioSource: {
+        createReplayScenario: async () => ({
+          sourceDataVersion: "v1",
+          tsCode: "600000.SH",
+          interval: "1d",
+          observationBars: 250,
+          gameLength: 20,
+          bars,
+        }),
+        prefetchReplayStocks(command) {
+          prefetched = command;
+          return Promise.resolve();
+        },
+      },
+      createId: () => "session-1",
+      now: () => "2026-08-09T00:00:00.000Z",
+    });
+
+    const session = await lifecycle.createSession({
+      gameLength: 20,
+      benchmarkCode: "000001.SH",
+      seed: 1,
+      interval: "1d",
+      initialCapital: 100000,
+      costConfig: {},
+      trainingConfig: { mode: "free" },
+    });
+
+    assert.equal(session.id, "session-1");
+    assert.equal(created.account.cash, 100000);
+    assert.deepEqual(prefetched.excludedTsCodes, ["000001.SZ", "600000.SH"]);
+  });
+
   it("owns hybrid whole-day advancement and internal step revisions", () => {
     const calls = [];
     const sessions = [

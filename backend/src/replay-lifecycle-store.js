@@ -1,6 +1,11 @@
 export function createReplayLifecycleStore(database) {
   return {
     getSession: (sessionId) => database.getReplaySession(sessionId),
+    getScenarioUsage: () => database.getReplayScenarioUsage(),
+    createSession: (session) => database.createReplaySession(session),
+    retrainSession: (command) => database.retrainReplaySession(command),
+    deleteSession: (sessionId, deletedAt) =>
+      database.deleteReplaySession(sessionId, deletedAt),
     getPlaybookVersionLink: (playbookId, versionId) =>
       database.getReplayPlaybookVersionLink(playbookId, versionId),
     submitOrder: (command) => database.submitReplayOrder(command),

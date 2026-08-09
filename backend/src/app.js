@@ -536,10 +536,7 @@ function normalizeReplayTrainingSelection(body) {
   const mode = body.trainingMode == null
     ? "free"
     : String(body.trainingMode).trim();
-  assertCondition(
-    ["free", "playbook"].includes(mode),
-    "trainingMode 只支持 free、playbook",
-  );
+  assertCondition(mode === "free", "trainingMode 只支持 free");
   const playbookId = String(body.playbookId ?? "").trim();
   const playbookVersionId = String(body.playbookVersionId ?? "").trim();
   assertCondition(playbookId.length <= 120, "playbookId 最多 120 个字符");
@@ -547,22 +544,11 @@ function normalizeReplayTrainingSelection(body) {
     playbookVersionId.length <= 120,
     "playbookVersionId 最多 120 个字符",
   );
-  if (mode === "playbook") {
-    assertCondition(
-      Boolean(playbookId) && Boolean(playbookVersionId),
-      "专项演练必须提供 playbookId 和 playbookVersionId",
-    );
-  } else {
-    assertCondition(
-      !playbookId && !playbookVersionId,
-      "自由演练不能指定 playbookId 或 playbookVersionId",
-    );
-  }
-  return {
-    mode,
-    playbookId,
-    playbookVersionId,
-  };
+  assertCondition(
+    !playbookId && !playbookVersionId,
+    "自由演练不能在开局时指定战法",
+  );
+  return { mode };
 }
 
 function normalizeReplayPlaybookCreate(body) {
@@ -2962,12 +2948,14 @@ function buildPdfReportLines(run, metrics) {
 export function createApp(options = {}) {
   const clock = typeof options.clock === "function" ? options.clock : () => new Date();
   const database = createDatabase(options.dbPath);
+  const engine = createEngineClient(options.engineUrl);
   const replayLifecycle = createReplayLifecycle({
     store: createReplayLifecycleStore(database),
+    scenarioSource: engine,
+    createId: randomUUID,
     now: isoNow,
   });
   const mainlineRankingStore = createMainlineRankingStore(options.rankingDbPath);
-  const engine = createEngineClient(options.engineUrl);
   const workspace = createWorkspaceService(options.workspaceRoot);
   const stockDecisionServiceUrl = String(
     options.stockDecisionServiceUrl ??
@@ -5892,76 +5880,17 @@ export function createApp(options = {}) {
         "initialCapital 必须是大于 0 的数字",
       );
       const costConfig = normalizeReplayCostConfig(body.costConfig);
-      const trainingSelection = normalizeReplayTrainingSelection(body);
-      let trainingConfig = { mode: "free" };
-      if (trainingSelection.mode === "playbook") {
-        const link = database.getReplayPlaybookVersionLink(
-          trainingSelection.playbookId,
-          trainingSelection.playbookVersionId,
-        );
-        assertCondition(
-          Boolean(link),
-          "playbookVersionId 不属于指定的 playbookId",
-        );
-        trainingConfig = {
-          mode: "playbook",
-          playbookId: link.playbookId,
-          playbookVersionId: link.versionId,
-          playbookName: link.playbookName,
-          playbookVersionNumber: link.versionNumber,
-          playbookContent: link.content,
-        };
-      }
-      const scenarioUsage = database.getReplayScenarioUsage();
-      const snapshot = await engine.createReplayScenario({
+      normalizeReplayTrainingSelection(body);
+      const trainingConfig = { mode: "free" };
+      const session = await replayLifecycle.createSession({
         gameLength,
         benchmarkCode: body.benchmarkCode,
         seed,
         interval,
-        excludedTsCodes: scenarioUsage.usedTsCodes,
-        recentWindowEndDates: scenarioUsage.recentWindowEndDates,
-      });
-      assertCondition(
-        Number(snapshot?.observationBars) === 250 &&
-          (interval === "hybrid"
-            ? Number(snapshot?.trainingDays) === gameLength &&
-              Number(snapshot?.gameLength) > 0
-            : Number(snapshot?.gameLength) === gameLength) &&
-          String(snapshot?.interval ?? "1d") === interval &&
-          Array.isArray(snapshot?.bars) &&
-          snapshot.bars.length >= 250 + Number(snapshot?.gameLength),
-        "行情演练场景数据不完整",
-        502,
-      );
-      const now = isoNow();
-      const session = database.createReplaySession({
-        id: randomUUID(),
-        sourceDataVersion: String(snapshot.sourceDataVersion ?? ""),
-        gameLength: Number(snapshot.gameLength),
-        observationBars: 250,
-        revealedFutureBars: 0,
-        status: "active",
-        revision: 0,
-        snapshot,
-        account: {
-          initialCapital,
-          cash: initialCapital,
-          positionQuantity: 0,
-          availableQuantity: 0,
-          lockedQuantity: 0,
-          averageCost: 0,
-          realizedPnl: 0,
-          totalFees: 0,
-        },
+        initialCapital,
         costConfig,
         trainingConfig,
-        createdAt: now,
-        updatedAt: now,
       });
-      void engine.prefetchReplayStocks({
-        excludedTsCodes: [...scenarioUsage.usedTsCodes, String(snapshot.tsCode || "")],
-        targetReserve: 12,
-      }).catch(() => {});
       res.status(201).json({
         session: toPublicReplaySession(session),
       });
@@ -5996,7 +5925,7 @@ export function createApp(options = {}) {
   app.delete("/api/quant/replay/sessions/:sessionId", (req, res, next) => {
     try {
       const sessionId = String(req.params.sessionId ?? "");
-      const deleted = database.deleteReplaySession(sessionId, isoNow());
+      const deleted = replayLifecycle.deleteSession(sessionId);
       assertCondition(deleted, "找不到行情演练会话", 404);
       res.json({ deleted: true, sessionId });
     } catch (error) {
@@ -6013,11 +5942,9 @@ export function createApp(options = {}) {
           Object.keys(body).length === 0,
           "复练请求不支持额外字段",
         );
-        const session = database.retrainReplaySession({
-          sourceSessionId: String(req.params.sessionId ?? ""),
-          id: randomUUID(),
-          createdAt: isoNow(),
-        });
+        const session = replayLifecycle.retrainSession(
+          String(req.params.sessionId ?? ""),
+        );
         assertCondition(Boolean(session), "找不到行情演练会话", 404);
         res.status(201).json({
           session: toPublicReplaySession(session),

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 function buildActionRequest(expectedRevision, extra = {}) {
   return {
     expectedRevision,
@@ -13,8 +15,88 @@ function lifecycleError(message, status = 400) {
 
 export function createReplayLifecycle({
   store,
+  scenarioSource,
+  createId = randomUUID,
   now = () => new Date().toISOString(),
 }) {
+  async function createSession({
+    gameLength,
+    benchmarkCode,
+    seed,
+    interval,
+    initialCapital,
+    costConfig,
+    trainingConfig,
+  }) {
+    const scenarioUsage = store.getScenarioUsage();
+    const snapshot = await scenarioSource.createReplayScenario({
+      gameLength,
+      benchmarkCode,
+      seed,
+      interval,
+      excludedTsCodes: scenarioUsage.usedTsCodes,
+      recentWindowEndDates: scenarioUsage.recentWindowEndDates,
+    });
+    const validSnapshot =
+      Number(snapshot?.observationBars) === 250 &&
+      (interval === "hybrid"
+        ? Number(snapshot?.trainingDays) === gameLength &&
+          Number(snapshot?.gameLength) > 0
+        : Number(snapshot?.gameLength) === gameLength) &&
+      String(snapshot?.interval ?? "1d") === interval &&
+      Array.isArray(snapshot?.bars) &&
+      snapshot.bars.length >= 250 + Number(snapshot?.gameLength);
+    if (!validSnapshot) {
+      throw lifecycleError("行情演练场景数据不完整", 502);
+    }
+
+    const timestamp = now();
+    const session = store.createSession({
+      id: createId(),
+      sourceDataVersion: String(snapshot.sourceDataVersion ?? ""),
+      gameLength: Number(snapshot.gameLength),
+      observationBars: 250,
+      revealedFutureBars: 0,
+      status: "active",
+      revision: 0,
+      snapshot,
+      account: {
+        initialCapital,
+        cash: initialCapital,
+        positionQuantity: 0,
+        availableQuantity: 0,
+        lockedQuantity: 0,
+        averageCost: 0,
+        realizedPnl: 0,
+        totalFees: 0,
+      },
+      costConfig,
+      trainingConfig,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    void scenarioSource.prefetchReplayStocks({
+      excludedTsCodes: [
+        ...scenarioUsage.usedTsCodes,
+        String(snapshot.tsCode || ""),
+      ],
+      targetReserve: 12,
+    }).catch(() => {});
+    return session;
+  }
+
+  function retrainSession(sourceSessionId) {
+    return store.retrainSession({
+      sourceSessionId,
+      id: createId(),
+      createdAt: now(),
+    });
+  }
+
+  function deleteSession(sessionId) {
+    return store.deleteSession(sessionId, now());
+  }
+
   function submitOrder({
     sessionId,
     actionId,
@@ -273,6 +355,9 @@ export function createReplayLifecycle({
   }
 
   return {
+    createSession,
+    retrainSession,
+    deleteSession,
     submitOrder,
     advanceSession,
     finishSession,
