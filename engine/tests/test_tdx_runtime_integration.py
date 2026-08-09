@@ -4,8 +4,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pandas as pd
-
 from replay_engine.data_store import DuckDbBarStore
 from replay_engine.service import ReplayMarketSupply
 from replay_engine.tdx_market_cache import TdxMarketCache
@@ -15,7 +13,6 @@ class RecordingMarketProvider:
     def __init__(self) -> None:
         self.ensure_calls = 0
         self.prepare_calls = 0
-        self.cache = None
 
     def ensure_ready(self):
         self.ensure_calls += 1
@@ -39,6 +36,21 @@ class RecordingMarketProvider:
     def ensure_unseen_stock_available(self, excluded_ts_codes, *, target_count):
         self.prefetch_call = (excluded_ts_codes, target_count)
         return True
+
+    def load_hybrid_daily_history(self, ts_code, benchmark_code):
+        def row(code):
+            return {
+                "datetime": "2026-08-04",
+                "open": 10,
+                "high": 11,
+                "low": 9,
+                "close": 10.5,
+                "vol": 100,
+                "amount": 1000,
+                "code": code,
+            }
+
+        return {"stock": [row(ts_code)], "benchmark": [row(benchmark_code)]}
 
 
 class InitializingMarketProvider(RecordingMarketProvider):
@@ -73,23 +85,6 @@ class ReplayStoreStub:
         return {"600000.XSHG": "浦发银行"}
 
 
-class DailyHistoryCacheStub:
-    def load_history(self, table_name, ts_code):
-        return pd.DataFrame([
-            {
-                "datetime": "2026-08-04",
-                "open": 10,
-                "high": 11,
-                "low": 9,
-                "close": 10.5,
-                "vol": 100,
-                "amount": 1000,
-                "table": table_name,
-                "code": ts_code,
-            }
-        ])
-
-
 class RecordingMinuteProvider:
     def __init__(self):
         self.calls = []
@@ -99,22 +94,19 @@ class RecordingMinuteProvider:
         return {"interval": "hybrid", "sourceDataVersion": "minute-cache"}
 
 
-class CacheStatusStub:
-    def __init__(self, path: Path, statistics: dict):
-        self.path = path
-        self._statistics = statistics
-
-    def statistics(self):
-        return self._statistics
-
-
 class CacheStatusMarketProvider(RecordingMarketProvider):
     def __init__(self, path: Path):
         super().__init__()
-        self.cache = CacheStatusStub(
-            path,
-            {"instrumentCount": 12, "lastSuccessAt": "2026-08-09T10:00:00"},
-        )
+        self._snapshot = {
+            "statistics": {
+                "instrumentCount": 12,
+                "lastSuccessAt": "2026-08-09T10:00:00",
+            },
+            "storageBytes": path.stat().st_size,
+        }
+
+    def cache_snapshot(self):
+        return self._snapshot
 
     def replay_cache_status(self):
         return {"state": "ready", "ready": True, "message": "ready"}
@@ -126,7 +118,13 @@ class CacheStatusMarketProvider(RecordingMarketProvider):
 class CacheStatusMinuteProvider(RecordingMinuteProvider):
     def __init__(self, path: Path):
         super().__init__()
-        self.store = CacheStatusStub(path, {"fiveMinuteBarCount": 2400})
+        self._snapshot = {
+            "statistics": {"fiveMinuteBarCount": 2400},
+            "storageBytes": path.stat().st_size,
+        }
+
+    def cache_snapshot(self):
+        return self._snapshot
 
 
 class TdxRuntimeIntegrationTest(unittest.TestCase):
@@ -210,7 +208,6 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
     def test_hybrid_replay_passes_local_daily_history_to_minute_provider(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             provider = RecordingMarketProvider()
-            provider.cache = DailyHistoryCacheStub()
             minute_provider = RecordingMinuteProvider()
             supply = ReplayMarketSupply(
                 store=ReplayStoreStub(),

@@ -395,6 +395,40 @@ class TdxMarketCache:
             columns=["datetime", "open", "high", "low", "close", "vol", "amount"],
         )
 
+    def load_replay_stock_history(self, ts_code: str) -> pd.DataFrame:
+        self.ensure_schema()
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                """
+                SELECT
+                    bars.trade_date,
+                    bars.open,
+                    bars.high,
+                    bars.low,
+                    bars.close,
+                    bars.vol,
+                    bars.amount,
+                    factors.adj_factor
+                FROM stock_daily_bars AS bars
+                INNER JOIN stock_adj_factors AS factors
+                    ON factors.ts_code = bars.ts_code
+                   AND factors.trade_date = bars.trade_date
+                WHERE bars.ts_code = ?
+                ORDER BY bars.trade_date
+                """,
+                [str(ts_code).upper()],
+            ).fetchall()
+        finally:
+            connection.close()
+        return pd.DataFrame(
+            rows,
+            columns=[
+                "datetime", "open", "high", "low", "close", "vol", "amount",
+                "adjust_factor",
+            ],
+        )
+
     def upsert_instruments(self, rows: list[dict[str, Any]]) -> None:
         self.ensure_schema()
         if not rows:
@@ -695,6 +729,28 @@ class TdxMarketDataProvider:
             "total": 1 + len(self.benchmark_codes) + self.initial_stock_count,
             "message": "等待初始化通达信行情缓存",
             "error": "",
+        }
+
+    def cache_snapshot(self) -> dict[str, Any]:
+        try:
+            storage_bytes = int(self.cache.path.stat().st_size)
+        except FileNotFoundError:
+            storage_bytes = 0
+        return {
+            "statistics": self.cache.statistics(),
+            "storageBytes": storage_bytes,
+        }
+
+    def load_hybrid_daily_history(
+        self,
+        ts_code: str,
+        benchmark_code: str,
+    ) -> dict[str, list[dict[str, Any]]]:
+        return {
+            "stock": self.cache.load_replay_stock_history(ts_code).to_dict("records"),
+            "benchmark": self.cache.load_history(
+                "index_daily_bars", benchmark_code
+            ).to_dict("records"),
         }
 
     def _connection_hosts(self) -> tuple[str, ...]:

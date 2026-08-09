@@ -449,6 +449,16 @@ class TdxMinuteReplayProvider:
     def __init__(self, cache_path: Path):
         self.store = MinuteReplayStore(cache_path)
 
+    def cache_snapshot(self) -> dict[str, Any]:
+        try:
+            storage_bytes = int(self.store.path.stat().st_size)
+        except FileNotFoundError:
+            storage_bytes = 0
+        return {
+            "statistics": self.store.statistics(),
+            "storageBytes": storage_bytes,
+        }
+
     @staticmethod
     def _market_for_code(ts_code: str):
         from easy_tdx.models.enums import Market

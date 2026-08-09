@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 from typing import Any
 
 from .config import MARKET_DB_PATH, MINUTE_REPLAY_DB_PATH
@@ -53,20 +52,15 @@ class ReplayMarketSupply:
         except (FileNotFoundError, ValueError) as exc:
             raise QuantWorkbenchError(str(exc), 409) from exc
 
-    @staticmethod
-    def _file_size(path: Path) -> int:
-        try:
-            return int(path.stat().st_size)
-        except FileNotFoundError:
-            return 0
-
     def cache_status(self) -> dict[str, Any]:
-        market_stats = self.market_provider.cache.statistics()
-        minute_stats = self.minute_provider.store.statistics()
+        market_snapshot = self.market_provider.cache_snapshot()
+        minute_snapshot = self.minute_provider.cache_snapshot()
+        market_stats = market_snapshot["statistics"]
+        minute_stats = minute_snapshot["statistics"]
         initialization = self.market_provider.replay_cache_status()
         pool = self.market_provider.pool_status()
-        market_bytes = self._file_size(self.market_provider.cache.path)
-        minute_bytes = self._file_size(self.minute_provider.store.path)
+        market_bytes = market_snapshot["storageBytes"]
+        minute_bytes = minute_snapshot["storageBytes"]
         active = pool if pool.get("state") == "running" else initialization
         if initialization.get("state") == "running":
             active = initialization
@@ -164,13 +158,11 @@ class ReplayMarketSupply:
                         "hybrid": normalized_interval == "hybrid",
                     }
                     if normalized_interval == "hybrid":
-                        cache = self.market_provider.cache
-                        options["stock_daily_rows"] = cache.load_history(
-                            "stock_daily_bars", daily["tsCode"]
-                        ).to_dict("records")
-                        options["benchmark_daily_rows"] = cache.load_history(
-                            "index_daily_bars", benchmark
-                        ).to_dict("records")
+                        history = self.market_provider.load_hybrid_daily_history(
+                            daily["tsCode"], benchmark
+                        )
+                        options["stock_daily_rows"] = history["stock"]
+                        options["benchmark_daily_rows"] = history["benchmark"]
                     return self.minute_provider.create_scenario(**options)
                 except ValueError as exc:
                     last_error = exc
