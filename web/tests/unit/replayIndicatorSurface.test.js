@@ -21,8 +21,9 @@ const indicatorSource = read("../../src/utils/replayKlineIndicators.js");
 
 describe("replay indicator frontend surface", () => {
   it("sends one indicator model and the same revealed bars to KLineChart", () => {
-    assert.match(chartSource, /const chartBars = computed/u);
-    assert.match(chartSource, /:indicators="chartIndicators"/u);
+    assert.match(chartSource, /useReplayChartPresentation/u);
+    assert.match(chartSource, /:bars="chart\.bars"/u);
+    assert.match(chartSource, /:indicators="chart\.indicators"/u);
     assert.match(workspaceSource, /chartIndicatorModel/u);
     assert.match(workspaceSource, /builtins:[\s\S]*?main:[\s\S]*?panes:/u);
     assert.match(workspaceSource, /evaluateReplayIndicator/u);

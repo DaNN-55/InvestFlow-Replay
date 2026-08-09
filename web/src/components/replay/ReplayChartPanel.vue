@@ -1,11 +1,8 @@
 <script setup>
 import { ChartCandlestick } from "lucide-vue-next";
-import { computed, shallowRef, watch } from "vue";
+import { toRef } from "vue";
 
-import {
-  aggregateReplayBars,
-  mapReplayExecutionsToTrades,
-} from "../../utils/replayMarket";
+import { useReplayChartPresentation } from "../../composables/useReplayChartPresentation.js";
 import CandlestickChart from "../CandlestickChart.vue";
 import ReplayIndicatorWorkspace from "./ReplayIndicatorWorkspace.vue";
 
@@ -36,58 +33,20 @@ const props = defineProps({
   },
 });
 
-const period = shallowRef("day");
-const chartIndicators = shallowRef({
-  builtins: { main: ["MA"], panes: ["MACD", "RSI"] },
-  custom: [],
+const {
+  period,
+  periodOptions,
+  latestQuote,
+  chart,
+  selectPeriod,
+  setIndicators,
+} = useReplayChartPresentation({
+  bars: toRef(props, "bars"),
+  executions: toRef(props, "executions"),
+  sessionInterval: toRef(props, "sessionInterval"),
+  observationBars: toRef(props, "observationBars"),
+  stepMinutes: toRef(props, "stepMinutes"),
 });
-const periodOptions = computed(() =>
-  props.sessionInterval === "1m"
-    ? [
-        { value: "minute", label: "分" },
-      ]
-    : [
-        { value: "day", label: "日" },
-        { value: "week", label: "周" },
-        { value: "month", label: "月" },
-      ],
-);
-
-watch(
-  () => props.sessionInterval,
-  (interval) => {
-    period.value = interval === "1m" ? "minute" : "day";
-  },
-  { immediate: true },
-);
-
-const chartBars = computed(() =>
-  aggregateReplayBars(props.bars, period.value),
-);
-const chartTrades = computed(() =>
-  mapReplayExecutionsToTrades(props.executions, chartBars.value, {
-    sessionInterval: props.sessionInterval,
-    observationBars: props.observationBars,
-    stepMinutes: props.stepMinutes,
-  }),
-);
-const latestBar = computed(() => props.bars.at(-1) ?? null);
-const chartResetKey = computed(() => `${period.value}-chart`);
-
-function formatPrice(value) {
-  return Number(value ?? 0).toFixed(2);
-}
-
-function formatAmount(value) {
-  const amount = Number(value ?? 0);
-  if (amount >= 100000000) {
-    return `${(amount / 100000000).toFixed(2)} 亿`;
-  }
-  if (amount >= 10000) {
-    return `${(amount / 10000).toFixed(2)} 万`;
-  }
-  return amount.toFixed(0);
-}
 </script>
 
 <template>
@@ -122,34 +81,34 @@ function formatAmount(value) {
           :aria-pressed="period === option.value"
           class="replay-chart-panel__period"
           :class="{ 'replay-chart-panel__period--active': period === option.value }"
-          @click="period = option.value"
+          @click="selectPeriod(option.value)"
         >
           {{ option.label }}
         </button>
       </div>
     </header>
 
-    <div v-if="latestBar" class="replay-chart-panel__quote">
+    <div v-if="latestQuote" class="replay-chart-panel__quote">
       <span class="replay-chart-panel__quote-label">
-        {{ latestBar.displayLabel }}
+        {{ latestQuote.label }}
       </span>
-      <span>开 <strong>{{ formatPrice(latestBar.open) }}</strong></span>
-      <span>高 <strong class="replay-chart-panel__rise">{{ formatPrice(latestBar.high) }}</strong></span>
-      <span>低 <strong class="replay-chart-panel__fall">{{ formatPrice(latestBar.low) }}</strong></span>
-      <span>收 <strong>{{ formatPrice(latestBar.close) }}</strong></span>
-      <span>额 <strong>{{ formatAmount(latestBar.amount) }}</strong></span>
+      <span>开 <strong>{{ latestQuote.open }}</strong></span>
+      <span>高 <strong class="replay-chart-panel__rise">{{ latestQuote.high }}</strong></span>
+      <span>低 <strong class="replay-chart-panel__fall">{{ latestQuote.low }}</strong></span>
+      <span>收 <strong>{{ latestQuote.close }}</strong></span>
+      <span>额 <strong>{{ latestQuote.amount }}</strong></span>
     </div>
 
     <ReplayIndicatorWorkspace
-      :bars="chartBars"
-      @chart-indicators-change="chartIndicators = $event"
+      :bars="chart.bars"
+      @chart-indicators-change="setIndicators"
     />
     <div class="replay-chart-panel__chart">
       <CandlestickChart
-        :key="chartResetKey"
-        :bars="chartBars"
-        :trades="chartTrades"
-        :indicators="chartIndicators"
+        :key="chart.key"
+        :bars="chart.bars"
+        :trades="chart.trades"
+        :indicators="chart.indicators"
       />
     </div>
   </section>
