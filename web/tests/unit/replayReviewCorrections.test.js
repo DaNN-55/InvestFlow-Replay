@@ -155,6 +155,8 @@ describe("replay review corrections presentation", () => {
       },
       form: {
         ...blindReview,
+        playbookId: "playbook-1",
+        playbookVersionId: "version-1",
         invalidationEnabled: true,
         invalidationOperator: "lte",
         invalidationThreshold: 9.5,
@@ -183,6 +185,16 @@ describe("replay review corrections presentation", () => {
     });
     assert.equal("playbookVersionNumber" in payload, false);
     assert.equal("createdAt" in payload, false);
+  });
+
+  it("allows a blind correction to remove a mistaken playbook link", () => {
+    const payload = buildReplayReviewCorrectionPayload({
+      stage: "blind",
+      snapshot: { ...blindReview, playbookId: "wrong", playbookVersionId: "wrong-v1" },
+      form: { ...blindReview, playbookId: "", playbookVersionId: "", changeNote: "解除误关联" },
+    });
+    assert.equal("playbookId" in payload, false);
+    assert.equal("playbookVersionId" in payload, false);
   });
 
   it("marks new blind fields as unrecorded for legacy reviews", () => {

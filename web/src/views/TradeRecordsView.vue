@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-vue-next";
+import { Ellipsis, Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import ReplayHistoryRecords from "../components/replay-history/ReplayHistoryRecords.vue";
@@ -15,6 +15,7 @@ import UiCard from "../components/ui/UiCard.vue";
 import UiInput from "../components/ui/UiInput.vue";
 import UiSelect from "../components/ui/UiSelect.vue";
 import UiTextarea from "../components/ui/UiTextarea.vue";
+import UiTooltip from "../components/ui/UiTooltip.vue";
 import { api } from "../services/api";
 import { buildTradeRecordAnalytics } from "../utils/tradeRecordAnalytics.js";
 import {
@@ -358,6 +359,12 @@ function formatAnalyticsPercent(value, { signed = false } = {}) {
   if (value == null) return "--";
   const sign = signed && value > 0 ? "+" : "";
   return `${sign}${Number(value).toFixed(2).replace(/\.00$/u, "")}%`;
+}
+
+function formatProfitLossRatio(value) {
+  if (value == null) return "--";
+  if (value === Number.POSITIVE_INFINITY) return "∞";
+  return `${Number(value).toFixed(2).replace(/\.00$/u, "")} 倍`;
 }
 
 function formatRecordProfitPct(record) {
@@ -754,22 +761,6 @@ onMounted(() => {
           记录模拟与实盘的逐笔成交、持仓结果和复盘备注；交易计划与风控按需使用。
         </p>
       </div>
-      <div v-if="primaryTab === 'records'" class="ql-page-actions">
-        <UiButton type="button" size="sm" @click="openCreateDrawer">
-          <template #prefix><Plus :size="16" /></template>
-          新建交易
-        </UiButton>
-        <UiButton
-          type="button"
-          variant="secondary"
-          size="sm"
-          :loading="loading"
-          @click="loadRecords(selectedId)"
-        >
-          <template #prefix><RefreshCw v-if="!loading" :size="16" /></template>
-          刷新
-        </UiButton>
-      </div>
     </header>
 
     <nav class="trade-records-primary-tabs" aria-label="交易追踪分类">
@@ -808,7 +799,13 @@ onMounted(() => {
         <div><span>已完成</span><strong>{{ tradeAnalytics.summary.completedCount }} 笔</strong></div>
         <div><span>胜率</span><strong>{{ formatAnalyticsPercent(tradeAnalytics.summary.winRatePct) }}</strong></div>
         <div><span>平均盈亏</span><strong>{{ formatAnalyticsPercent(tradeAnalytics.summary.averageProfitPct, { signed: true }) }}</strong></div>
-        <div><span>纪律偏差率</span><strong>{{ formatAnalyticsPercent(tradeAnalytics.summary.deviationRatePct) }}</strong></div>
+        <div>
+          <span class="trade-record-analytics__label">
+            盈亏比
+            <UiTooltip content="平均盈利交易收益率 ÷ 平均亏损交易绝对收益率；没有亏损交易时显示 ∞。" />
+          </span>
+          <strong>{{ formatProfitLossRatio(tradeAnalytics.summary.profitLossRatio) }}</strong>
+        </div>
       </div>
       </UiCard>
 
@@ -829,6 +826,9 @@ onMounted(() => {
           :selected-id="selectedId"
           @select="selectRecord"
         />
+        <button class="trade-records-list__create" type="button" aria-label="新建交易" @click="openCreateDrawer">
+          <Plus :size="18" />
+        </button>
       </UiCard>
 
       <UiCard class="trade-record-detail">
@@ -842,29 +842,13 @@ onMounted(() => {
                 {{ selectedRecord ? `账户：${accountTypeLabel(form.accountType)} · 阶段：${statusLabel(form.status)}` : "请选择一条交易追踪单" }}
               </p>
             </div>
-            <div class="ql-flex ql-flex-wrap ql-gap-2">
-              <UiButton
-                type="button"
-                variant="secondary"
-                size="sm"
-                :disabled="!selectedRecord || detailLoading"
-                @click="openEditDrawer"
-              >
-                <template #prefix><Pencil :size="16" /></template>
-                修改
-              </UiButton>
-              <UiButton
-                type="button"
-                variant="danger"
-                size="sm"
-                :loading="deleting"
-                :disabled="!selectedRecord || detailLoading"
-                @click="recordDeleteConfirmOpen = true"
-              >
-                <template #prefix><Trash2 v-if="!deleting" :size="16" /></template>
-                删除
-              </UiButton>
-            </div>
+            <details v-if="selectedRecord" class="trade-record-detail__menu">
+              <summary aria-label="交易追踪单操作"><Ellipsis :size="18" /></summary>
+              <div>
+                <button type="button" :disabled="detailLoading" @click="openEditDrawer(); $event.currentTarget.closest('details')?.removeAttribute('open')"><Pencil :size="14" />修改</button>
+                <button class="trade-record-detail__delete" type="button" :disabled="detailLoading || deleting" @click="recordDeleteConfirmOpen = true; $event.currentTarget.closest('details')?.removeAttribute('open')"><Trash2 :size="14" />删除</button>
+              </div>
+            </details>
           </div>
         </template>
 
@@ -1009,31 +993,7 @@ onMounted(() => {
               </div>
             </section>
 
-            <template v-else-if="stageIs('entered', 'holding')"></template>
-
-            <section v-else-if="stageIs('exited')" class="trade-record-form__section">
-              <h3>已卖出</h3>
-              <div class="trade-record-form__grid trade-record-form__grid--three">
-                <label>
-                  <span>卖出日期</span>
-                  <UiInput v-model="form.actualExitDate" size="sm" type="date" />
-                </label>
-                <label>
-                  <span>卖出价格</span>
-                  <UiInput v-model="form.actualExitPrice" size="sm" type="text" />
-                </label>
-                <label>
-                  <span>卖出数量</span>
-                  <UiInput v-model="form.actualExitQuantity" size="sm" type="text" />
-                </label>
-              </div>
-              <div class="trade-record-form__grid trade-record-form__grid--one trade-record-form__grid--spaced">
-                <label>
-                  <span>卖出原因</span>
-                  <UiTextarea v-model="form.exitReason" />
-                </label>
-              </div>
-            </section>
+            <template v-else-if="stageIs('entered', 'holding', 'exited')"></template>
 
             <section v-else-if="stageIs('reviewed')" class="trade-record-form__section">
               <h3>最终复盘</h3>
@@ -1076,7 +1036,7 @@ onMounted(() => {
               </div>
             </section>
 
-            <div v-if="!stageIs('entered', 'holding')" class="trade-record-form__actions">
+            <div v-if="!stageIs('entered', 'holding', 'exited')" class="trade-record-form__actions">
               <UiButton type="submit" :loading="saving" :disabled="detailLoading">
                 <template #prefix><Save v-if="!saving" :size="16" /></template>
                 保存
@@ -1135,7 +1095,35 @@ onMounted(() => {
 
 .trade-records-page__header {
   align-items: flex-start;
+  margin-top: 10px;
 }
+
+.trade-records-list__create {
+  align-items: center;
+  background: transparent;
+  border: 1px dashed var(--ql-color-border-strong);
+  border-radius: 8px;
+  color: var(--ql-color-text-muted);
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  margin-top: 0.75rem;
+  min-height: 36px;
+  width: 100%;
+}
+
+.trade-records-list__create:hover { background: var(--ql-color-bg-muted); color: var(--ql-color-primary); }
+
+.trade-record-detail__menu { position: relative; flex: 0 0 auto; }
+.trade-record-detail__menu > summary { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 7px; color: var(--ql-color-text-muted); cursor: pointer; list-style: none; }
+.trade-record-detail__menu > summary:hover { background: var(--ql-color-bg-muted); color: var(--ql-color-text-strong); }
+.trade-record-detail__menu > div { position: absolute; z-index: 8; top: 34px; right: 0; display: grid; min-width: 108px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
+.trade-record-detail__menu button { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border: 0; border-radius: 6px; color: var(--ql-color-text-body); background: transparent; cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.trade-record-detail__menu button:hover:not(:disabled) { background: var(--ql-color-bg-muted); }
+.trade-record-detail__menu .trade-record-detail__delete { color: var(--ql-color-danger); }
+.trade-record-detail__menu button:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.trade-record-analytics__label { align-items: center; display: inline-flex; gap: 4px; }
 
 .trade-records-primary-tabs {
   border-bottom: 1px solid rgba(15, 23, 42, 0.1);
@@ -1167,7 +1155,7 @@ onMounted(() => {
 
 .trade-records-layout {
   display: grid;
-  grid-template-columns: minmax(240px, 0.58fr) minmax(620px, 1.42fr);
+  grid-template-columns: minmax(280px, 340px) minmax(620px, 1fr);
   gap: 1rem;
 }
 

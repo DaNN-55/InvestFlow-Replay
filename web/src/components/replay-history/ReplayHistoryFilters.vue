@@ -64,9 +64,9 @@ function submit() {
       </UiSelect>
     </label>
     <label>
-      <span>训练类型</span>
+      <span>演练次数</span>
       <UiSelect v-model="filters.attemptKind" size="sm">
-        <option value="all">全部训练</option>
+        <option value="all">全部次数</option>
         <option value="first">首次盲测</option>
         <option value="retrain">已知复练</option>
       </UiSelect>

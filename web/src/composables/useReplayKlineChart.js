@@ -78,8 +78,6 @@ function resolveChartStyles(mainIndicatorLegends) {
     background: cssToken(rootStyle, "--ql-color-bg-surface-strong", "#ffffff"),
     grid: cssToken(rootStyle, "--ql-line", "#e5e7eb"),
     text: cssToken(rootStyle, "--ql-color-text-muted", "#64748b"),
-    rise: cssToken(rootStyle, "--ql-rise", "#ef4444"),
-    fall: cssToken(rootStyle, "--ql-fall", "#10b981"),
     mainIndicatorLegends,
   });
 }
@@ -257,9 +255,24 @@ export function useReplayKlineChart({
       const id = current.createOverlay({
         name: TRADE_OVERLAY_NAME,
         id: description.id,
-        lock: true,
+        lock: false,
         points: [{ timestamp: description.timestamp, value: description.value }],
         extendData: description,
+        performEventPressedMove: () => {},
+        onMouseEnter: ({ overlay }) => {
+          current.overrideOverlay({
+            id: overlay.id,
+            extendData: { ...overlay.extendData, expanded: true },
+          });
+          return true;
+        },
+        onMouseLeave: ({ overlay }) => {
+          current.overrideOverlay({
+            id: overlay.id,
+            extendData: { ...overlay.extendData, expanded: false },
+          });
+          return true;
+        },
       }, CANDLE_PANE_ID);
       if (typeof id === "string") {
         overlayIds.push(id);

@@ -1,6 +1,6 @@
 export function createReplayLifecycleStore(database) {
   return {
-    getSession: (sessionId) => database.getReplaySession(sessionId),
+    getSession: (sessionId) => database.getReplaySessionContext(sessionId),
     getScenarioUsage: () => database.getReplayScenarioUsage(),
     createSession: (session) => database.createReplaySession(session),
     retrainSession: (command) => database.retrainReplaySession(command),
@@ -10,6 +10,8 @@ export function createReplayLifecycleStore(database) {
       database.getReplayPlaybookVersionLink(playbookId, versionId),
     submitOrder: (command) => database.submitReplayOrder(command),
     advanceSession: (command) => database.advanceReplaySession(command),
+    advanceSessionThroughDay: (command) =>
+      database.advanceReplaySessionThroughDay(command),
     finishSession: (command) => database.finishReplaySession(command),
     saveBlindReview: (command) => database.saveReplayBlindReview(command),
     savePostReview: (command) => database.saveReplayPostReview(command),

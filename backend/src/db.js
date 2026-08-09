@@ -19,7 +19,8 @@ const REPLAY_SCENARIO_FINGERPRINT_V2 = "replay-scenario-v2";
 const LEGACY_REPLAY_SCENARIO_FINGERPRINT_VERSION =
   "legacy-unidentifiable-v1";
 const REPLAY_SCORE_V2 = "replay-score-v2";
-const CURRENT_REPLAY_SCORING_CONFIG = Object.freeze({
+const REPLAY_SCORE_V3 = "replay-score-v3";
+const LEGACY_REPLAY_SCORING_CONFIG = Object.freeze({
   algorithmVersion: REPLAY_SCORE_V2,
   weights: Object.freeze({
     executionDiscipline: 30,
@@ -34,6 +35,23 @@ const CURRENT_REPLAY_SCORING_CONFIG = Object.freeze({
       pointsPerReturnPct: 0.75,
       minimumScore: 0,
       maximumScore: 15,
+    }),
+  }),
+});
+const CURRENT_REPLAY_SCORING_CONFIG = Object.freeze({
+  algorithmVersion: REPLAY_SCORE_V3,
+  weights: Object.freeze({
+    executionDiscipline: 37.5,
+    riskControl: 31.25,
+    returnPerformance: 18.75,
+    reviewQuality: 12.5,
+  }),
+  parameters: Object.freeze({
+    returnPerformance: Object.freeze({
+      neutralScore: 9.375,
+      pointsPerReturnPct: 0.9375,
+      minimumScore: 0,
+      maximumScore: 18.75,
     }),
   }),
 });
@@ -106,6 +124,7 @@ function rowToParameterSet(row) {
   }
   return {
     id: row.id,
+    benchmarkCode: String(snapshot?.benchmark?.code ?? ""),
     strategyId: row.strategy_id,
     name: row.name,
     params: parseJson(
@@ -463,24 +482,7 @@ function rowToReplayHistoryItem(row) {
       ? 1
       : 0
   );
-  const storedTrainingConfig = parseJson(
-    row.training_config_json,
-    { mode: "free" },
-    {
-      fieldName: "replay_sessions.training_config_json",
-      rowId: row.id,
-      strict: true,
-    },
-  );
-  const trainingConfig = storedTrainingConfig.mode === "playbook"
-    ? {
-        mode: "playbook",
-        playbookId: storedTrainingConfig.playbookId,
-        playbookVersionId: storedTrainingConfig.playbookVersionId,
-        playbookName: storedTrainingConfig.playbookName,
-        playbookVersionNumber: storedTrainingConfig.playbookVersionNumber,
-      }
-    : { mode: "free" };
+  const trainingConfig = { mode: "free" };
   return {
     id: row.id,
     interval,
@@ -699,19 +701,26 @@ function normalizeReplayScoringConfig(config) {
     );
   }
   const algorithmVersion = String(config.algorithmVersion ?? "").trim();
-  if (algorithmVersion !== REPLAY_SCORE_V2) {
+  if (![REPLAY_SCORE_V2, REPLAY_SCORE_V3].includes(algorithmVersion)) {
     throw createReplayStateError(
       `不支持会话冻结的评分算法版本：${algorithmVersion || "<empty>"}`,
       500,
     );
   }
-  const dimensionNames = [
-    "executionDiscipline",
-    "riskControl",
-    "playbookCompliance",
-    "returnPerformance",
-    "reviewQuality",
-  ];
+  const dimensionNames = algorithmVersion === REPLAY_SCORE_V3
+    ? [
+        "executionDiscipline",
+        "riskControl",
+        "returnPerformance",
+        "reviewQuality",
+      ]
+    : [
+        "executionDiscipline",
+        "riskControl",
+        "playbookCompliance",
+        "returnPerformance",
+        "reviewQuality",
+      ];
   const weights = Object.fromEntries(
     dimensionNames.map((name) => {
       const value = Number(config.weights?.[name]);
@@ -846,14 +855,10 @@ function calculateReplayScoreCard(session) {
 
   const blind = session.review?.blindReview;
   const post = session.review?.postReview;
-  const playbookConfigured =
-    session.trainingConfig?.mode === "playbook" &&
-    String(
-      session.trainingConfig?.playbookVersionId ?? "",
-    ).trim().length > 0;
-  const playbookHasContent =
-    String(session.trainingConfig?.playbookContent ?? "").trim().length > 0;
-  const playbookApplicable = playbookConfigured && playbookHasContent;
+  const usesUniversalScore = algorithmVersion === REPLAY_SCORE_V3;
+  const playbookConfigured = false;
+  const playbookHasContent = false;
+  const playbookApplicable = false;
   const hasScore = (value) =>
     Number.isSafeInteger(value) && value >= 1 && value <= 5;
   const requiredFields = [
@@ -890,12 +895,16 @@ function calculateReplayScoreCard(session) {
           (Number(post.riskControlScore) / 5) * weights.riskControl,
         )
       : null,
-    playbookCompliance: playbookComplianceApplicable
-      ? roundReplayScore(
-          (Number(post.playbookFitScore) / 5) *
-            weights.playbookCompliance,
-        )
-      : null,
+    ...(!usesUniversalScore
+      ? {
+          playbookCompliance: playbookComplianceApplicable
+            ? roundReplayScore(
+                (Number(post.playbookFitScore) / 5) *
+                  weights.playbookCompliance,
+              )
+            : null,
+        }
+      : {}),
     returnPerformance: roundReplayScore(
       clampReplayScore(
         returnPerformanceParameters.neutralScore +
@@ -921,16 +930,20 @@ function calculateReplayScoreCard(session) {
       applicable: riskControlApplicable,
       reason: riskControlApplicable ? null : "legacy_missing_input",
     },
-    playbookCompliance: {
-      applicable: playbookComplianceApplicable,
-      reason: playbookComplianceApplicable
-        ? null
-        : !playbookConfigured
-          ? "free_training"
-          : !playbookHasContent
-            ? "blank_playbook"
-            : "legacy_missing_input",
-    },
+    ...(!usesUniversalScore
+      ? {
+          playbookCompliance: {
+            applicable: playbookComplianceApplicable,
+            reason: playbookComplianceApplicable
+              ? null
+              : !playbookConfigured
+                ? "free_training"
+                : !playbookHasContent
+                  ? "blank_playbook"
+                  : "legacy_missing_input",
+          },
+        }
+      : {}),
     returnPerformance: { applicable: true, reason: null },
     reviewQuality: { applicable: true, reason: null },
   };
@@ -1062,6 +1075,33 @@ function replayOrderQuantity(order, account, price, costConfig) {
     );
   }
   return 0;
+}
+
+function calculateReplayAdvanceTransition(current) {
+  const targetIndex =
+    Number(current.observationBars) + Number(current.revealedFutureBars);
+  const targetBar = current.snapshot?.bars?.[targetIndex];
+  if (!targetBar) {
+    throw createReplayStateError("行情演练场景缺少下一交易日数据", 500);
+  }
+  const previousBar = current.snapshot?.bars?.[targetIndex - 1] ?? null;
+  const interval = String(current.snapshot?.interval ?? "1d");
+  const crossedTradeDate =
+    interval === "1d" ||
+    String(previousBar?.tradeDate ?? "") !== String(targetBar.tradeDate ?? "");
+  const revealedFutureBars = Number(current.revealedFutureBars) + 1;
+  const status = revealedFutureBars >= Number(current.gameLength)
+    ? "completed"
+    : "active";
+  return {
+    targetBar,
+    previousBar,
+    targetSequence: targetIndex + 1,
+    crossedTradeDate,
+    revealedFutureBars,
+    status,
+    nextRevision: Number(current.revision) + 1,
+  };
 }
 
 function rowToSyncLog(row) {
@@ -1630,17 +1670,10 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       SELECT RAISE(ABORT, 'initial replay reviews are immutable');
     END;
 
-    CREATE TRIGGER IF NOT EXISTS replay_review_corrections_no_update
-    BEFORE UPDATE ON replay_review_corrections
-    BEGIN
-      SELECT RAISE(ABORT, 'replay review corrections are append-only');
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS replay_review_corrections_no_delete
-    BEFORE DELETE ON replay_review_corrections
-    BEGIN
-      SELECT RAISE(ABORT, 'replay review corrections are append-only');
-    END;
+  `);
+  db.exec(`
+    DROP TRIGGER IF EXISTS replay_review_corrections_no_update;
+    DROP TRIGGER IF EXISTS replay_review_corrections_no_delete;
   `);
 
   ensureColumn(db, "backtest_runs", "request_json", "TEXT");
@@ -1875,6 +1908,116 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
     WHERE training_config_json IS NULL OR training_config_json = ''
     `,
   ).run();
+  const retiredSpecialistSessions = db
+    .prepare(
+      `
+      SELECT id, scenario_fingerprint
+      FROM replay_sessions
+      WHERE json_extract(training_config_json, '$.mode') = 'playbook'
+      `,
+    )
+    .all();
+  if (retiredSpecialistSessions.length > 0) {
+    const retiredIds = retiredSpecialistSessions.map((row) => row.id);
+    const affectedFingerprints = [
+      ...new Set(
+        retiredSpecialistSessions
+          .map((row) => String(row.scenario_fingerprint ?? "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    const placeholders = retiredIds.map(() => "?").join(", ");
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.exec(`
+        DROP TRIGGER IF EXISTS replay_reviews_no_delete;
+        DROP TRIGGER IF EXISTS replay_review_corrections_no_delete;
+      `);
+      for (const table of [
+        "replay_playbook_candidates",
+        "replay_review_drafts",
+        "replay_review_corrections",
+        "replay_order_rejections",
+        "replay_fills",
+        "replay_orders",
+        "replay_events",
+        "replay_reviews",
+      ]) {
+        db.prepare(
+          `DELETE FROM ${table} WHERE session_id IN (${placeholders})`,
+        ).run(...retiredIds);
+      }
+      db.prepare(
+        `DELETE FROM replay_sessions WHERE id IN (${placeholders})`,
+      ).run(...retiredIds);
+      for (const fingerprint of affectedFingerprints) {
+        const remaining = db
+          .prepare(
+            `
+            SELECT id
+            FROM replay_sessions
+            WHERE scenario_fingerprint = ?
+            ORDER BY created_at ASC, id ASC
+            `,
+          )
+          .all(fingerprint);
+        remaining.forEach((row, index) => {
+          db.prepare(
+            `
+            UPDATE replay_sessions
+            SET
+              attempt_number = ?,
+              attempt_kind = ?,
+              counts_toward_first_score = ?
+            WHERE id = ?
+            `,
+          ).run(
+            index + 1,
+            index === 0 ? "first" : "retrain",
+            index === 0 ? 1 : 0,
+            row.id,
+          );
+        });
+        if (remaining.length === 0) {
+          db.prepare(
+            `DELETE FROM replay_scenario_attempt_counters WHERE scenario_fingerprint = ?`,
+          ).run(fingerprint);
+        } else {
+          const now = new Date().toISOString();
+          db.prepare(
+            `
+            INSERT INTO replay_scenario_attempt_counters (
+              scenario_fingerprint, last_attempt_number, created_at, updated_at
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT(scenario_fingerprint) DO UPDATE SET
+              last_attempt_number = excluded.last_attempt_number,
+              updated_at = excluded.updated_at
+            `,
+          ).run(fingerprint, remaining.length, now, now);
+        }
+      }
+      db.exec(`
+        CREATE TRIGGER replay_reviews_no_delete
+        BEFORE DELETE ON replay_reviews
+        WHEN OLD.blind_json IS NOT NULL
+          OR OLD.post_json IS NOT NULL
+          OR OLD.score_json IS NOT NULL
+        BEGIN
+          SELECT RAISE(ABORT, 'initial replay reviews are immutable');
+        END;
+
+        CREATE TRIGGER replay_review_corrections_no_delete
+        BEFORE DELETE ON replay_review_corrections
+        BEGIN
+          SELECT RAISE(ABORT, 'replay review corrections are append-only');
+        END;
+      `);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   db.prepare(
     `
     UPDATE replay_sessions
@@ -1940,7 +2083,9 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
     let scoringConfig;
     if (!storedScore) {
       scoringConfig = {
-        ...normalizeReplayScoringConfig(cloneReplayScoringConfig()),
+        ...normalizeReplayScoringConfig(
+          cloneReplayScoringConfig(LEGACY_REPLAY_SCORING_CONFIG),
+        ),
         migration: {
           source: "legacy_session",
           weightsSource: "replay_score_v2_fixed",
@@ -1953,8 +2098,8 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         algorithmVersion: REPLAY_SCORE_V2,
         weights: hasStoredWeights
           ? storedScore.weights
-          : CURRENT_REPLAY_SCORING_CONFIG.weights,
-        parameters: CURRENT_REPLAY_SCORING_CONFIG.parameters,
+          : LEGACY_REPLAY_SCORING_CONFIG.weights,
+        parameters: LEGACY_REPLAY_SCORING_CONFIG.parameters,
       });
       scoringConfig = {
         ...recoveredConfig,
@@ -3319,6 +3464,18 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       return readReplaySession(sessionId);
     },
 
+    getReplaySessionContext(sessionId) {
+      const row = db
+        .prepare(
+          "SELECT * FROM replay_sessions WHERE id = ? AND deleted_at IS NULL",
+        )
+        .get(sessionId);
+      const session = rowToReplaySession(row);
+      return session
+        ? { ...session, review: readReplayReview(sessionId) }
+        : null;
+    },
+
     deleteReplaySession(sessionId, deletedAt) {
       const result = db
         .prepare(
@@ -4560,19 +4717,6 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
             409,
           );
         }
-        if (current.trainingConfig?.mode === "playbook") {
-          const frozen = current.trainingConfig;
-          if (
-            review.playbookId !== frozen.playbookId ||
-            review.playbookVersionId !== frozen.playbookVersionId
-          ) {
-            throw createReplayStateError(
-              "专项演练只能使用开局时冻结的战法版本",
-              409,
-            );
-          }
-        }
-
         db.prepare(
           `
           INSERT INTO replay_reviews (
@@ -4902,6 +5046,120 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       }
     },
 
+    updateReplayReviewCorrection({
+      sessionId,
+      correctionId,
+      stage,
+      actionId,
+      expectedRevision,
+      review,
+      changeNote,
+      requestPayload,
+      updatedAt,
+    }) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const currentRow = db.prepare(
+          "SELECT * FROM replay_sessions WHERE id = ? AND deleted_at IS NULL",
+        ).get(sessionId);
+        if (!currentRow) {
+          db.exec("COMMIT");
+          return null;
+        }
+        const current = rowToReplaySession(currentRow);
+        const correctionRow = db.prepare(
+          "SELECT * FROM replay_review_corrections WHERE id = ? AND session_id = ? AND stage = ?",
+        ).get(correctionId, sessionId, stage);
+        if (!correctionRow) {
+          db.exec("COMMIT");
+          return { session: readReplaySession(sessionId), correction: null };
+        }
+        if (current.revision !== expectedRevision) {
+          throw createReplayStateError(
+            `会话版本冲突，当前 revision 为 ${current.revision}`,
+            409,
+          );
+        }
+        db.prepare(
+          "UPDATE replay_review_corrections SET full_review_json = ?, change_note = ? WHERE id = ?",
+        ).run(JSON.stringify(review), changeNote, correctionId);
+        const nextRevision = current.revision + 1;
+        db.prepare(
+          "UPDATE replay_sessions SET revision = ?, updated_at = ? WHERE id = ?",
+        ).run(nextRevision, updatedAt, sessionId);
+        insertReplayEvent({
+          sessionId,
+          actionId,
+          eventType: `${stage}_review_correction_updated`,
+          sequence: current.observationBars + current.revealedFutureBars,
+          payload: { request: requestPayload, correctionId },
+          createdAt: updatedAt,
+        });
+        const correction = rowToReplayReviewCorrection(
+          db.prepare("SELECT * FROM replay_review_corrections WHERE id = ?").get(correctionId),
+        );
+        const session = readReplaySession(sessionId);
+        db.exec("COMMIT");
+        return { correction, session };
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+
+    deleteReplayReviewCorrection({
+      sessionId,
+      correctionId,
+      stage,
+      actionId,
+      expectedRevision,
+      updatedAt,
+    }) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const currentRow = db.prepare(
+          "SELECT * FROM replay_sessions WHERE id = ? AND deleted_at IS NULL",
+        ).get(sessionId);
+        if (!currentRow) {
+          db.exec("COMMIT");
+          return null;
+        }
+        const current = rowToReplaySession(currentRow);
+        const correctionRow = db.prepare(
+          "SELECT * FROM replay_review_corrections WHERE id = ? AND session_id = ? AND stage = ?",
+        ).get(correctionId, sessionId, stage);
+        if (!correctionRow) {
+          db.exec("COMMIT");
+          return { deleted: false, session: readReplaySession(sessionId) };
+        }
+        if (current.revision !== expectedRevision) {
+          throw createReplayStateError(
+            `会话版本冲突，当前 revision 为 ${current.revision}`,
+            409,
+          );
+        }
+        db.prepare("DELETE FROM replay_review_corrections WHERE id = ?").run(correctionId);
+        const nextRevision = current.revision + 1;
+        db.prepare(
+          "UPDATE replay_sessions SET revision = ?, updated_at = ? WHERE id = ?",
+        ).run(nextRevision, updatedAt, sessionId);
+        insertReplayEvent({
+          sessionId,
+          actionId,
+          eventType: `${stage}_review_correction_deleted`,
+          sequence: current.observationBars + current.revealedFutureBars,
+          payload: { correctionId },
+          createdAt: updatedAt,
+        });
+        const session = readReplaySession(sessionId);
+        db.exec("COMMIT");
+        return { deleted: true, session };
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+
     revealReplaySession({
       sessionId,
       actionId,
@@ -4990,8 +5248,12 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       expectedRevision,
       requestPayload,
       updatedAt,
+      manageTransaction = true,
+      hydrateResult = true,
     }) {
-      db.exec("BEGIN IMMEDIATE");
+      if (manageTransaction) {
+        db.exec("BEGIN IMMEDIATE");
+      }
       try {
         const currentRow = db
           .prepare(
@@ -4999,7 +5261,9 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           )
           .get(sessionId);
         if (!currentRow) {
-          db.exec("COMMIT");
+          if (manageTransaction) {
+            db.exec("COMMIT");
+          }
           return null;
         }
         const current = rowToReplaySession(currentRow);
@@ -5010,8 +5274,12 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
             "advanced",
             requestPayload,
           );
-          const session = readReplaySession(sessionId);
-          db.exec("COMMIT");
+          const session = hydrateResult
+            ? readReplaySession(sessionId)
+            : rowToReplaySession(currentRow);
+          if (manageTransaction) {
+            db.exec("COMMIT");
+          }
           return {
             session,
             advanced: true,
@@ -5028,26 +5296,27 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           current.status === "completed" ||
           current.revealedFutureBars >= current.gameLength
         ) {
-          db.exec("COMMIT");
+          if (manageTransaction) {
+            db.exec("COMMIT");
+          }
           return {
-            session: readReplaySession(sessionId),
+            session: hydrateResult
+              ? readReplaySession(sessionId)
+              : current,
             advanced: false,
             idempotent: false,
           };
         }
 
-        const targetIndex =
-          current.observationBars + current.revealedFutureBars;
-        const targetBar = current.snapshot?.bars?.[targetIndex];
-        if (!targetBar) {
-          throw createReplayStateError("行情演练场景缺少下一交易日数据", 500);
-        }
-        const targetSequence = targetIndex + 1;
-        const previousBar = current.snapshot?.bars?.[targetIndex - 1] ?? null;
-        const interval = String(current.snapshot?.interval ?? "1d");
-        const crossedTradeDate =
-          interval === "1d" ||
-          String(previousBar?.tradeDate ?? "") !== String(targetBar.tradeDate ?? "");
+        const {
+          targetBar,
+          previousBar,
+          targetSequence,
+          crossedTradeDate,
+          revealedFutureBars,
+          status,
+          nextRevision,
+        } = calculateReplayAdvanceTransition(current);
         const account = {
           ...current.account,
           cash: Number(current.account.cash),
@@ -5317,10 +5586,6 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           );
         }
 
-        const revealedFutureBars = current.revealedFutureBars + 1;
-        const status =
-          revealedFutureBars >= current.gameLength ? "completed" : "active";
-        const nextRevision = current.revision + 1;
         db.prepare(
           `
           UPDATE replay_sessions
@@ -5352,13 +5617,84 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           },
           createdAt: updatedAt,
         });
-        const session = readReplaySession(sessionId);
-        db.exec("COMMIT");
+        const session = hydrateResult
+          ? readReplaySession(sessionId)
+          : rowToReplaySession(
+              db
+                .prepare(
+                  "SELECT * FROM replay_sessions WHERE id = ? AND deleted_at IS NULL",
+                )
+                .get(sessionId),
+            );
+        if (manageTransaction) {
+          db.exec("COMMIT");
+        }
         return {
           session,
           advanced: true,
           idempotent: false,
         };
+      } catch (error) {
+        if (manageTransaction) {
+          db.exec("ROLLBACK");
+        }
+        throw error;
+      }
+    },
+
+    advanceReplaySessionThroughDay(command) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        let result = this.advanceReplaySession({
+          ...command,
+          actionId: `${command.actionId}:0`,
+          requestPayload: {
+            expectedRevision: command.expectedRevision,
+            mode: "day",
+          },
+          manageTransaction: false,
+          hydrateResult: false,
+        });
+        if (!result || !result.advanced || result.idempotent) {
+          const session = result?.session
+            ? readReplaySession(command.sessionId)
+            : null;
+          db.exec("COMMIT");
+          return result ? { ...result, session } : null;
+        }
+
+        const firstSequence =
+          Number(result.session.observationBars) +
+          Number(result.session.revealedFutureBars);
+        const targetTradeDate = String(
+          result.session.snapshot?.bars?.[firstSequence - 1]?.tradeDate ?? "",
+        );
+        let step = 1;
+        while (
+          result.session.status !== "completed" &&
+          String(
+            result.session.snapshot?.bars?.[
+              Number(result.session.observationBars) +
+                Number(result.session.revealedFutureBars)
+            ]?.tradeDate ?? "",
+          ) === targetTradeDate
+        ) {
+          result = this.advanceReplaySession({
+            ...command,
+            actionId: `${command.actionId}:${step}`,
+            expectedRevision: Number(result.session.revision),
+            requestPayload: {
+              expectedRevision: Number(result.session.revision),
+              mode: "day",
+            },
+            manageTransaction: false,
+            hydrateResult: false,
+          });
+          step += 1;
+        }
+        const session = readReplaySession(command.sessionId);
+        db.exec("COMMIT");
+        return { ...result, session };
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;

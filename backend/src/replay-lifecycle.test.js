@@ -252,5 +252,40 @@ describe("replay lifecycle", () => {
 
     assert.equal("playbookFitScore" in saved.review, false);
     assert.equal(saved.review.strategyAdjustment, "");
+    assert.deepEqual(review, {
+      playbookFitScore: 5,
+      strategyAdjustment: "保留",
+    });
+    assert.equal(normalized.requestPayload.review, review);
+  });
+
+  it("uses the store batch command for whole-day advancement", () => {
+    const calls = [];
+    const lifecycle = createReplayLifecycle({
+      store: {
+        advanceSessionThroughDay(command) {
+          calls.push(command);
+          return { session: hybridSession({ revealedFutureBars: 3, revision: 7 }) };
+        },
+        advanceSession() {
+          assert.fail("whole-day advancement should not use single-step persistence");
+        },
+      },
+      now: () => "2026-08-09T00:00:00.000Z",
+    });
+
+    lifecycle.advanceSession({
+      sessionId: "session-1",
+      actionId: "advance-day",
+      expectedRevision: 4,
+      mode: "day",
+    });
+
+    assert.deepEqual(calls, [{
+      sessionId: "session-1",
+      actionId: "advance-day",
+      expectedRevision: 4,
+      updatedAt: "2026-08-09T00:00:00.000Z",
+    }]);
   });
 });

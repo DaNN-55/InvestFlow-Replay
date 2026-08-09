@@ -9,6 +9,19 @@ import {
 } from "../../src/utils/replayKlineIndicators.js";
 
 describe("replay KLineChart custom indicators", () => {
+  it("colors volume with candles and distinguishes expanding MACD bars", () => {
+    const volume = createReplayBuiltinIndicatorConfig("VOL");
+    const volumeBar = volume.figures.find((figure) => figure.key === "volume");
+    assert.equal(volumeBar.styles({ current: { kLineData: { open: 10, close: 11 } } }).color, "#df7180");
+    assert.equal(volumeBar.styles({ current: { kLineData: { open: 11, close: 10 } } }).color, "#38ae86");
+
+    const macd = createReplayBuiltinIndicatorConfig("MACD");
+    const macdBar = macd.figures.find((figure) => figure.key === "macd");
+    assert.equal(macdBar.styles({ prev: { indicatorData: { macd: 1 } }, current: { indicatorData: { macd: 2 } } }).style, "fill");
+    assert.equal(macdBar.styles({ prev: { indicatorData: { macd: 2 } }, current: { indicatorData: { macd: 1 } } }).style, "stroke");
+    assert.equal(macdBar.styles({ prev: { indicatorData: { macd: -1 } }, current: { indicatorData: { macd: -2 } } }).color, "#38ae86");
+  });
+
   it("uses a stable registration name derived from the custom id", () => {
     assert.equal(replayCustomIndicatorName("alpha / beta"), "REPLAY_CUSTOM_alpha_beta");
   });

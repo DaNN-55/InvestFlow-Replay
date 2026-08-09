@@ -20,15 +20,28 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  playbooks: { type: Array, default: () => [] },
+  playbooksLoading: { type: Boolean, default: false },
+  playbooksError: { type: String, default: "" },
   loading: {
     type: Boolean,
     default: false,
+  },
+  editing: {
+    type: Boolean,
+    default: false,
+  },
+  initialChangeNote: {
+    type: String,
+    default: "",
   },
 });
 
 const emit = defineEmits(["cancel", "submit"]);
 
 const form = reactive({
+  playbookId: "",
+  playbookVersionId: "",
   strategyName: "",
   thesis: "",
   tradePlan: "",
@@ -94,6 +107,8 @@ const ready = computed(() => {
 
 function syncForm() {
   Object.assign(form, {
+    playbookId: props.snapshot.playbookId ?? "",
+    playbookVersionId: props.snapshot.playbookVersionId ?? "",
     strategyName: props.snapshot.strategyName ?? "",
     thesis: props.snapshot.thesis ?? "",
     tradePlan: props.snapshot.tradePlan ?? "",
@@ -110,8 +125,15 @@ function syncForm() {
     riskControlScore: props.snapshot.riskControlScore ?? 3,
     playbookFitScore: props.snapshot.playbookFitScore ?? 3,
     strategyAdjustment: props.snapshot.strategyAdjustment ?? "",
-    changeNote: "",
+    changeNote: props.initialChangeNote,
   });
+}
+
+function changePlaybook() {
+  const playbook = props.playbooks.find((item) => item.id === form.playbookId);
+  form.playbookVersionId = playbook?.currentVersion?.id ?? "";
+  if (playbook) form.strategyName = playbook.name ?? "";
+  if (!form.playbookId) form.strategyName = "";
 }
 
 function submit() {
@@ -138,12 +160,23 @@ watch(
   <form class="replay-correction" @submit.prevent="submit">
     <header>
       <div>
-        <h3>追加{{ isBlind ? "盲评" : "事后复盘" }}修正</h3>
-        <p>已按原记录或最新修正预填。提交后会新增快照，不覆盖任何历史。</p>
+        <h3>{{ editing ? "修改" : "追加" }}{{ isBlind ? "盲评" : "事后复盘" }}修正</h3>
+        <p v-if="editing">保存后会更新这条修正记录，原始盲评与原始评分不变。</p>
+        <p v-else>已按原记录或最新修正预填。提交后会新增快照，不覆盖原始记录。</p>
       </div>
     </header>
 
     <template v-if="isBlind">
+      <label class="replay-correction__field">
+        <span>参考战法（可选）</span>
+        <select v-model="form.playbookId" :disabled="playbooksLoading" @change="changePlaybook">
+          <option value="">不关联战法</option>
+          <option v-for="playbook in playbooks" :key="playbook.id" :value="playbook.id">
+            {{ playbook.name }} · v{{ playbook.currentVersion?.versionNumber ?? "—" }}
+          </option>
+        </select>
+        <small v-if="playbooksError">{{ playbooksError }}</small>
+      </label>
       <label class="replay-correction__field">
         <span>战法名称（可选）</span>
         <UiInput v-model="form.strategyName" maxlength="120" />
@@ -222,18 +255,14 @@ watch(
         v-if="playbookFitApplicable"
         class="replay-correction__field replay-correction__field--compact"
       >
-        <span>战法符合度</span>
+        <span>战法复核</span>
         <select v-model.number="form.playbookFitScore">
           <option v-for="value in 5" :key="value" :value="value">
             {{ value }} / 5
           </option>
         </select>
       </label>
-      <div v-else class="replay-correction__field">
-        <span>战法符合度</span>
-        <div class="replay-correction__na">不适用</div>
-      </div>
-      <label class="replay-correction__field">
+      <label v-if="playbookFitApplicable" class="replay-correction__field">
         <span>战法调整建议（可选）</span>
         <textarea v-model="form.strategyAdjustment" maxlength="2000" />
       </label>

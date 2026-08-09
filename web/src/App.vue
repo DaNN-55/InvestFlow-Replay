@@ -58,7 +58,7 @@ onMounted(() => {
 <style scoped>
 .standalone-shell { min-height: 100vh; background: var(--ql-paper); color: var(--ql-ink); }
 .standalone-shell__header { position: sticky; top: 0; z-index: 30; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 44px; padding: 0 20px; border-bottom: 1px solid var(--ql-line-strong); background: var(--ql-panel); }
-.standalone-shell__brand { color: inherit; font-size: 16px; font-weight: 700; text-decoration: none; }
+.standalone-shell__brand { align-self: stretch; display: flex; align-items: center; color: inherit; font-size: 16px; font-weight: 700; line-height: 1; text-decoration: none; }
 nav { display: flex; gap: 6px; }
 nav a { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 6px; color: var(--ql-muted); text-decoration: none; }
 nav a.router-link-active { background: var(--ql-color-primary-soft); color: var(--ql-color-primary); }

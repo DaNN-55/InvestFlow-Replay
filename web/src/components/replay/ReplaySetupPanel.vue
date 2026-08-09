@@ -338,6 +338,7 @@ function submit() {
 
 .replay-setup__intro {
   max-width: 580px;
+  margin-top: clamp(16px, 2.5vw, 25px);
   margin-bottom: 24px;
 }
 

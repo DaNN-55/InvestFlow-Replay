@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import {
   REPLAY_CANDLE_PANE_OPTIONS,
+  REPLAY_FALL_COLOR,
+  REPLAY_RISE_COLOR,
   createReplayChartStyles,
 } from "../../src/utils/replayKlineConfig.js";
 
@@ -51,5 +53,27 @@ describe("replay KLineChart configuration", () => {
       title: { text: "短期线: ", color: "#2563eb" },
       value: { text: "3.36", color: "#2563eb" },
     });
+  });
+
+  it("keeps red-rise and green-fall candle colors independent from the theme", () => {
+    const light = createReplayChartStyles({
+      background: "#ffffff",
+      grid: "#e5e7eb",
+      text: "#64748b",
+    });
+    const dark = createReplayChartStyles({
+      background: "#111827",
+      grid: "#334155",
+      text: "#a6b3c5",
+    });
+
+    for (const styles of [light, dark]) {
+      assert.equal(styles.candle.bar.upColor, REPLAY_RISE_COLOR);
+      assert.equal(styles.candle.bar.upBorderColor, REPLAY_RISE_COLOR);
+      assert.equal(styles.candle.bar.upWickColor, REPLAY_RISE_COLOR);
+      assert.equal(styles.candle.bar.downColor, REPLAY_FALL_COLOR);
+      assert.equal(styles.candle.bar.downBorderColor, REPLAY_FALL_COLOR);
+      assert.equal(styles.candle.bar.downWickColor, REPLAY_FALL_COLOR);
+    }
   });
 });

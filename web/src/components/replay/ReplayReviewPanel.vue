@@ -17,6 +17,7 @@ import {
 } from "../../utils/replayReviewPresentation.js";
 import ReplayReviewCorrectionForm from "./ReplayReviewCorrectionForm.vue";
 import ReplayReviewTimeline from "./ReplayReviewTimeline.vue";
+import ConfirmDialog from "../ConfirmDialog.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 
@@ -72,6 +73,8 @@ const emit = defineEmits([
   "savePost",
   "addBlindCorrection",
   "addPostCorrection",
+  "updateCorrection",
+  "deleteCorrection",
   "draftChange",
   "deleteDraft",
 ]);
@@ -96,6 +99,8 @@ const postForm = reactive({
   strategyAdjustment: "",
 });
 const correctionStage = shallowRef("");
+const editingCorrection = shallowRef(null);
+const pendingCorrectionDelete = shallowRef(null);
 const contentCollapsed = shallowRef(false);
 let lastBlindDraftSignature = "";
 let lastPostDraftSignature = "";
@@ -118,18 +123,10 @@ const postReview = computed(() => review.value.postReview ?? null);
 const corrections = computed(() =>
   Array.isArray(props.session.corrections) ? props.session.corrections : [],
 );
-const trainingConfig = computed(
-  () => props.session.trainingConfig ?? { mode: "free" },
-);
-const isPlaybookTraining = computed(
-  () => trainingConfig.value.mode === "playbook",
-);
 const playbookFitApplicable = computed(
   () =>
-    trainingConfig.value.mode === "playbook" &&
-    Boolean(trainingConfig.value.playbookId) &&
-    Boolean(trainingConfig.value.playbookVersionId) &&
-    Boolean(String(trainingConfig.value.playbookContent ?? "").trim()),
+    Boolean(blindReview.value?.playbookId) &&
+    Boolean(blindReview.value?.playbookVersionId),
 );
 const selectedPlaybook = computed(
   () =>
@@ -138,13 +135,7 @@ const selectedPlaybook = computed(
 );
 const linkedVersionReady = computed(
   () =>
-    isPlaybookTraining.value
-      ? Boolean(
-          trainingConfig.value.playbookId &&
-            trainingConfig.value.playbookVersionId,
-        )
-      : !blindForm.playbookId ||
-        Boolean(selectedPlaybook.value?.currentVersion?.id),
+    !blindForm.playbookId || Boolean(selectedPlaybook.value?.currentVersion?.id),
 );
 const scoreCard = computed(() => props.session.scoreCard ?? null);
 const blindReady = computed(
@@ -190,7 +181,9 @@ const postReady = computed(
 const scoreDimensions = computed(() =>
   buildReplayScoreDimensions(scoreCard.value),
 );
-const scoreMetrics = computed(() => buildReplayScoreMetrics(scoreCard.value));
+const scoreMetrics = computed(() => buildReplayScoreMetrics(scoreCard.value, {
+  benchmarkCode: props.session?.benchmarkCode,
+}));
 const scoreWeightSnapshot = computed(() =>
   buildReplayScoreWeightSnapshot(scoreCard.value),
 );
@@ -201,7 +194,7 @@ const latestCorrectionSnapshot = computed(() => {
   if (!correctionStage.value) {
     return null;
   }
-  return getLatestReplayReviewSnapshot({
+  return editingCorrection.value?.fullReviewSnapshot ?? getLatestReplayReviewSnapshot({
     stage: correctionStage.value,
     originalReview:
       correctionStage.value === "blind"
@@ -219,9 +212,7 @@ function syncBlindForm() {
   const sourceBlind =
     blindReview.value ?? serverBlindDraft ?? blindDecisionPrefill.value;
   Object.assign(blindForm, {
-    playbookId: isPlaybookTraining.value
-      ? trainingConfig.value.playbookId ?? ""
-      : sourceBlind?.playbookId ?? "",
+    playbookId: sourceBlind?.playbookId ?? "",
     strategyName: sourceBlind?.strategyName ?? "",
     thesis: sourceBlind?.thesis ?? "",
     tradePlan: sourceBlind?.tradePlan ?? "",
@@ -261,9 +252,7 @@ function syncForms() {
 function buildBlindPayload() {
   const payload = buildReplayBlindReviewPayload({
     strategyName:
-      (isPlaybookTraining.value
-        ? trainingConfig.value.playbookName
-        : selectedPlaybook.value?.name) ?? blindForm.strategyName.trim(),
+      selectedPlaybook.value?.name ?? blindForm.strategyName.trim(),
     thesis: blindForm.thesis.trim(),
     tradePlan: blindForm.tradePlan.trim(),
     riskPlan: blindForm.riskPlan.trim(),
@@ -272,10 +261,7 @@ function buildBlindPayload() {
     stopLossPrice: null,
     invalidationRule: null,
   });
-  if (isPlaybookTraining.value) {
-    payload.playbookId = trainingConfig.value.playbookId;
-    payload.playbookVersionId = trainingConfig.value.playbookVersionId;
-  } else if (selectedPlaybook.value?.currentVersion?.id) {
+  if (selectedPlaybook.value?.currentVersion?.id) {
     payload.playbookId = selectedPlaybook.value.id;
     payload.playbookVersionId = selectedPlaybook.value.currentVersion.id;
   }
@@ -290,10 +276,10 @@ function buildPostPayload() {
     lessons: postForm.lessons.trim(),
     disciplineScore: Number(postForm.disciplineScore),
     riskControlScore: Number(postForm.riskControlScore),
-    strategyAdjustment: postForm.strategyAdjustment.trim(),
   };
   if (playbookFitApplicable.value) {
     payload.playbookFitScore = Number(postForm.playbookFitScore);
+    payload.strategyAdjustment = postForm.strategyAdjustment.trim();
   }
   return payload;
 }
@@ -316,9 +302,7 @@ function submitPost() {
 function clearDraft(stage) {
   if (stage === "blind") {
     Object.assign(blindForm, {
-      playbookId: isPlaybookTraining.value
-        ? trainingConfig.value.playbookId ?? ""
-        : "",
+      playbookId: "",
       strategyName: "",
       thesis: "",
       tradePlan: "",
@@ -344,14 +328,31 @@ function clearDraft(stage) {
 }
 
 function openCorrection(stage) {
+  editingCorrection.value = null;
   correctionStage.value = stage;
+}
+
+function editCorrection(correction) {
+  editingCorrection.value = correction;
+  correctionStage.value = correction.stage;
 }
 
 function closeCorrection() {
   correctionStage.value = "";
+  editingCorrection.value = null;
 }
 
 function submitCorrection(payload) {
+  if (editingCorrection.value) {
+    emit(
+      "updateCorrection",
+      editingCorrection.value.id,
+      editingCorrection.value.stage,
+      payload,
+    );
+    closeCorrection();
+    return;
+  }
   if (correctionStage.value === "blind") {
     emit("addBlindCorrection", payload);
     return;
@@ -359,6 +360,16 @@ function submitCorrection(payload) {
   if (correctionStage.value === "post") {
     emit("addPostCorrection", payload);
   }
+}
+
+function confirmDeleteCorrection() {
+  if (!pendingCorrectionDelete.value) return;
+  emit(
+    "deleteCorrection",
+    pendingCorrectionDelete.value.id,
+    pendingCorrectionDelete.value.stage,
+  );
+  pendingCorrectionDelete.value = null;
 }
 
 function formatScore(value) {
@@ -458,7 +469,7 @@ watch(
 watch(
   () => blindForm.playbookId,
   () => {
-    if (!isPlaybookTraining.value && selectedPlaybook.value) {
+    if (selectedPlaybook.value) {
       blindForm.strategyName = selectedPlaybook.value.name;
     }
   },
@@ -515,7 +526,7 @@ watch(
         </span>
       </div>
       <p class="replay-review__intro">
-        演练中即可持续记录。买卖时的判断已经逐笔保存，这里只确认整局结论并关联战法；约 600ms 后自动保存草稿，只有完成演练后才能提交冻结。
+        演练中即可持续记录。买卖时的判断已经逐笔保存，这里只确认整局结论；如需按某套战法复核，可选择一个参考版本。约 600ms 后自动保存草稿，只有完成演练后才能提交冻结。
       </p>
 
       <div
@@ -525,21 +536,10 @@ watch(
         已自动带入最近一次买入判断，你只需检查并补充整局层面的变化，不必重新抄写。
       </div>
 
-      <div
-        v-if="isPlaybookTraining"
-        class="replay-review__training-lock"
-      >
-        <span>本局专项战法</span>
-        <strong>
-          {{ trainingConfig.playbookName || "未命名战法" }} ·
-          v{{ trainingConfig.playbookVersionNumber ?? "—" }}
-        </strong>
-        <small>开局时已冻结，盲评只能使用本局版本，不能改绑</small>
-      </div>
-      <label v-else class="replay-review__field">
-        <span>关联战法（可选）</span>
+      <label class="replay-review__field">
+        <span>参考战法（可选）</span>
         <select v-model="blindForm.playbookId" :disabled="playbooksLoading">
-          <option value="">不关联战法 / 自由填写</option>
+          <option value="">不参考战法 / 自由填写</option>
           <option
             v-for="playbook in playbooks"
             :key="playbook.id"
@@ -556,10 +556,10 @@ watch(
           </template>
         </small>
         <small v-else-if="selectedPlaybook">
-          本次引用 v{{ selectedPlaybook.currentVersion?.versionNumber }}，揭晓后冻结
+          本次参考 v{{ selectedPlaybook.currentVersion?.versionNumber }}，保存后冻结
         </small>
         <small v-else-if="blindForm.playbookId">
-          关联战法版本无法解析，暂不能保存盲评，避免静默丢失关联。
+          参考战法版本无法解析，暂不能保存盲评，避免静默丢失关联。
         </small>
       </label>
       <fieldset class="replay-review__reason-tags">
@@ -582,7 +582,7 @@ watch(
         </select>
       </label>
       <label
-        v-if="!isPlaybookTraining && !selectedPlaybook"
+        v-if="!selectedPlaybook"
         class="replay-review__field"
       >
         <span>自由填写战法名称（可选）</span>
@@ -671,13 +671,21 @@ watch(
         stage="blind"
         :snapshot="latestCorrectionSnapshot"
         :loading="savingBlindCorrection"
+        :editing="Boolean(editingCorrection)"
+        :initial-change-note="editingCorrection?.changeNote || ''"
+        :playbooks="playbooks"
+        :playbooks-loading="playbooksLoading"
+        :playbooks-error="playbooksError"
         @cancel="closeCorrection"
         @submit="submitCorrection"
       />
       <ReplayReviewTimeline
+        editable
         :blind-review="blindReview"
         :corrections="corrections"
         :revealed="false"
+        @edit-correction="editCorrection"
+        @delete-correction="pendingCorrectionDelete = $event"
       />
     </div>
 
@@ -703,7 +711,7 @@ watch(
                 blindReview.playbookVersionNumber
               "
             >
-              关联战法 · v{{ blindReview.playbookVersionNumber }}，已冻结
+              参考战法 · v{{ blindReview.playbookVersionNumber }}，已冻结
             </small>
           </div>
           <div>
@@ -732,6 +740,7 @@ watch(
         </div>
         <UiButton
           v-if="blindReview && correctionStage !== 'blind'"
+          class="replay-review__correction-trigger"
           type="button"
           variant="secondary"
           size="sm"
@@ -746,6 +755,11 @@ watch(
           stage="blind"
           :snapshot="latestCorrectionSnapshot"
           :loading="savingBlindCorrection"
+          :editing="Boolean(editingCorrection)"
+          :initial-change-note="editingCorrection?.changeNote || ''"
+          :playbooks="playbooks"
+          :playbooks-loading="playbooksLoading"
+          :playbooks-error="playbooksError"
           @cancel="closeCorrection"
           @submit="submitCorrection"
         />
@@ -831,23 +845,14 @@ watch(
           v-if="playbookFitApplicable"
           class="replay-review__field replay-review__field--compact"
         >
-          <span>战法符合度</span>
+          <span>战法复核</span>
           <select v-model.number="postForm.playbookFitScore">
             <option v-for="value in 5" :key="value" :value="value">
               {{ value }} / 5
             </option>
           </select>
         </label>
-        <div
-          v-else
-          class="replay-review__field replay-review__field--compact"
-        >
-          <span>战法符合度</span>
-          <div class="replay-review__not-applicable">
-            不适用 · 本局未绑定含有效内容的战法版本
-          </div>
-        </div>
-        <label class="replay-review__field">
+        <label v-if="playbookFitApplicable" class="replay-review__field">
           <span>战法调整建议（可选）</span>
           <textarea
             v-model="postForm.strategyAdjustment"
@@ -926,6 +931,7 @@ watch(
         </dl>
         <UiButton
           v-if="correctionStage !== 'post'"
+          class="replay-review__correction-trigger"
           type="button"
           variant="secondary"
           size="sm"
@@ -939,6 +945,8 @@ watch(
           :snapshot="latestCorrectionSnapshot"
           :playbook-fit-applicable="playbookFitApplicable"
           :loading="savingPostCorrection"
+          :editing="Boolean(editingCorrection)"
+          :initial-change-note="editingCorrection?.changeNote || ''"
           @cancel="closeCorrection"
           @submit="submitCorrection"
         />
@@ -1001,14 +1009,25 @@ watch(
         </div>
       </section>
       <ReplayReviewTimeline
+        editable
         class="replay-review__timeline"
         :blind-review="blindReview"
         :post-review="postReview"
         :corrections="corrections"
         :revealed="revealed"
+        @edit-correction="editCorrection"
+        @delete-correction="pendingCorrectionDelete = $event"
       />
     </div>
     </div>
+    <ConfirmDialog
+      :open="Boolean(pendingCorrectionDelete)"
+      title="删除这条复盘修正？"
+      message="删除后，这条修正将不再出现在时间线中；原始盲评、原始复盘和原始评分不会改变。"
+      confirm-text="确认删除"
+      @cancel="pendingCorrectionDelete = null"
+      @confirm="confirmDeleteCorrection"
+    />
   </section>
 </template>
 
@@ -1094,6 +1113,7 @@ watch(
 .replay-review__frozen,
 .replay-review__score {
   display: grid;
+  align-content: start;
   gap: 10px;
   padding: 14px;
 }
@@ -1102,9 +1122,15 @@ watch(
   grid-column: 1 / -1;
 }
 
+.replay-review__frozen {
+  display: flex;
+  flex-direction: column;
+}
+
 .replay-review__revealed {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
 }
 
 .replay-review__revealed > * {
@@ -1113,6 +1139,13 @@ watch(
 
 .replay-review__revealed > :nth-child(2) {
   border-left: 1px solid var(--ql-line);
+}
+
+.replay-review__correction-trigger {
+  align-self: end;
+  width: 100%;
+  min-height: 42px;
+  margin-top: auto;
 }
 
 .replay-review__stage-heading {
@@ -1373,9 +1406,7 @@ watch(
 .replay-review__score {
   grid-column: 1 / -1;
   border-top: 1px solid var(--ql-line);
-  background:
-    linear-gradient(120deg, rgba(235, 242, 255, 0.82), transparent 42%),
-    var(--ql-color-bg-surface-strong);
+  background: var(--ql-color-bg-surface-strong);
 }
 
 .replay-review__score-total {

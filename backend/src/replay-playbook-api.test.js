@@ -68,6 +68,7 @@ function postReview(strategyAdjustment) {
     lessons: "后续需要把次日承接和量价确认写进执行清单。",
     disciplineScore: 4,
     riskControlScore: 4,
+    playbookFitScore: 4,
     strategyAdjustment,
   };
 }

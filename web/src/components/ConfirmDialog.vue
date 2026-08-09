@@ -75,7 +75,7 @@ function handleDismissableEvent(event) {
   <DialogRoot :open="open" @update:open="handleOpenUpdate">
     <DialogPortal>
       <DialogOverlay
-        class="ql-fixed ql-inset-0 ql-z-[90] ql-flex ql-items-center ql-justify-center ql-bg-[rgba(0,0,0,0.56)] ql-p-4 ql-backdrop-blur-[20px]"
+        class="ql-fixed ql-inset-0 ql-z-[200] ql-flex ql-items-center ql-justify-center ql-bg-[rgba(0,0,0,0.56)] ql-p-4 ql-backdrop-blur-[20px]"
       >
         <DialogContent
           as-child
@@ -101,7 +101,7 @@ function handleDismissableEvent(event) {
                 </DialogTitle>
                 <DialogDescription as-child>
                   <p
-                    class="ql-mt-2 ql-text-sm ql-leading-6 ql-text-[rgba(0,0,0,0.8)]"
+                    class="ql-mt-2 ql-text-sm ql-leading-6 ql-text-[var(--ql-color-text-body)]"
                   >
                     {{ message }}
                   </p>

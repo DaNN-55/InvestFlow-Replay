@@ -156,6 +156,7 @@ class ReplayMarketSupply:
                         "game_length": int(game_length),
                         "seed": seed,
                         "hybrid": normalized_interval == "hybrid",
+                        "recent_window_end_dates": recent_window_end_dates,
                     }
                     if normalized_interval == "hybrid":
                         history = self.market_provider.load_hybrid_daily_history(

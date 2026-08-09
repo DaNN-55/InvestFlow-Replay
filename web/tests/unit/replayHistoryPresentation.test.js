@@ -115,7 +115,7 @@ describe("replay history presentation", () => {
     assert.deepEqual(buildReplayHistoryScoreDimensions(null), []);
   });
 
-  it("supports the v2 risk and playbook dimensions", () => {
+  it("hides the retired inapplicable playbook dimension from v2 records", () => {
     const dimensions = buildReplayHistoryScoreDimensions({
       algorithmVersion: "replay-score-v2",
       breakdown: {
@@ -152,12 +152,6 @@ describe("replay history presentation", () => {
           label: "风险控制",
           maximum: 25,
           applicable: true,
-        },
-        {
-          key: "playbookCompliance",
-          label: "战法符合度",
-          maximum: 20,
-          applicable: false,
         },
         {
           key: "returnPerformance",

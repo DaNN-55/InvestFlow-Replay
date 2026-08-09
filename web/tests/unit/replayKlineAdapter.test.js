@@ -127,7 +127,9 @@ describe("replay KLineChart adapter", () => {
         timestamp: adapted.data[1].timestamp,
         value: 10,
         side: "buy",
-        text: "B ↑",
+        text: "B",
+        price: 12.1,
+        quantity: 0,
       },
     ]);
   });
@@ -142,25 +144,47 @@ describe("replay KLineChart adapter", () => {
     assert.deepEqual(
       overlays.map(({ value, side, text }) => ({ value, side, text })),
       [
-        { value: 9, side: "buy", text: "B ↑" },
-        { value: 13, side: "sell", text: "S ↓" },
+        { value: 9, side: "buy", text: "B" },
+        { value: 13, side: "sell", text: "S" },
       ],
     );
   });
 
-  it("renders trade markers as transparent text and arrows", () => {
+  it("renders trade markers as circular badges outside the candle", () => {
     const figures = createReplayTradeMarkerFigures({
-      overlay: { extendData: { side: "buy", text: "B ↑" } },
+      overlay: { extendData: { side: "buy", text: "B" } },
       coordinates: [{ x: 50, y: 80 }],
       bounding: { width: 200, height: 160 },
     });
 
-    assert.equal(figures.length, 1);
-    assert.equal(figures[0].type, "text");
-    assert.equal(figures[0].attrs.text, "B ↑");
-    assert.equal(figures[0].attrs.y, 104);
-    assert.equal(figures[0].styles.backgroundColor, "transparent");
-    assert.equal(figures[0].styles.borderSize, 0);
+    assert.equal(figures.length, 2);
+    assert.equal(figures[0].type, "circle");
+    assert.equal(figures[0].attrs.y, 106);
+    assert.equal(figures[0].styles.style, "stroke_fill");
+    assert.equal(figures[0].styles.color, "rgba(255, 255, 255, 0.88)");
+    assert.equal(figures[0].styles.borderSize, 3);
+    assert.equal(figures[1].attrs.text, "B");
+    assert.equal(figures[1].styles.color, figures[0].styles.borderColor);
+  });
+
+  it("expands a trade marker into price and quantity details", () => {
+    const figures = createReplayTradeMarkerFigures({
+      overlay: {
+        extendData: {
+          side: "sell",
+          text: "S",
+          price: 15.08,
+          quantity: 200,
+          expanded: true,
+        },
+      },
+      coordinates: [{ x: 50, y: 80 }],
+      bounding: { width: 200, height: 160 },
+    });
+
+    assert.equal(figures.length, 4);
+    assert.equal(figures[0].attrs.y, 54);
+    assert.equal(figures[3].attrs.text, "¥15.08 · 200股");
   });
 
   it("prefers the execution sequence when labels differ from aggregated bars", () => {

@@ -130,6 +130,14 @@ export function createReplayLifecycle({
     expectedRevision,
     mode = "minute",
   }) {
+    if (mode === "day" && store.advanceSessionThroughDay) {
+      return store.advanceSessionThroughDay({
+        sessionId,
+        actionId,
+        expectedRevision,
+        updatedAt: now(),
+      });
+    }
     let result = advanceOnce({
       sessionId,
       actionId,
@@ -201,7 +209,7 @@ export function createReplayLifecycle({
 
   function linkBlindReviewToPlaybook(review, requestPayload) {
     if (!review.playbookId) {
-      return;
+      return { review: { ...review }, requestPayload: { ...requestPayload } };
     }
     const link = store.getPlaybookVersionLink(
       review.playbookId,
@@ -210,9 +218,15 @@ export function createReplayLifecycle({
     if (!link) {
       throw lifecycleError("playbookVersionId 不属于指定的 playbookId");
     }
-    review.strategyName = link.playbookName;
-    review.playbookVersionNumber = link.versionNumber;
-    requestPayload.review = review;
+    const linkedReview = {
+      ...review,
+      strategyName: link.playbookName,
+      playbookVersionNumber: link.versionNumber,
+    };
+    return {
+      review: linkedReview,
+      requestPayload: { ...requestPayload, review: linkedReview },
+    };
   }
 
   function applyPostReviewRules(session, review, requestPayload, { required }) {
@@ -224,37 +238,49 @@ export function createReplayLifecycle({
       if (required && !Number.isSafeInteger(review.playbookFitScore)) {
         throw lifecycleError("关联参考战法的复盘必须提供 playbookFitScore");
       }
-      return;
+      return { review: { ...review }, requestPayload: { ...requestPayload } };
     }
-    delete review.playbookFitScore;
-    review.strategyAdjustment = "";
-    requestPayload.review = review;
+    const { playbookFitScore: _ignored, ...reviewWithoutPlaybookFit } = review;
+    const normalizedReview = {
+      ...reviewWithoutPlaybookFit,
+      strategyAdjustment: "",
+    };
+    return {
+      review: normalizedReview,
+      requestPayload: { ...requestPayload, review: normalizedReview },
+    };
   }
 
   function saveBlindReview({ sessionId, normalized }) {
     requireSession(sessionId);
-    linkBlindReviewToPlaybook(normalized.review, normalized.requestPayload);
+    const linked = linkBlindReviewToPlaybook(
+      normalized.review,
+      normalized.requestPayload,
+    );
     return store.saveBlindReview({
       sessionId,
       actionId: normalized.actionId,
       expectedRevision: normalized.expectedRevision,
-      review: normalized.review,
-      requestPayload: normalized.requestPayload,
+      review: linked.review,
+      requestPayload: linked.requestPayload,
       updatedAt: now(),
     });
   }
 
   function savePostReview({ sessionId, normalized }) {
     const session = requireSession(sessionId);
-    applyPostReviewRules(session, normalized.review, normalized.requestPayload, {
-      required: true,
-    });
+    const reviewed = applyPostReviewRules(
+      session,
+      normalized.review,
+      normalized.requestPayload,
+      { required: true },
+    );
     return store.savePostReview({
       sessionId,
       actionId: normalized.actionId,
       expectedRevision: normalized.expectedRevision,
-      review: normalized.review,
-      requestPayload: normalized.requestPayload,
+      review: reviewed.review,
+      requestPayload: reviewed.requestPayload,
       updatedAt: now(),
     });
   }
@@ -280,21 +306,19 @@ export function createReplayLifecycle({
 
   function appendReviewCorrection({ sessionId, stage, normalized }) {
     const session = requireSession(sessionId);
-    if (stage === "blind") {
-      linkBlindReviewToPlaybook(normalized.review, normalized.requestPayload);
-    } else {
-      applyPostReviewRules(session, normalized.review, normalized.requestPayload, {
+    const reviewed = stage === "blind"
+      ? linkBlindReviewToPlaybook(normalized.review, normalized.requestPayload)
+      : applyPostReviewRules(session, normalized.review, normalized.requestPayload, {
         required: true,
       });
-    }
     return store.appendReviewCorrection({
       sessionId,
       stage,
       actionId: normalized.actionId,
       expectedRevision: normalized.expectedRevision,
-      review: normalized.review,
+      review: reviewed.review,
       changeNote: normalized.changeNote,
-      requestPayload: normalized.requestPayload,
+      requestPayload: reviewed.requestPayload,
       createdAt: now(),
     });
   }
@@ -306,23 +330,20 @@ export function createReplayLifecycle({
     normalized,
   }) {
     const session = requireSession(sessionId);
-    if (stage === "blind") {
-      linkBlindReviewToPlaybook(normalized.review, normalized.requestPayload);
-    } else {
-      applyPostReviewRules(session, normalized.review, normalized.requestPayload, {
+    const reviewed = stage === "blind"
+      ? linkBlindReviewToPlaybook(normalized.review, normalized.requestPayload)
+      : applyPostReviewRules(session, normalized.review, normalized.requestPayload, {
         required: false,
       });
-    }
-    normalized.requestPayload.review = normalized.review;
     return store.updateReviewCorrection({
       sessionId,
       correctionId,
       stage,
       actionId: normalized.actionId,
       expectedRevision: normalized.expectedRevision,
-      review: normalized.review,
+      review: reviewed.review,
       changeNote: normalized.changeNote,
-      requestPayload: normalized.requestPayload,
+      requestPayload: reviewed.requestPayload,
       updatedAt: now(),
     });
   }

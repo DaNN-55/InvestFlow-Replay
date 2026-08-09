@@ -58,13 +58,6 @@ function formatScore(value) {
     .replace(/\.00$/u, "");
 }
 
-function formatTrainingLabel(item) {
-  const config = item?.trainingConfig;
-  if (config?.mode !== "playbook") {
-    return "";
-  }
-  return `${config.playbookName || "未命名战法"} · v${config.playbookVersionNumber ?? "—"}`;
-}
 </script>
 
 <template>
@@ -103,12 +96,6 @@ function formatTrainingLabel(item) {
           {{ item.interval === "1m" ? "1 分钟" : item.interval === "hybrid" ? `日内模拟 · ${item.stepMinutes ?? 1}分钟` : "日线" }}
           {{ item.gameLength }} {{ item.interval === "1m" ? "分钟" : "日" }} · 已推进
           {{ item.progress?.current ?? 0 }} / {{ item.progress?.total ?? item.gameLength }}
-        </span>
-        <span
-          v-if="formatTrainingLabel(item)"
-          class="replay-history-list__training"
-        >
-          专项 · {{ formatTrainingLabel(item) }}
         </span>
         <span
           class="replay-history-list__attempt"

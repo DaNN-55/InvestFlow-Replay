@@ -59,6 +59,8 @@ export const api = {
   deleteReplayReviewDraft: (id, stage, expectedRevision) => request(`${replaySessionPath(id)}/reviews/${encodeURIComponent(stage)}/draft`, json("DELETE", { expectedRevision })),
   addReplayBlindReviewCorrection: (id, payload) => request(`${replaySessionPath(id)}/reviews/blind/corrections`, json("POST", payload)),
   addReplayPostReviewCorrection: (id, payload) => request(`${replaySessionPath(id)}/reviews/post/corrections`, json("POST", payload)),
+  updateReplayReviewCorrection: (id, stage, correctionId, payload) => request(`${replaySessionPath(id)}/reviews/${encodeURIComponent(stage)}/corrections/${encodeURIComponent(correctionId)}`, json("PATCH", payload)),
+  deleteReplayReviewCorrection: (id, stage, correctionId, payload) => request(`${replaySessionPath(id)}/reviews/${encodeURIComponent(stage)}/corrections/${encodeURIComponent(correctionId)}`, json("DELETE", payload)),
   revealReplaySession: (id, payload) => request(`${replaySessionPath(id)}/reveal`, json("POST", payload)),
   listTradeRecords(payload = {}) {
     const query = new URLSearchParams(Object.entries(payload).filter(([, value]) => value != null && value !== ""));

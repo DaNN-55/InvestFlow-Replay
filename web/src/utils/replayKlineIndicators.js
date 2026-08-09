@@ -1,12 +1,65 @@
 import { buildReplayCustomIndicatorRows } from "./replayKlineAdapter.js";
+import {
+  REPLAY_FALL_COLOR,
+  REPLAY_RISE_COLOR,
+} from "./replayKlineConfig.js";
 
 const BUILTIN_PARAMS = Object.freeze({
+  VOL: [5, 10, 20],
   MA: [5, 10, 30, 60],
   BOLL: [20, 2],
   MACD: [12, 26, 9],
   RSI: [6, 12, 24],
   KDJ: [9, 3, 3],
 });
+
+function volumeFigures() {
+  return [
+    { key: "ma1", title: "MA5: ", type: "line" },
+    { key: "ma2", title: "MA10: ", type: "line" },
+    { key: "ma3", title: "MA20: ", type: "line" },
+    {
+      key: "volume",
+      title: "VOL: ",
+      type: "bar",
+      baseValue: 0,
+      styles: ({ current }) => {
+        const row = current?.kLineData;
+        return {
+          color: Number(row?.close) >= Number(row?.open)
+            ? REPLAY_RISE_COLOR
+            : REPLAY_FALL_COLOR,
+        };
+      },
+    },
+  ];
+}
+
+function macdFigures() {
+  return [
+    { key: "dif", title: "DIF: ", type: "line" },
+    { key: "dea", title: "DEA: ", type: "line" },
+    {
+      key: "macd",
+      title: "MACD: ",
+      type: "bar",
+      baseValue: 0,
+      styles: ({ prev, current }) => {
+        const value = Number(current?.indicatorData?.macd);
+        const previous = Number(prev?.indicatorData?.macd);
+        const color = value >= 0 ? REPLAY_RISE_COLOR : REPLAY_FALL_COLOR;
+        const sameSide = Number.isFinite(previous) && Math.sign(previous) === Math.sign(value);
+        const expanding = !sameSide || Math.abs(value) >= Math.abs(previous);
+        return {
+          style: expanding ? "fill" : "stroke",
+          color,
+          borderColor: color,
+          borderSize: 1,
+        };
+      },
+    },
+  ];
+}
 
 function hiddenTooltipDataSource() {
   return { name: "", calcParamsText: "", values: [], icons: [] };
@@ -16,6 +69,8 @@ export function createReplayBuiltinIndicatorConfig(name, placement = "sub") {
   return {
     name,
     calcParams: BUILTIN_PARAMS[name],
+    ...(name === "VOL" ? { figures: volumeFigures() } : {}),
+    ...(name === "MACD" ? { figures: macdFigures() } : {}),
     ...(placement === "main"
       ? { createTooltipDataSource: hiddenTooltipDataSource }
       : {}),

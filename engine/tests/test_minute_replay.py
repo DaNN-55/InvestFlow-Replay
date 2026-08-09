@@ -80,6 +80,8 @@ class MinuteReplayScenarioTest(unittest.TestCase):
             provider.store.save("000001.SH", "index-day", daily_rows)
             provider.store.save("600000.SH", "stock-5m", minute_rows)
             provider.store.save("000001.SH", "index-5m", minute_rows)
+            provider.store.mark_full_history("600000.SH", "stock-5m")
+            provider.store.mark_full_history("000001.SH", "index-5m")
 
             with patch(
                 "easy_tdx.client.TdxClient",
@@ -130,6 +132,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
                 for minute_offset in range(48)
             ]
             provider.store.save("000001.SH", "index-5m", minute_rows)
+            provider.store.mark_full_history("000001.SH", "index-5m")
 
             with (
                 patch("easy_tdx.client.TdxClient"),
@@ -149,7 +152,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
             self.assertEqual(scenario["interval"], "hybrid")
             self.assertEqual(fetch.call_count, 1)
             self.assertEqual(fetch.call_args.args[2], "stock-5m")
-            self.assertEqual(fetch.call_args.kwargs["maximum_bars"], 1200)
+            self.assertEqual(fetch.call_args.kwargs["maximum_bars"], 23520)
 
     def test_merge_preserves_existing_partition_rows(self):
         with TemporaryDirectory() as directory:
@@ -173,6 +176,16 @@ class MinuteReplayScenarioTest(unittest.TestCase):
 
             rows = store.load("600000.SH", "stock-5m")
             self.assertEqual([row["close"] for row in rows], [10, 11])
+
+    def test_marks_a_completed_full_history_download(self):
+        with TemporaryDirectory() as directory:
+            store = MinuteReplayStore(Path(directory) / "minute.duckdb")
+
+            self.assertFalse(store.has_full_history("600000.SH", "stock-5m"))
+            store.mark_full_history("600000.SH", "stock-5m")
+
+            self.assertTrue(store.has_full_history("600000.SH", "stock-5m"))
+            self.assertFalse(store.has_full_history("000001.SH", "index-5m"))
 
     def test_reports_minute_cache_volume_by_granularity(self):
         with TemporaryDirectory() as directory:
@@ -228,10 +241,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
                 patch.object(provider, "_fetch", return_value=provider_rows) as fetch,
                 patch(
                     "replay_engine.minute_replay.build_hybrid_replay_scenario",
-                    side_effect=[
-                        ValueError("cache insufficient"),
-                        {"interval": "hybrid"},
-                    ],
+                    return_value={"interval": "hybrid"},
                 ),
             ):
                 client_class.return_value.__enter__.return_value = object()
@@ -269,6 +279,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
                 "close": 10.1 + index / 100,
                 "vol": 1000 + index,
                 "amount": 10000 + index,
+                "adjust_factor": 1,
             }
             stock_daily_rows.append(row)
             benchmark_daily_rows.append(
@@ -280,6 +291,28 @@ class MinuteReplayScenarioTest(unittest.TestCase):
                     "close": 3001 + index,
                 }
             )
+
+        for day_offset in range(2):
+            timestamp = datetime(2026, 7, 30) + timedelta(days=day_offset)
+            stock_daily_rows.append({
+                "date": timestamp,
+                "open": 20 + day_offset,
+                "high": 20.2 + day_offset,
+                "low": 19.8 + day_offset,
+                "close": 20.1 + day_offset,
+                "vol": 2000,
+                "amount": 20000,
+                "adjust_factor": 1 + day_offset,
+            })
+            benchmark_daily_rows.append({
+                "date": timestamp,
+                "open": 4000 + day_offset,
+                "high": 4002 + day_offset,
+                "low": 3998 + day_offset,
+                "close": 4001 + day_offset,
+                "vol": 2000,
+                "amount": 20000,
+            })
 
         minute_start = datetime(2026, 7, 30, 9, 35)
         stock_minute_rows = []
@@ -331,6 +364,11 @@ class MinuteReplayScenarioTest(unittest.TestCase):
         self.assertNotIn("tradeTime", scenario["bars"][249])
         self.assertEqual(scenario["bars"][250]["tradeTime"], "2026-07-30 09:35")
         self.assertEqual(scenario["bars"][298]["tradeDate"], "2026-07-31")
+        self.assertEqual(scenario["bars"][298]["open"], 42)
+        self.assertEqual(
+            scenario["priceAdjustment"]["factorSource"],
+            "stock_adj_factors.adj_factor",
+        )
 
     def test_aligns_stock_and_benchmark_and_keeps_minute_metadata(self):
         start = datetime(2026, 7, 30, 9, 31)

@@ -116,7 +116,7 @@ describe("replay playbook training API", () => {
     assert.deepEqual(item.trainingConfig, { mode: "free" });
   });
 
-  it("validates playbook selection before requesting a market scenario", async () => {
+  it("rejects every specialist-training create request before requesting a scenario", async () => {
     const beforeCount = scenarioRequests;
     await request(app)
       .post("/api/quant/replay/sessions")
@@ -128,7 +128,7 @@ describe("replay playbook training API", () => {
         gameLength: 20,
         trainingMode: "playbook",
         playbookId: "replay-playbook-longtou",
-        playbookVersionId: "replay-playbook-shaofu-v1",
+        playbookVersionId: "replay-playbook-longtou-v1",
       })
       .expect(400);
     await request(app)
@@ -141,147 +141,7 @@ describe("replay playbook training API", () => {
     assert.equal(scenarioRequests, beforeCount);
   });
 
-  it("freezes a playbook version and authoritatively links blind reviews", async () => {
-    const playbook = await request(app)
-      .post("/api/quant/replay/playbooks")
-      .send({
-        name: "专项冻结战法",
-        content: "v1：只在突破并确认承接后介入。",
-        changeSummary: "创建首版",
-      })
-      .expect(201);
-    const playbookId = playbook.body.playbook.id;
-    const versionOne = playbook.body.playbook.currentVersion;
-
-    const created = await request(app)
-      .post("/api/quant/replay/sessions")
-      .send({
-        gameLength: 20,
-        seed: 2,
-        trainingMode: "playbook",
-        playbookId,
-        playbookVersionId: versionOne.id,
-      })
-      .expect(201);
-    assert.deepEqual(created.body.session.trainingConfig, {
-      mode: "playbook",
-      playbookId,
-      playbookVersionId: versionOne.id,
-      playbookName: "专项冻结战法",
-      playbookVersionNumber: 1,
-      playbookContent: "v1：只在突破并确认承接后介入。",
-    });
-
-    await request(app)
-      .post(`/api/quant/replay/playbooks/${playbookId}/versions`)
-      .send({
-        expectedVersionNumber: 1,
-        content: "v2：增加量能过滤条件。",
-        changeSummary: "增加量能过滤",
-      })
-      .expect(201);
-
-    const detail = await request(app)
-      .get(`/api/quant/replay/sessions/${created.body.session.id}`)
-      .expect(200);
-    assert.deepEqual(
-      detail.body.session.trainingConfig,
-      created.body.session.trainingConfig,
-    );
-    const history = await request(app)
-      .get("/api/quant/replay/sessions")
-      .expect(200);
-    assert.deepEqual(
-      history.body.items.find((item) => item.id === created.body.session.id)
-        .trainingConfig,
-      {
-        mode: "playbook",
-        playbookId,
-        playbookVersionId: versionOne.id,
-        playbookName: "专项冻结战法",
-        playbookVersionNumber: 1,
-      },
-    );
-    assert.equal(JSON.stringify(history.body).includes("playbookContent"), false);
-
-    const finished = await request(app)
-      .post(`/api/quant/replay/sessions/${created.body.session.id}/finish`)
-      .send({ actionId: "finish-training", expectedRevision: 0 })
-      .expect(200);
-    await request(app)
-      .post(
-        `/api/quant/replay/sessions/${created.body.session.id}/reviews/blind`,
-      )
-      .send({
-        actionId: "reject-rebind",
-        expectedRevision: finished.body.session.revision,
-        ...blindReview({
-          playbookId: "replay-playbook-longtou",
-          playbookVersionId: "replay-playbook-longtou-v1",
-        }),
-      })
-      .expect(409);
-
-    const saved = await request(app)
-      .post(
-        `/api/quant/replay/sessions/${created.body.session.id}/reviews/blind`,
-      )
-      .send({
-        actionId: "save-frozen-blind",
-        expectedRevision: finished.body.session.revision,
-        ...blindReview(),
-      })
-      .expect(200);
-    assert.deepEqual(saved.body.session.review.blindReview, {
-      ...blindReview(),
-      strategyName: "专项冻结战法",
-      playbookId,
-      playbookVersionId: versionOne.id,
-      playbookVersionNumber: 1,
-    });
-    const revealed = await request(app)
-      .post(`/api/quant/replay/sessions/${created.body.session.id}/reveal`)
-      .send({
-        actionId: "reveal-frozen-training",
-        expectedRevision: saved.body.session.revision,
-      })
-      .expect(200);
-    const postReview = {
-      actionId: "score-frozen-training",
-      expectedRevision: revealed.body.session.revision,
-      outcome: "partial",
-      executionReview: "本次按冻结版本逐项执行，并记录了偏离计划的位置。",
-      mistakes: "入场确认仍然稍早。",
-      lessons: "后续继续逐条核对战法和风险控制要求。",
-      disciplineScore: 4,
-      riskControlScore: 4,
-      strategyAdjustment: "",
-    };
-    await request(app)
-      .post(
-        `/api/quant/replay/sessions/${created.body.session.id}/reviews/post`,
-      )
-      .send(postReview)
-      .expect(400);
-    const scored = await request(app)
-      .post(
-        `/api/quant/replay/sessions/${created.body.session.id}/reviews/post`,
-      )
-      .send({ ...postReview, playbookFitScore: 4 })
-      .expect(200);
-    assert.equal(
-      scored.body.session.scoreCard.breakdown.playbookCompliance,
-      16,
-    );
-    assert.deepEqual(
-      scored.body.session.scoreCard.applicability.playbookCompliance,
-      { applicable: true, reason: null },
-    );
-    assert.equal(scored.body.session.scoreCard.appliedWeightTotal, 100);
-    assert.equal(scored.body.session.scoreCard.total, 77.5);
-  });
-
-  it("keeps optional playbook links on free blind reviews", async () => {
+  it("keeps an optional playbook review separate from the universal score", async () => {
     const created = await request(app)
       .post("/api/quant/replay/sessions")
       .send({ gameLength: 20, seed: 3 })
@@ -307,6 +167,49 @@ describe("replay playbook training API", () => {
       saved.body.session.review.blindReview.strategyName,
       "龙头战法",
     );
+    const revealed = await request(app)
+      .post(`/api/quant/replay/sessions/${created.body.session.id}/reveal`)
+      .send({
+        actionId: "reveal-free-linked",
+        expectedRevision: saved.body.session.revision,
+      })
+      .expect(200);
+    const postReview = {
+      actionId: "score-free-linked",
+      expectedRevision: revealed.body.session.revision,
+      outcome: "partial",
+      executionReview: "本次按事先计划执行，并记录了实际执行中的偏差。",
+      mistakes: "入场确认仍然稍早。",
+      lessons: "后续继续核对参考战法和风险控制要求。",
+      disciplineScore: 4,
+      riskControlScore: 4,
+      strategyAdjustment: "增加次日承接确认条件。",
+    };
+    await request(app)
+      .post(
+        `/api/quant/replay/sessions/${created.body.session.id}/reviews/post`,
+      )
+      .send(postReview)
+      .expect(400);
+    const scored = await request(app)
+      .post(
+        `/api/quant/replay/sessions/${created.body.session.id}/reviews/post`,
+      )
+      .send({ ...postReview, playbookFitScore: 4 })
+      .expect(200);
+    assert.equal(scored.body.session.review.postReview.playbookFitScore, 4);
+    assert.equal(scored.body.session.scoreCard.algorithmVersion, "replay-score-v3");
+    assert.deepEqual(
+      Object.keys(scored.body.session.scoreCard.breakdown),
+      [
+        "executionDiscipline",
+        "riskControl",
+        "returnPerformance",
+        "reviewQuality",
+      ],
+    );
+    assert.equal(scored.body.session.scoreCard.appliedWeightTotal, 100);
+    assert.equal(scored.body.session.scoreCard.total, 76.88);
   });
 });
 
@@ -343,5 +246,103 @@ it("migrates replay sessions without a training snapshot as free", () => {
     mode: "free",
   });
   database.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+it("purges retired specialist sessions and their replay-only records", () => {
+  const root = mkdtempSync(join(tmpdir(), "investflow-replay-specialist-purge-"));
+  const dbPath = join(root, "legacy-specialist.sqlite");
+  const initialized = createDatabase(dbPath);
+  initialized.close();
+
+  const legacy = new DatabaseSync(dbPath);
+  const insertSession = legacy.prepare(`
+    INSERT INTO replay_sessions (
+      id, source_data_version, game_length, observation_bars, status,
+      snapshot_json, account_json, cost_config_json, training_config_json,
+      scoring_config_json, created_at, updated_at
+    ) VALUES (?, 'legacy-v1', 20, 250, 'completed', ?, '{}', '{}', ?, ?, ?, ?)
+  `);
+  const scoringConfig = JSON.stringify({
+    algorithmVersion: "replay-score-v2",
+    weights: {
+      executionDiscipline: 30,
+      riskControl: 25,
+      playbookCompliance: 20,
+      returnPerformance: 15,
+      reviewQuality: 10,
+    },
+    parameters: {
+      returnPerformance: {
+        neutralScore: 7.5,
+        pointsPerReturnPct: 0.75,
+        minimumScore: 0,
+        maximumScore: 15,
+      },
+    },
+  });
+  insertSession.run(
+    "legacy-specialist",
+    JSON.stringify({ bars: [] }),
+    JSON.stringify({
+      mode: "playbook",
+      playbookId: "replay-playbook-longtou",
+      playbookVersionId: "replay-playbook-longtou-v1",
+    }),
+    scoringConfig,
+    "2024-01-01",
+    "2024-01-01",
+  );
+  insertSession.run(
+    "kept-free",
+    JSON.stringify({ bars: [] }),
+    JSON.stringify({ mode: "free" }),
+    scoringConfig,
+    "2024-01-02",
+    "2024-01-02",
+  );
+  legacy.prepare(`
+    INSERT INTO replay_reviews (
+      session_id, blind_json, created_at, updated_at
+    ) VALUES ('legacy-specialist', '{}', '2024-01-01', '2024-01-01')
+  `).run();
+  legacy.prepare(`
+    INSERT INTO replay_review_corrections (
+      id, session_id, action_id, stage, revision_number,
+      full_review_json, change_note, created_at
+    ) VALUES (
+      'specialist-correction', 'legacy-specialist', 'action-1', 'blind', 1,
+      '{}', 'legacy', '2024-01-01'
+    )
+  `).run();
+  legacy.prepare(`
+    INSERT INTO replay_playbook_candidates (
+      id, playbook_id, session_id, source_version_id, suggestion, state,
+      created_at, updated_at
+    ) VALUES (
+      'specialist-candidate', 'replay-playbook-longtou', 'legacy-specialist',
+      'replay-playbook-longtou-v1', 'legacy', 'pending',
+      '2024-01-01', '2024-01-01'
+    )
+  `).run();
+  legacy.close();
+
+  const migrated = createDatabase(dbPath);
+  assert.equal(migrated.getReplaySession("legacy-specialist"), null);
+  assert.ok(migrated.getReplaySession("kept-free"));
+  migrated.close();
+
+  const verified = new DatabaseSync(dbPath, { readOnly: true });
+  for (const table of [
+    "replay_reviews",
+    "replay_review_corrections",
+    "replay_playbook_candidates",
+  ]) {
+    const count = verified
+      .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE session_id = ?`)
+      .get("legacy-specialist").count;
+    assert.equal(count, 0, table);
+  }
+  verified.close();
   rmSync(root, { recursive: true, force: true });
 });

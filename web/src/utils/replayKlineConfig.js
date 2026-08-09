@@ -4,6 +4,9 @@ export const REPLAY_CANDLE_PANE_OPTIONS = Object.freeze({
   axisOptions: Object.freeze({ scrollZoomEnabled: false }),
 });
 
+export const REPLAY_RISE_COLOR = "#df7180";
+export const REPLAY_FALL_COLOR = "#38ae86";
+
 const BASE_CANDLE_TOOLTIP_LEGENDS = Object.freeze([
   Object.freeze({ title: "time", value: "{time}" }),
   Object.freeze({ title: "open", value: "{open}" }),
@@ -17,8 +20,8 @@ export function createReplayChartStyles({
   background,
   grid,
   text,
-  rise,
-  fall,
+  rise = REPLAY_RISE_COLOR,
+  fall = REPLAY_FALL_COLOR,
   mainIndicatorLegends = () => [],
 }) {
   return {

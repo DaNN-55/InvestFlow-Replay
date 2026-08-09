@@ -66,6 +66,33 @@ class InitializingMarketProvider(RecordingMarketProvider):
         }
 
 
+class RecoveringMarketProvider(RecordingMarketProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.retry_flags = []
+
+    def prepare_replay_cache(self, *, retry_failed=False):
+        self.prepare_calls += 1
+        self.retry_flags.append(retry_failed)
+        if not retry_failed:
+            return {
+                "state": "failed",
+                "ready": False,
+                "completed": 2,
+                "total": 8,
+                "message": "通达信连接失败",
+                "error": "network unavailable",
+            }
+        return {
+            "state": "ready",
+            "ready": True,
+            "completed": 8,
+            "total": 8,
+            "message": "ready",
+            "error": "",
+        }
+
+
 class ReplayStoreStub:
     def source_data_version(self):
         return "tdx-version"
@@ -204,6 +231,23 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
             self.assertEqual(benchmarks["initialization"]["completed"], 3)
             self.assertEqual(benchmarks["initialization"]["total"], 21)
             self.assertEqual(provider.ensure_calls, 0)
+
+    def test_failed_cache_initialization_recovers_only_after_explicit_retry(self) -> None:
+        provider = RecoveringMarketProvider()
+        supply = ReplayMarketSupply(
+            store=ReplayStoreStub(),
+            market_data_provider=provider,
+        )
+
+        failed = supply.benchmarks()
+        recovered = supply.benchmarks(retry_failed=True)
+
+        self.assertEqual(failed["items"], [])
+        self.assertEqual(failed["initialization"]["state"], "failed")
+        self.assertEqual(failed["initialization"]["error"], "network unavailable")
+        self.assertEqual(recovered["items"], [{"code": "000001.SH"}])
+        self.assertEqual(recovered["initialization"]["state"], "ready")
+        self.assertEqual(provider.retry_flags, [False, True])
 
     def test_hybrid_replay_passes_local_daily_history_to_minute_provider(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

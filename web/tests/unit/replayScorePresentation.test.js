@@ -53,7 +53,7 @@ const v2ScoreCard = {
 };
 
 describe("replay score presentation", () => {
-  it("presents v2 dimensions and preserves an inapplicable playbook score", () => {
+  it("hides the retired playbook dimension from free-training score details", () => {
     const dimensions = buildReplayScoreDimensions(v2ScoreCard);
     assert.ok(dimensions.every((dimension) => dimension.description));
     assert.deepEqual(dimensions.map((dimension) => {
@@ -79,14 +79,6 @@ describe("replay score presentation", () => {
         reason: null,
       },
       {
-        key: "playbookCompliance",
-        label: "战法符合度",
-        maximum: 20,
-        value: null,
-        applicable: false,
-        reason: "自由演练不评价战法符合度",
-      },
-      {
         key: "returnPerformance",
         label: "收益表现",
         maximum: 15,
@@ -103,6 +95,34 @@ describe("replay score presentation", () => {
         reason: null,
       },
     ]);
+  });
+
+  it("presents the four universal replay-score-v3 dimensions", () => {
+    const dimensions = buildReplayScoreDimensions({
+      algorithmVersion: "replay-score-v3",
+      breakdown: {
+        executionDiscipline: 30,
+        riskControl: 25,
+        returnPerformance: 9.375,
+        reviewQuality: 12.5,
+      },
+      applicability: {
+        executionDiscipline: { applicable: true, reason: null },
+        riskControl: { applicable: true, reason: null },
+        returnPerformance: { applicable: true, reason: null },
+        reviewQuality: { applicable: true, reason: null },
+      },
+    });
+
+    assert.deepEqual(
+      dimensions.map(({ key, maximum }) => ({ key, maximum })),
+      [
+        { key: "executionDiscipline", maximum: 37.5 },
+        { key: "riskControl", maximum: 31.25 },
+        { key: "returnPerformance", maximum: 18.75 },
+        { key: "reviewQuality", maximum: 12.5 },
+      ],
+    );
   });
 
   it("keeps the legacy five dimensions compatible", () => {
@@ -179,7 +199,7 @@ describe("replay score presentation", () => {
 
     assert.deepEqual(
       dimensions.filter((dimension) => dimension.explain).map((dimension) => dimension.key),
-      ["playbookCompliance"],
+      [],
     );
     assert.deepEqual(
       metrics.filter((metric) => metric.explain).map((metric) => metric.key),
@@ -204,7 +224,16 @@ describe("replay score presentation", () => {
     );
   });
 
-  it("builds an immutable weight snapshot including applicability", () => {
+  it("names the selected index benchmark and includes its code in the explanation", () => {
+    const metrics = buildReplayScoreMetrics(v2ScoreCard, { benchmarkCode: "000300.SH" });
+    const benchmark = metrics.find((metric) => metric.key === "indexBenchmarkReturnPct");
+    const excess = metrics.find((metric) => metric.key === "indexExcessReturnPct");
+    assert.equal(benchmark.label, "指数基准收益率 · 沪深300");
+    assert.match(benchmark.description, /沪深300（000300\.SH）/u);
+    assert.equal(excess.label, "相对沪深300超额");
+  });
+
+  it("omits retired inapplicable playbook weight from the snapshot", () => {
     const weightSnapshot = buildReplayScoreWeightSnapshot(v2ScoreCard);
     assert.ok(weightSnapshot.every((entry) => entry.description));
     assert.deepEqual(weightSnapshot.map((entry) => {
@@ -223,12 +252,6 @@ describe("replay score presentation", () => {
         label: "风险控制",
         weight: 25,
         applicable: true,
-      },
-      {
-        key: "playbookCompliance",
-        label: "战法符合度",
-        weight: 20,
-        applicable: false,
       },
       {
         key: "returnPerformance",
@@ -265,10 +288,9 @@ describe("replay score presentation", () => {
     }
   });
 
-  it("uses history score applicability when the API omits playbook content", () => {
+  it("uses the frozen blind-review link for the optional playbook review", () => {
     const apiHistoryItem = {
-      trainingConfig: {
-        mode: "playbook",
+      blindReview: {
         playbookId: "playbook-1",
         playbookVersionId: "version-1",
       },
@@ -291,6 +313,17 @@ describe("replay score presentation", () => {
     );
     assert.equal(
       isReplayPlaybookComplianceApplicable({
+        postReview: { playbookFitScore: 4 },
+        scoreCard: {
+          applicability: {
+            playbookCompliance: { applicable: true, reason: null },
+          },
+        },
+      }),
+      false,
+    );
+    assert.equal(
+      isReplayPlaybookComplianceApplicable({
         ...apiHistoryItem,
         postReview: {},
         scoreCard: {
@@ -302,13 +335,13 @@ describe("replay score presentation", () => {
           },
         },
       }),
-      false,
+      true,
     );
     assert.equal(
       isReplayPlaybookComplianceApplicable({
         postReview: { playbookFitScore: 3 },
       }),
-      true,
+      false,
     );
   });
 });

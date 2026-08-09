@@ -166,9 +166,7 @@ describe("replay known-scenario retraining API", () => {
         gameLength: 20,
         seed: 1,
         initialCapital: 234567,
-        trainingMode: "playbook",
-        playbookId: "replay-playbook-longtou",
-        playbookVersionId: "replay-playbook-longtou-v1",
+        trainingMode: "free",
       })
       .expect(201);
     assert.deepEqual(created.body.session.attemptInfo, {
@@ -306,9 +304,12 @@ describe("replay known-scenario retraining API", () => {
       })
       .expect(200);
     assert.equal(typeof scored.body.session.scoreCard.total, "number");
-    assert.deepEqual(
-      scored.body.session.scoreCard.applicability.playbookCompliance,
-      { applicable: false, reason: "blank_playbook" },
+    assert.equal(
+      Object.hasOwn(
+        scored.body.session.scoreCard.applicability,
+        "playbookCompliance",
+      ),
+      false,
     );
     assert.equal(
       Object.hasOwn(

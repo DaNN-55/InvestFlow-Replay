@@ -22,6 +22,7 @@ describe("buildTradeRecordAnalytics", () => {
       completedCount: 1,
       winRatePct: 100,
       averageProfitPct: 12.5,
+      profitLossRatio: Number.POSITIVE_INFINITY,
       deviationRatePct: 0,
     });
   });
@@ -50,18 +51,28 @@ describe("buildTradeRecordAnalytics", () => {
       completedCount: 2,
       winRatePct: 50,
       averageProfitPct: 0,
+      profitLossRatio: 1,
       deviationRatePct: 50,
     });
     assert.deepEqual(result.groups.marketPhase, [
-      { label: "上涨延续", completedCount: 1, winRatePct: 100, averageProfitPct: 10, deviationRatePct: 0 },
-      { label: "震荡偏弱", completedCount: 1, winRatePct: 0, averageProfitPct: -10, deviationRatePct: 100 },
+      { label: "上涨延续", completedCount: 1, winRatePct: 100, averageProfitPct: 10, profitLossRatio: Number.POSITIVE_INFINITY, deviationRatePct: 0 },
+      { label: "震荡偏弱", completedCount: 1, winRatePct: 0, averageProfitPct: -10, profitLossRatio: 0, deviationRatePct: 100 },
     ]);
     assert.deepEqual(result.groups.mainline, [
-      { label: "油气", completedCount: 2, winRatePct: 50, averageProfitPct: 0, deviationRatePct: 50 },
+      { label: "油气", completedCount: 2, winRatePct: 50, averageProfitPct: 0, profitLossRatio: 1, deviationRatePct: 50 },
     ]);
     assert.deepEqual(result.groups.role, [
-      { label: "趋势龙头", completedCount: 1, winRatePct: 100, averageProfitPct: 10, deviationRatePct: 0 },
-      { label: "连板龙头", completedCount: 1, winRatePct: 0, averageProfitPct: -10, deviationRatePct: 100 },
+      { label: "趋势龙头", completedCount: 1, winRatePct: 100, averageProfitPct: 10, profitLossRatio: Number.POSITIVE_INFINITY, deviationRatePct: 0 },
+      { label: "连板龙头", completedCount: 1, winRatePct: 0, averageProfitPct: -10, profitLossRatio: 0, deviationRatePct: 100 },
     ]);
+  });
+
+  it("calculates profit-loss ratio from average winner versus average loser", () => {
+    const result = buildTradeRecordAnalytics([
+      { status: "exited", actualEntryPrice: 100, actualExitPrice: 110 },
+      { status: "exited", actualEntryPrice: 100, actualExitPrice: 120 },
+      { status: "exited", actualEntryPrice: 100, actualExitPrice: 95 },
+    ]);
+    assert.equal(result.summary.profitLossRatio, 3);
   });
 });

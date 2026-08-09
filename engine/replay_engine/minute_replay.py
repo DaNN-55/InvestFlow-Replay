@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import random
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -18,7 +18,6 @@ TDX_MAX_BARS = 8000
 TDX_5MIN_MAX_BARS = 23520
 HYBRID_STEP_MINUTES = 5
 HYBRID_BARS_PER_DAY = 48
-HYBRID_DOWNLOAD_BUFFER_DAYS = 5
 
 
 def _row_value(row: Any, key: str) -> Any:
@@ -47,6 +46,11 @@ def _normalize_rows(rows: Iterable[Any]) -> dict[datetime, dict[str, Any]]:
             "close": float(_row_value(row, "close")),
             "volume": float(_row_value(row, "vol") or _row_value(row, "volume") or 0),
             "amount": float(_row_value(row, "amount") or 0),
+            "adjust_factor": float(
+                _row_value(row, "adjust_factor")
+                or _row_value(row, "adj_factor")
+                or 1
+            ),
         }
         if not all(
             math.isfinite(values[field]) and values[field] > 0
@@ -59,6 +63,20 @@ def _normalize_rows(rows: Iterable[Any]) -> dict[datetime, dict[str, Any]]:
             continue
         normalized[timestamp] = values
     return normalized
+
+
+def _apply_daily_adjustment(
+    rows: dict[datetime, dict[str, Any]],
+    factors_by_day: dict[str, float],
+    anchor_factor: float,
+) -> None:
+    for timestamp, row in rows.items():
+        factor = factors_by_day.get(timestamp.date().isoformat())
+        if factor is None:
+            continue
+        multiplier = factor / anchor_factor
+        for field in ("open", "high", "low", "close"):
+            row[field] *= multiplier
 
 
 def _public_bar(row: dict[str, Any], sequence: int, previous_close: float | None) -> dict[str, Any]:
@@ -150,6 +168,7 @@ def build_hybrid_replay_scenario(
     benchmark_code: str,
     training_days: int,
     seed: int | None = None,
+    recent_window_end_dates: tuple[date, ...] = (),
     source_data_version: str = "tdx-hybrid-5m",
 ) -> dict[str, Any]:
     stock_daily = _normalize_rows(stock_daily_rows)
@@ -175,7 +194,28 @@ def build_hybrid_replay_scenario(
         )
     maximum_start = len(eligible_days) - int(training_days)
     rng = random.Random(seed) if seed is not None else random.SystemRandom()
-    start = rng.randrange(maximum_start + 1) if maximum_start else 0
+    candidates = list(range(maximum_start + 1))
+    if recent_window_end_dates:
+        minimum_gap_days = max(int(training_days) * 2, 30)
+        separated_candidates = [
+            candidate
+            for candidate in candidates
+            if min(
+                abs(
+                    (
+                        datetime.fromisoformat(
+                            eligible_days[candidate + int(training_days) - 1]
+                        ).date()
+                        - recent_date
+                    ).days
+                )
+                for recent_date in recent_window_end_dates
+            )
+            >= minimum_gap_days
+        ]
+        if separated_candidates:
+            candidates = separated_candidates
+    start = rng.choice(candidates)
     selected_days = eligible_days[start : start + int(training_days)]
     selected_times = [
         timestamp
@@ -190,6 +230,17 @@ def build_hybrid_replay_scenario(
     ][-MINUTE_OBSERVATION_BARS:]
     if len(daily_context_times) < MINUTE_OBSERVATION_BARS:
         raise ValueError("日线背景不足 250 根")
+
+    factors_by_day = {
+        timestamp.date().isoformat(): row["adjust_factor"]
+        for timestamp, row in stock_daily.items()
+        if math.isfinite(row["adjust_factor"]) and row["adjust_factor"] > 0
+    }
+    anchor_factor = stock_daily[daily_context_times[0]]["adjust_factor"]
+    if not factors_by_day or not math.isfinite(anchor_factor) or anchor_factor <= 0:
+        raise ValueError("混合演练缺少有效的日线复权因子")
+    _apply_daily_adjustment(stock_daily, factors_by_day, anchor_factor)
+    _apply_daily_adjustment(stock_minute, factors_by_day, anchor_factor)
 
     bars: list[dict[str, Any]] = []
     previous_stock_close: float | None = None
@@ -237,6 +288,12 @@ def build_hybrid_replay_scenario(
         "name": name,
         "interval": "hybrid",
         "stepMinutes": HYBRID_STEP_MINUTES,
+        "priceAdjustment": {
+            "method": "scenario-start-total-return",
+            "factorSource": "stock_adj_factors.adj_factor",
+            "anchorTradeDate": daily_context_times[0].date().isoformat(),
+            "anchorFactor": anchor_factor,
+        },
         "trainingDays": int(training_days),
         "observationBars": MINUTE_OBSERVATION_BARS,
         "gameLength": len(selected_times),
@@ -405,6 +462,58 @@ class MinuteReplayStore:
             for row in rows
         ]
 
+    def mark_full_history(self, instrument_code: str, instrument_type: str) -> None:
+        connection = duckdb.connect(str(self.path))
+        try:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS minute_history_sync (
+                    instrument_code VARCHAR NOT NULL,
+                    instrument_type VARCHAR NOT NULL,
+                    synced_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (instrument_code, instrument_type)
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO minute_history_sync (instrument_code, instrument_type, synced_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (instrument_code, instrument_type)
+                DO UPDATE SET synced_at = EXCLUDED.synced_at
+                """,
+                [instrument_code, instrument_type],
+            )
+        finally:
+            connection.close()
+
+    def has_full_history(self, instrument_code: str, instrument_type: str) -> bool:
+        if not self.path.exists():
+            return False
+        connection = duckdb.connect(str(self.path), read_only=True)
+        try:
+            table_exists = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_name = 'minute_history_sync'
+                """
+            ).fetchone()[0]
+            if not table_exists:
+                return False
+            return bool(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM minute_history_sync
+                    WHERE instrument_code = ? AND instrument_type = ?
+                    """,
+                    [instrument_code, instrument_type],
+                ).fetchone()[0]
+            )
+        finally:
+            connection.close()
+
     def statistics(self) -> dict[str, int]:
         empty = {
             "oneMinuteInstrumentCount": 0,
@@ -514,14 +623,13 @@ class TdxMinuteReplayProvider:
         if not frames:
             raise ValueError(f"通达信未返回 {ts_code} 的行情")
         self.store.merge(ts_code, instrument_type, frames)
+        if instrument_type.endswith("-5m") and maximum_bars >= TDX_5MIN_MAX_BARS:
+            self.store.mark_full_history(ts_code, instrument_type)
         return self.store.load(ts_code, instrument_type)
 
     @staticmethod
-    def _hybrid_download_limit(training_days: int) -> int:
-        requested = (
-            int(training_days) + HYBRID_DOWNLOAD_BUFFER_DAYS
-        ) * HYBRID_BARS_PER_DAY
-        return min(requested, TDX_5MIN_MAX_BARS)
+    def _hybrid_download_limit(_training_days: int) -> int:
+        return TDX_5MIN_MAX_BARS
 
     @staticmethod
     def _minute_download_limit(game_length: int) -> int:
@@ -541,6 +649,7 @@ class TdxMinuteReplayProvider:
         game_length: int,
         seed: int | None,
         source_data_version: str,
+        recent_window_end_dates: tuple[date, ...] = (),
     ) -> dict[str, Any]:
         return build_hybrid_replay_scenario(
             stock_daily_rows=stock_daily_rows,
@@ -553,6 +662,7 @@ class TdxMinuteReplayProvider:
             training_days=game_length,
             seed=seed,
             source_data_version=source_data_version,
+            recent_window_end_dates=recent_window_end_dates,
         )
 
     def create_scenario(
@@ -566,6 +676,7 @@ class TdxMinuteReplayProvider:
         hybrid: bool = False,
         stock_daily_rows: Iterable[Any] | None = None,
         benchmark_daily_rows: Iterable[Any] | None = None,
+        recent_window_end_dates: tuple[date, ...] = (),
     ) -> dict[str, Any]:
         stock_type = "stock-5m" if hybrid else "stock"
         benchmark_type = "index-5m" if hybrid else "index"
@@ -582,7 +693,13 @@ class TdxMinuteReplayProvider:
             else self.store.load(benchmark_code, "index-day")
         )
         cache_error: Exception | None = None
+        hybrid_cache_complete = (
+            self.store.has_full_history(ts_code, stock_type)
+            and self.store.has_full_history(benchmark_code, benchmark_type)
+        )
         try:
+            if hybrid and not hybrid_cache_complete:
+                raise ValueError("五分钟缓存尚未回填到近两年")
             if hybrid:
                 return self._build_hybrid(
                     stock_daily_rows=local_stock_daily,
@@ -595,6 +712,7 @@ class TdxMinuteReplayProvider:
                     game_length=game_length,
                     seed=seed,
                     source_data_version=f"tdx-hybrid-cache:{self.store.path}",
+                    recent_window_end_dates=recent_window_end_dates,
                 )
             return build_minute_replay_scenario(
                 stock_rows=stock_rows,
@@ -621,13 +739,17 @@ class TdxMinuteReplayProvider:
         client = _FailoverTdxClient(TdxClient, hosts)
         last_error: Exception | None = None
         try:
-            required_minute_rows = (
-                int(game_length) * HYBRID_BARS_PER_DAY
+            required_minute_rows = MINUTE_OBSERVATION_BARS + int(game_length)
+            stock_needs_download = (
+                not self.store.has_full_history(ts_code, stock_type)
                 if hybrid
-                else MINUTE_OBSERVATION_BARS + int(game_length)
+                else len(stock_rows) < required_minute_rows
             )
-            stock_needs_download = len(stock_rows) < required_minute_rows
-            benchmark_needs_download = len(benchmark_rows) < required_minute_rows
+            benchmark_needs_download = (
+                not self.store.has_full_history(benchmark_code, benchmark_type)
+                if hybrid
+                else len(benchmark_rows) < required_minute_rows
+            )
             if not stock_needs_download and not benchmark_needs_download:
                 stock_needs_download = True
                 benchmark_needs_download = True
@@ -695,6 +817,7 @@ class TdxMinuteReplayProvider:
                 game_length=game_length,
                 seed=seed,
                 source_data_version=f"tdx-hybrid-5m:{self.store.path}",
+                recent_window_end_dates=recent_window_end_dates,
             )
         return build_minute_replay_scenario(
             stock_rows=stock_rows,

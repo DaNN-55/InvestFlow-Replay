@@ -878,7 +878,7 @@ describe("replay session API", () => {
     assert.equal(saved.body.session.review.postSaved, true);
     assert.deepEqual(
       saved.body.session.review.postReview,
-      validPostReview(),
+      { ...validPostReview(), strategyAdjustment: "" },
     );
     assert.deepEqual(saved.body.session.scoreCard.metrics, {
       totalReturnPct: 0.0419,
@@ -896,25 +896,26 @@ describe("replay session API", () => {
       indexBenchmarkStatus: "unavailable",
     });
     assert.deepEqual(saved.body.session.scoreCard.breakdown, {
-      executionDiscipline: 24,
-      riskControl: 20,
-      playbookCompliance: null,
-      returnPerformance: 7.53,
-      reviewQuality: 10,
-    });
-    assert.equal(saved.body.session.scoreCard.algorithmVersion, "replay-score-v2");
-    assert.deepEqual(saved.body.session.scoreCard.weights, {
       executionDiscipline: 30,
       riskControl: 25,
-      playbookCompliance: 20,
-      returnPerformance: 15,
-      reviewQuality: 10,
+      returnPerformance: 9.41,
+      reviewQuality: 12.5,
     });
-    assert.equal(saved.body.session.scoreCard.appliedWeightTotal, 80);
+    assert.equal(saved.body.session.scoreCard.algorithmVersion, "replay-score-v3");
+    assert.deepEqual(saved.body.session.scoreCard.weights, {
+      executionDiscipline: 37.5,
+      riskControl: 31.25,
+      returnPerformance: 18.75,
+      reviewQuality: 12.5,
+    });
+    assert.equal(saved.body.session.scoreCard.appliedWeightTotal, 100);
     assert.equal(saved.body.session.scoreCard.total, 76.91);
-    assert.deepEqual(
-      saved.body.session.scoreCard.applicability.playbookCompliance,
-      { applicable: false, reason: "free_training" },
+    assert.equal(
+      Object.hasOwn(
+        saved.body.session.scoreCard.applicability,
+        "playbookCompliance",
+      ),
+      false,
     );
     const scoreDb = new DatabaseSync(dbPath, { readOnly: true });
     const storedReview = scoreDb
@@ -928,7 +929,10 @@ describe("replay session API", () => {
       .get(sessionId);
     scoreDb.close();
     assert.deepEqual(JSON.parse(storedReview.blind_json), validBlindReview());
-    assert.deepEqual(JSON.parse(storedReview.post_json), validPostReview());
+    assert.deepEqual(JSON.parse(storedReview.post_json), {
+      ...validPostReview(),
+      strategyAdjustment: "",
+    });
     assert.equal(JSON.parse(storedReview.score_json).total, 76.91);
     const snapshotDb = new DatabaseSync(dbPath);
     assert.throws(
@@ -1006,7 +1010,7 @@ describe("replay session API", () => {
       .expect(200);
     assert.equal(
       frozen.body.session.scoreCard.breakdown.executionDiscipline,
-      24,
+      30,
     );
     assert.equal(frozen.body.session.scoreCard.total, 76.91);
   });
@@ -1146,11 +1150,10 @@ describe("replay session API", () => {
       indexBenchmarkStatus: "unavailable",
     });
     assert.deepEqual(reviewed.scoreCard.breakdown, {
-      executionDiscipline: 18,
-      riskControl: 20,
-      playbookCompliance: null,
-      returnPerformance: 5.99,
-      reviewQuality: 10,
+      executionDiscipline: 22.5,
+      riskControl: 25,
+      returnPerformance: 7.49,
+      reviewQuality: 12.5,
     });
     assert.equal(reviewed.scoreCard.total, 67.49);
   });
@@ -1284,8 +1287,8 @@ describe("replay session API", () => {
       indexExcessReturnPct: null,
       indexBenchmarkStatus: "unavailable",
     });
-    assert.equal(reviewed.scoreCard.breakdown.returnPerformance, 7.5);
-    assert.equal(reviewed.scoreCard.breakdown.riskControl, 20);
+    assert.equal(reviewed.scoreCard.breakdown.returnPerformance, 9.38);
+    assert.equal(reviewed.scoreCard.breakdown.riskControl, 25);
     assert.equal(reviewed.scoreCard.total, 76.88);
   });
 
@@ -1337,7 +1340,7 @@ describe("replay session API", () => {
     );
     assert.equal(
       post.body.session.scoreCard.breakdown.reviewQuality,
-      6,
+      7.5,
     );
 
     const restored = await request(app)

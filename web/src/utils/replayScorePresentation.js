@@ -6,6 +6,13 @@ const V2_DIMENSIONS = [
   { key: "reviewQuality", label: "复盘质量", maximum: 10, description: "揭晓前判断与揭晓后总结是否完整、具体。" },
 ];
 
+const V3_DIMENSIONS = [
+  { key: "executionDiscipline", label: "执行纪律", maximum: 37.5, description: "是否按买入、卖出与仓位计划执行。" },
+  { key: "riskControl", label: "风险控制", maximum: 31.25, description: "止损、仓位和风险边界的执行情况。" },
+  { key: "returnPerformance", label: "收益表现", maximum: 18.75, description: "本局最终收益在评分区间中的表现。" },
+  { key: "reviewQuality", label: "复盘质量", maximum: 12.5, description: "揭晓前判断与揭晓后总结是否完整、具体。" },
+];
+
 const LEGACY_DIMENSIONS = [
   { key: "return", label: "收益表现", maximum: 25, description: "本局最终收益在旧版评分区间中的表现。" },
   { key: "benchmark", label: "基准表现", maximum: 15, description: "本局收益相对基准收益的表现。" },
@@ -26,10 +33,10 @@ const APPLICABILITY_REASONS = {
 };
 
 const METRIC_DESCRIPTIONS = {
-  totalReturnPct: "初始资金到演练结束时总资产的涨跌幅。",
-  benchmarkReturnPct: "首次买入后一直持有到演练结束的收益率。",
+  totalReturnPct: "演练结束总资产相对初始资金的涨跌幅，已计入交易费用。",
+  benchmarkReturnPct: "从演练起点到终点全程持有该股票的收益率，不以实际首次买入时间为起点。",
   excessReturnPct: "实际总收益率减去个股买入持有收益率。",
-  stockBuyAndHoldReturnPct: "首次买入后一直持有到演练结束的收益率。",
+  stockBuyAndHoldReturnPct: "从演练起点到终点全程持有该股票的收益率，不以实际首次买入时间为起点。",
   strategyVsStockBuyAndHoldPct: "实际总收益率减去个股买入持有收益率。",
   maxDrawdownPct: "账户净值从阶段高点到随后低点的最大跌幅。",
   realizedPnl: "已卖出仓位最终确认的盈亏。",
@@ -65,17 +72,24 @@ function withMetricDescriptions(metrics) {
 function isV2ScoreCard(scoreCard) {
   return (
     scoreCard?.algorithmVersion === "replay-score-v2" ||
-    Object.hasOwn(scoreCard?.breakdown ?? {}, "executionDiscipline")
+    (!scoreCard?.algorithmVersion &&
+      Object.hasOwn(scoreCard?.breakdown ?? {}, "executionDiscipline"))
   );
+}
+
+function isV3ScoreCard(scoreCard) {
+  return scoreCard?.algorithmVersion === "replay-score-v3";
 }
 
 export function buildReplayScoreDimensions(scoreCard) {
   if (!scoreCard?.breakdown) {
     return [];
   }
-  const definitions = isV2ScoreCard(scoreCard)
-    ? V2_DIMENSIONS
-    : LEGACY_DIMENSIONS;
+  const definitions = isV3ScoreCard(scoreCard)
+    ? V3_DIMENSIONS
+    : isV2ScoreCard(scoreCard)
+      ? V2_DIMENSIONS
+      : LEGACY_DIMENSIONS;
   return definitions.map((dimension) => {
     const applicability = scoreCard.applicability?.[dimension.key];
     const value = scoreCard.breakdown[dimension.key];
@@ -91,24 +105,30 @@ export function buildReplayScoreDimensions(scoreCard) {
         ? APPLICABILITY_REASONS[applicability.reason] ?? "该维度不适用"
         : null,
     };
-  });
+  }).filter(
+    (dimension) =>
+      dimension.key !== "playbookCompliance" || dimension.applicable,
+  );
 }
 
 export function isReplayPlaybookComplianceApplicable(item) {
-  const applicability =
-    item?.scoreCard?.applicability?.playbookCompliance?.applicable;
-  if (typeof applicability === "boolean") {
-    return applicability;
-  }
-  return item?.postReview?.playbookFitScore != null;
+  return Boolean(
+    item?.blindReview?.playbookId && item?.blindReview?.playbookVersionId,
+  );
 }
 
-export function buildReplayScoreMetrics(scoreCard) {
+const BENCHMARK_NAMES = {
+  "000001.SH": "上证指数", "000016.SH": "上证50", "000300.SH": "沪深300",
+  "000688.SH": "科创50", "000852.SH": "中证1000", "000905.SH": "中证500",
+  "399001.SZ": "深证成指", "399006.SZ": "创业板指",
+};
+
+export function buildReplayScoreMetrics(scoreCard, { benchmarkCode = "" } = {}) {
   const metrics = scoreCard?.metrics;
   if (!metrics) {
     return [];
   }
-  if (!isV2ScoreCard(scoreCard)) {
+  if (!isV2ScoreCard(scoreCard) && !isV3ScoreCard(scoreCard)) {
     return withMetricDescriptions([
       {
         key: "totalReturnPct",
@@ -139,6 +159,7 @@ export function buildReplayScoreMetrics(scoreCard) {
       },
     ]);
   }
+  const benchmarkName = BENCHMARK_NAMES[benchmarkCode] ?? "所选指数";
   return withMetricDescriptions([
     {
       key: "totalReturnPct",
@@ -207,7 +228,7 @@ export function buildReplayScoreMetrics(scoreCard) {
     },
     {
       key: "indexBenchmarkReturnPct",
-      label: "指数基准收益率",
+      label: `指数基准收益率 · ${benchmarkName}`,
       value: metrics.indexBenchmarkReturnPct,
       format: "percent",
       signed: true,
@@ -217,7 +238,7 @@ export function buildReplayScoreMetrics(scoreCard) {
     },
     {
       key: "indexExcessReturnPct",
-      label: "相对指数超额",
+      label: `相对${benchmarkName}超额`,
       value: metrics.indexExcessReturnPct,
       format: "percent",
       signed: true,
@@ -225,7 +246,10 @@ export function buildReplayScoreMetrics(scoreCard) {
         metrics.indexBenchmarkStatus === "unavailable" ||
         metrics.indexExcessReturnPct == null,
     },
-  ]);
+  ]).map((metric) => {
+    if (!["indexBenchmarkReturnPct", "indexExcessReturnPct"].includes(metric.key) || !benchmarkCode) return metric;
+    return { ...metric, description: `${metric.description} 当前基准：${benchmarkName}（${benchmarkCode}）。` };
+  });
 }
 
 export function buildReplayScoreWeightSnapshot(scoreCard) {

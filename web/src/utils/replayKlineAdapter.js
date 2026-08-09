@@ -155,7 +155,9 @@ export function adaptReplayTrades(trades = [], data = []) {
       timestamp: matchedBar.timestamp,
       value: side === "sell" ? matchedBar.high : matchedBar.low,
       side,
-      text: side === "buy" ? "B ↑" : "S ↓",
+      text: side === "buy" ? "B" : "S",
+      price: executionPrice,
+      quantity: Number(trade?.quantity) || 0,
     }];
   });
 }
@@ -170,27 +172,43 @@ export function createReplayTradeMarkerFigures({
     return [];
   }
   const side = overlay?.extendData?.side === "sell" ? "sell" : "buy";
-  const color = side === "buy" ? "#ef4444" : "#10b981";
+  const color = side === "buy" ? REPLAY_RISE_COLOR : REPLAY_FALL_COLOR;
+  const mutedColor = side === "buy"
+    ? "rgba(223, 113, 128, 0.72)"
+    : "rgba(56, 174, 134, 0.72)";
   const width = Number(bounding.width) || 0;
   const height = Number(bounding.height) || 0;
-  const x = Math.max(16, Math.min(width - 16, point.x));
-  const y = Math.max(12, Math.min(
-    height - 12,
-    point.y + (side === "buy" ? 24 : -24),
+  const x = Math.max(14, Math.min(width - 14, point.x));
+  const y = Math.max(14, Math.min(
+    height - 14,
+    point.y + (side === "buy" ? 26 : -26),
   ));
-  return [{
+  const expanded = Boolean(overlay?.extendData?.expanded);
+  const figures = [{
+    key: "badge",
+    type: "circle",
+    attrs: { x, y, r: 11 },
+    styles: {
+      style: "stroke_fill",
+      color: "rgba(255, 255, 255, 0.88)",
+      borderColor: mutedColor,
+      borderSize: 3,
+    },
+    ignoreEvent: false,
+  }, {
+    key: "badge-label",
     type: "text",
     attrs: {
       x,
       y,
-      text: overlay?.extendData?.text ?? (side === "buy" ? "B ↑" : "S ↓"),
+      text: overlay?.extendData?.text ?? (side === "buy" ? "B" : "S"),
       align: "center",
       baseline: "middle",
     },
     styles: {
-      color,
+      color: mutedColor,
       size: 12,
-      weight: "700",
+      weight: "800",
       borderSize: 0,
       paddingLeft: 0,
       paddingRight: 0,
@@ -198,8 +216,54 @@ export function createReplayTradeMarkerFigures({
       paddingBottom: 0,
       backgroundColor: "transparent",
     },
-    ignoreEvent: true,
+    ignoreEvent: false,
   }];
+  if (!expanded) {
+    return figures;
+  }
+
+  const price = Number(overlay?.extendData?.price);
+  const quantity = Number(overlay?.extendData?.quantity);
+  const detail = [
+    Number.isFinite(price) ? `¥${price.toFixed(2)}` : "",
+    quantity > 0 ? `${quantity}股` : "",
+  ].filter(Boolean).join(" · ");
+  if (!detail) {
+    return figures;
+  }
+  const openToLeft = x > width - 118;
+  const lineEndX = x + (openToLeft ? -20 : 20);
+  figures.push({
+    key: "detail-line",
+    type: "line",
+    attrs: { coordinates: [{ x, y }, { x: lineEndX, y }] },
+    styles: { style: "solid", size: 2, color },
+    ignoreEvent: true,
+  }, {
+    key: "detail-label",
+    type: "text",
+    attrs: {
+      x: lineEndX + (openToLeft ? -5 : 5),
+      y,
+      text: detail,
+      align: openToLeft ? "right" : "left",
+      baseline: "middle",
+    },
+    styles: {
+      color: "#ffffff",
+      size: 11,
+      weight: "700",
+      borderSize: 0,
+      borderRadius: 4,
+      backgroundColor: color,
+      paddingLeft: 6,
+      paddingRight: 6,
+      paddingTop: 4,
+      paddingBottom: 4,
+    },
+    ignoreEvent: true,
+  });
+  return figures;
 }
 
 function normalizeIndicatorValue(value) {
@@ -243,3 +307,7 @@ export function buildReplayCustomIndicatorRows(series = [], dataLength = 0) {
     return row;
   });
 }
+import {
+  REPLAY_FALL_COLOR,
+  REPLAY_RISE_COLOR,
+} from "./replayKlineConfig.js";

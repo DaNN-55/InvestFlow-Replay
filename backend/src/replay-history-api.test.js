@@ -378,7 +378,10 @@ describe("replay history list API", () => {
       reviewedItem.blindReview,
       blindReview("已评分战法"),
     );
-    assert.deepEqual(reviewedItem.postReview, postReview());
+    assert.deepEqual(reviewedItem.postReview, {
+      ...postReview(),
+      strategyAdjustment: "",
+    });
     assert.deepEqual(reviewedItem.scoreCard, reviewed.scoreCard);
     assert.equal(
       all.body.items.find((item) => item.id === awaitingPost.id).scoreCard,

@@ -37,7 +37,7 @@ function blindFields(snapshot) {
 }
 
 function postFields(snapshot) {
-  return [
+  const fields = [
     {
       label: "判断结果",
       value:
@@ -54,21 +54,21 @@ function postFields(snapshot) {
           ? "旧记录未保存"
           : `${snapshot.riskControlScore} / 5`,
     },
-    {
-      label: "战法符合度",
-      value:
-        snapshot.playbookFitScore == null
-          ? "不适用"
-          : `${snapshot.playbookFitScore} / 5`,
-    },
     { label: "执行复盘", value: snapshot.executionReview || "未填写" },
     { label: "错误与不足", value: snapshot.mistakes || "未填写" },
     { label: "经验总结", value: snapshot.lessons || "未填写" },
-    {
+  ];
+  if (snapshot.playbookFitScore != null) {
+    fields.splice(3, 0, {
+      label: "战法复核",
+      value: `${snapshot.playbookFitScore} / 5`,
+    });
+    fields.push({
       label: "战法调整建议",
       value: snapshot.strategyAdjustment || "未填写",
-    },
-  ];
+    });
+  }
+  return fields;
 }
 
 export function getLatestReplayReviewSnapshot({
@@ -89,10 +89,8 @@ export function buildReplayReviewCorrectionPayload({
   playbookFitApplicable = false,
 }) {
   if (stage === "blind") {
-    return {
+    const payload = {
       strategyName: form.strategyName.trim(),
-      playbookId: snapshot.playbookId,
-      playbookVersionId: snapshot.playbookVersionId,
       thesis: form.thesis.trim(),
       tradePlan: form.tradePlan.trim(),
       riskPlan: form.riskPlan.trim(),
@@ -102,6 +100,11 @@ export function buildReplayReviewCorrectionPayload({
       invalidationRule: snapshot.invalidationRule ?? null,
       changeNote: form.changeNote.trim(),
     };
+    if (form.playbookId && form.playbookVersionId) {
+      payload.playbookId = form.playbookId;
+      payload.playbookVersionId = form.playbookVersionId;
+    }
+    return payload;
   }
   const payload = {
     outcome: form.outcome,
@@ -110,11 +113,11 @@ export function buildReplayReviewCorrectionPayload({
     lessons: form.lessons.trim(),
     disciplineScore: Number(form.disciplineScore),
     riskControlScore: Number(form.riskControlScore),
-    strategyAdjustment: form.strategyAdjustment.trim(),
     changeNote: form.changeNote.trim(),
   };
   if (playbookFitApplicable) {
     payload.playbookFitScore = Number(form.playbookFitScore);
+    payload.strategyAdjustment = form.strategyAdjustment.trim();
   }
   return payload;
 }
@@ -127,6 +130,7 @@ function buildStage(stage, originalReview, corrections, includeOriginal) {
     .filter((correction) => correction.stage === stage)
     .map((correction) => ({
       id: correction.id,
+      correction,
       title: `第 ${correction.revisionNumber} 次修正`,
       time: formatTime(correction.createdAt),
       changeNote: correction.changeNote,

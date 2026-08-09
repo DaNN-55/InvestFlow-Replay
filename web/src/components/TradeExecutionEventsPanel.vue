@@ -1,6 +1,6 @@
 <script setup>
-import { Pencil, Trash2 } from "lucide-vue-next";
-import { reactive } from "vue";
+import { ChevronDown, ChevronUp, Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
+import { reactive, shallowRef } from "vue";
 
 import UiButton from "./ui/UiButton.vue";
 import UiInput from "./ui/UiInput.vue";
@@ -27,6 +27,7 @@ defineProps({
 });
 
 const emit = defineEmits(["add", "edit", "delete"]);
+const collapsed = shallowRef(false);
 
 const ACTION_OPTIONS = [
   { value: "buy", label: "买入" },
@@ -80,6 +81,12 @@ function actionLabel(value) {
   return ACTION_OPTIONS.find((option) => option.value === value)?.label ?? value ?? "--";
 }
 
+function eventTone(action) {
+  if (["buy", "add"].includes(action)) return "buy";
+  if (["sell", "reduce"].includes(action)) return "sell";
+  return "neutral";
+}
+
 function formatEvent(event) {
   const parts = [actionLabel(event?.action)];
   if (event?.price != null) {
@@ -119,9 +126,12 @@ function formatSigned(value, suffix = "") {
         <h3>成交与动作记录</h3>
         <p>买入、加仓、减仓、卖出可以记录多次，不再被一个买入价和一个卖出价限制。</p>
       </div>
-      <span>{{ events.length }} 条</span>
+      <button class="trade-execution-events__collapse" type="button" :aria-expanded="!collapsed" @click="collapsed = !collapsed">
+        {{ events.length }} 条 <ChevronDown v-if="collapsed" :size="14" /><ChevronUp v-else :size="14" />
+      </button>
     </div>
 
+    <template v-if="!collapsed">
     <dl class="trade-execution-events__ledger">
       <div><dt>当前持仓</dt><dd>{{ formatNumber(ledger.positionQuantity, 0) }} 股</dd></div>
       <div><dt>持仓成本</dt><dd>{{ formatNumber(ledger.averageCost) }}</dd></div>
@@ -134,20 +144,19 @@ function formatSigned(value, suffix = "") {
     </dl>
 
     <div v-if="events.length" class="trade-execution-events__list">
-      <article v-for="event in events" :key="event.id || `${event.eventAt}-${event.action}`">
+      <article v-for="event in events" :key="event.id || `${event.eventAt}-${event.action}`" :class="`trade-execution-events__event--${eventTone(event.action)}`">
         <div class="trade-execution-events__event-row">
           <div class="trade-execution-events__event-main">
             <strong>{{ formatEvent(event) }}</strong>
             <small>{{ event.eventAt }} · {{ planStatusLabel(event.planStatus) }}<span v-if="event.source"> · {{ event.source }}</span></small>
           </div>
-          <div class="trade-execution-events__event-actions">
-            <button type="button" aria-label="修改成交记录" title="修改" :disabled="saving" @click="emit('edit', event)">
-              <Pencil :size="14" />
-            </button>
-            <button type="button" aria-label="删除成交记录" title="删除" :disabled="saving" @click="emit('delete', event)">
-              <Trash2 :size="14" />
-            </button>
-          </div>
+          <details class="trade-execution-events__event-actions">
+            <summary aria-label="成交记录操作"><Ellipsis :size="15" /></summary>
+            <div>
+              <button type="button" :disabled="saving" @click="emit('edit', event); $event.currentTarget.closest('details')?.removeAttribute('open')"><Pencil :size="14" /> 修改</button>
+              <button class="trade-execution-events__delete" type="button" :disabled="saving" @click="emit('delete', event); $event.currentTarget.closest('details')?.removeAttribute('open')"><Trash2 :size="14" /> 删除</button>
+            </div>
+          </details>
         </div>
         <p v-if="event.note">{{ event.note }}</p>
       </article>
@@ -197,6 +206,7 @@ function formatSigned(value, suffix = "") {
         添加动作
       </UiButton>
     </form>
+    </template>
   </section>
 </template>
 
@@ -238,6 +248,8 @@ function formatSigned(value, suffix = "") {
   color: var(--ql-color-text-muted);
   font-size: 11px;
 }
+
+.trade-execution-events__collapse { display: flex; align-items: center; gap: 4px; border: 0; color: var(--ql-color-text-muted); background: transparent; cursor: pointer; font-size: 11px; }
 
 .trade-execution-events__list {
   display: grid;
@@ -281,6 +293,11 @@ function formatSigned(value, suffix = "") {
   background: var(--ql-color-bg-surface-strong);
 }
 
+.trade-execution-events__event--buy { border-left: 3px solid var(--ql-rise) !important; background: color-mix(in srgb, var(--ql-rise) 5%, var(--ql-color-bg-surface-strong)) !important; }
+.trade-execution-events__event--sell { border-left: 3px solid var(--ql-fall) !important; background: color-mix(in srgb, var(--ql-fall) 5%, var(--ql-color-bg-surface-strong)) !important; }
+.trade-execution-events__event--buy .trade-execution-events__event-main strong { color: var(--ql-rise); }
+.trade-execution-events__event--sell .trade-execution-events__event-main strong { color: var(--ql-fall); }
+
 .trade-execution-events__event-main {
   display: flex;
   min-width: 0;
@@ -292,7 +309,7 @@ function formatSigned(value, suffix = "") {
 
 .trade-execution-events__event-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
 }
 
@@ -309,22 +326,32 @@ function formatSigned(value, suffix = "") {
 }
 
 .trade-execution-events__event-actions {
-  display: flex;
+  position: relative;
   flex: 0 0 auto;
   gap: 4px;
 }
 
+.trade-execution-events__event-actions summary { display: grid; width: 24px; height: 24px; place-items: center; border: 0; border-radius: 6px; color: var(--ql-color-text-muted); background: transparent; cursor: pointer; list-style: none; }
+.trade-execution-events__event-actions summary:hover { color: var(--ql-color-text-strong); background: var(--ql-color-bg-muted); }
+.trade-execution-events__event-actions > div { position: absolute; z-index: 5; top: 30px; right: 0; display: grid; min-width: 104px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
+
 .trade-execution-events__event-actions button {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 1px solid var(--ql-color-border-soft);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
   border-radius: 7px;
   color: var(--ql-color-text-muted);
   background: transparent;
   cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 8px 9px;
+  white-space: nowrap;
 }
+
+.trade-execution-events__event-actions .trade-execution-events__delete { color: var(--ql-color-danger); }
 
 .trade-execution-events__event-actions button:hover:not(:disabled) {
   border-color: var(--ql-color-border-strong);
@@ -362,11 +389,13 @@ function formatSigned(value, suffix = "") {
 }
 
 .trade-execution-events__note {
-  grid-column: span 4;
+  grid-column: 1 / -1;
 }
 
 .trade-execution-events__form > .ql-ui-button {
   min-height: 40px;
+  grid-column: 1 / -1;
+  justify-self: end;
 }
 
 @media (max-width: 900px) {

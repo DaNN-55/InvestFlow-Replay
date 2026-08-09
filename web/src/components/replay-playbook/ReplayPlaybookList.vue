@@ -186,8 +186,8 @@ watch(
           <small>当前 v{{ getPlaybookVersionNumber(item) }}</small>
         </button>
         <div class="replay-playbook-list__tail">
-          <em>
-            {{ Number(item.pendingCandidateCount ?? 0) }} 条待处理
+          <em v-if="Number(item.pendingCandidateCount ?? 0) > 0">
+            {{ Number(item.pendingCandidateCount ?? 0) }} 条候选改进
           </em>
           <div class="replay-playbook-list__menu" @click.stop>
             <button

@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from "vue";
+import { ChevronDown, Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
 
 import { buildReplayReviewTimeline } from "../../utils/replayReviewCorrections.js";
 
@@ -24,7 +25,13 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  editable: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const emit = defineEmits(["editCorrection", "deleteCorrection"]);
 
 const stages = computed(() =>
   buildReplayReviewTimeline({
@@ -38,20 +45,24 @@ const stages = computed(() =>
 </script>
 
 <template>
-  <section
+  <details
     v-if="stages.length"
     class="replay-review-timeline"
     aria-label="复盘修正时间线"
   >
-    <header class="replay-review-timeline__header">
+    <summary class="replay-review-timeline__header">
       <div>
         <h3>{{ showOriginal ? "复盘记录时间线" : "复盘修正记录" }}</h3>
         <p v-if="showOriginal">原始记录永久保留；追加修正不会覆盖原始内容。</p>
         <p v-else>这里只展示追加修正；原始内容请查看上方记录。</p>
       </div>
-      <strong>原始评分不会改变</strong>
-    </header>
+      <span class="replay-review-timeline__summary-tail">
+        <strong>原始评分不会改变</strong>
+        <ChevronDown class="replay-review-timeline__chevron" :size="16" aria-hidden="true" />
+      </span>
+    </summary>
 
+    <div class="replay-review-timeline__body">
     <section
       v-for="stage in stages"
       :key="stage.stage"
@@ -66,7 +77,16 @@ const stages = computed(() =>
         >
           <header>
             <strong>{{ entry.title }}</strong>
-            <span>{{ entry.time }}</span>
+            <div class="replay-review-timeline__entry-meta">
+              <span>{{ entry.time }}</span>
+              <details v-if="editable && entry.correction" class="replay-review-timeline__entry-menu">
+                <summary aria-label="修正记录操作"><Ellipsis :size="15" /></summary>
+                <div>
+                  <button type="button" @click="emit('editCorrection', entry.correction); $event.currentTarget.closest('details')?.removeAttribute('open')"><Pencil :size="13" />修改</button>
+                  <button class="replay-review-timeline__delete" type="button" @click="emit('deleteCorrection', entry.correction); $event.currentTarget.closest('details')?.removeAttribute('open')"><Trash2 :size="13" />删除</button>
+                </div>
+              </details>
+            </div>
           </header>
           <p v-if="entry.changeNote" class="replay-review-timeline__note">
             修正说明：{{ entry.changeNote }}
@@ -80,17 +100,19 @@ const stages = computed(() =>
         </article>
       </div>
     </section>
-  </section>
+    </div>
+  </details>
 </template>
 
 <style scoped>
 .replay-review-timeline {
-  display: grid;
-  gap: 1rem;
   padding: 1rem;
   border-top: 1px solid var(--ql-line, rgba(15, 23, 42, 0.08));
   background: var(--ql-color-bg-surface-strong);
 }
+
+.replay-review-timeline__header { cursor: pointer; }
+.replay-review-timeline__body { display: grid; gap: 1rem; padding-top: 1rem; }
 
 .replay-review-timeline__header {
   display: flex;
@@ -116,14 +138,19 @@ const stages = computed(() =>
   font-size: 0.75rem;
 }
 
-.replay-review-timeline__header > strong {
+.replay-review-timeline__summary-tail { align-items: center; display: flex; flex: 0 0 auto; gap: 0.5rem; }
+
+.replay-review-timeline__summary-tail > strong {
   flex: 0 0 auto;
   padding: 0.3rem 0.55rem;
   border-radius: 999px;
-  color: #166534;
-  background: #dcfce7;
+  color: var(--ql-color-success);
+  background: var(--ql-color-success-soft);
   font-size: 0.6875rem;
 }
+
+.replay-review-timeline__chevron { color: var(--ql-color-text-muted); transition: transform 160ms ease; }
+.replay-review-timeline[open] .replay-review-timeline__chevron { transform: rotate(180deg); }
 
 .replay-review-timeline__stage {
   display: grid;
@@ -164,6 +191,15 @@ const stages = computed(() =>
   color: var(--ql-color-text-muted);
   font-size: 0.6875rem;
 }
+
+.replay-review-timeline__entry-meta { align-items: center; display: flex; gap: 0.35rem; }
+.replay-review-timeline__entry-menu { position: relative; }
+.replay-review-timeline__entry-menu > summary { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 6px; color: var(--ql-color-text-muted); cursor: pointer; list-style: none; }
+.replay-review-timeline__entry-menu > summary:hover { background: var(--ql-color-bg-surface-strong); color: var(--ql-color-text-strong); }
+.replay-review-timeline__entry-menu > div { position: absolute; z-index: 8; top: 28px; right: 0; display: grid; min-width: 96px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
+.replay-review-timeline__entry-menu button { align-items: center; display: flex; gap: 6px; padding: 7px 8px; border: 0; border-radius: 6px; color: var(--ql-color-text-body); background: transparent; cursor: pointer; font: inherit; font-size: 11px; }
+.replay-review-timeline__entry-menu button:hover { background: var(--ql-color-bg-muted); }
+.replay-review-timeline__entry-menu .replay-review-timeline__delete { color: var(--ql-color-danger); }
 
 .replay-review-timeline__note {
   margin: 0.6rem 0 0;

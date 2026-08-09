@@ -39,15 +39,23 @@ function completedTrade(record) {
 function summarize(trades) {
   const completedCount = trades.length;
   if (!completedCount) {
-    return { completedCount: 0, winRatePct: null, averageProfitPct: null, deviationRatePct: null };
+    return { completedCount: 0, winRatePct: null, averageProfitPct: null, profitLossRatio: null, deviationRatePct: null };
   }
   const wins = trades.filter((item) => item.profitPct > 0).length;
   const averageProfitPct = trades.reduce((sum, item) => sum + item.profitPct, 0) / completedCount;
+  const profits = trades.filter((item) => item.profitPct > 0).map((item) => item.profitPct);
+  const losses = trades.filter((item) => item.profitPct < 0).map((item) => Math.abs(item.profitPct));
+  const averageWinPct = profits.reduce((sum, value) => sum + value, 0) / (profits.length || 1);
+  const averageLossPct = losses.reduce((sum, value) => sum + value, 0) / (losses.length || 1);
+  const profitLossRatio = losses.length
+    ? Math.round((averageWinPct / averageLossPct) * 100) / 100
+    : profits.length ? Number.POSITIVE_INFINITY : 0;
   const deviations = trades.filter((item) => item.deviates).length;
   return {
     completedCount,
     winRatePct: Math.round((wins / completedCount) * 10000) / 100,
     averageProfitPct: Math.round(averageProfitPct * 100) / 100,
+    profitLossRatio,
     deviationRatePct: Math.round((deviations / completedCount) * 10000) / 100,
   };
 }

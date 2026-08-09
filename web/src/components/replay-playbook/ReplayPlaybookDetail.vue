@@ -11,6 +11,7 @@ import {
 } from "../../utils/replayPlaybookPresentation.js";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
+import { Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
 import ReplayPlaybookVersionForm from "./ReplayPlaybookVersionForm.vue";
 
 const props = defineProps({
@@ -39,6 +40,7 @@ const emit = defineEmits([
 const mode = shallowRef("");
 const baseVersion = shallowRef(null);
 const activeCandidate = shallowRef(null);
+const rejectingCandidateId = shallowRef("");
 const rejectReasons = reactive({});
 
 const playbook = computed(() => props.detail?.playbook ?? null);
@@ -68,8 +70,24 @@ const versionFormTitle = computed(() => {
 });
 
 function startAccept(candidate) {
+  rejectingCandidateId.value = "";
   activeCandidate.value = candidate;
   mode.value = "candidate";
+}
+
+function startReject(candidate) {
+  rejectingCandidateId.value = candidate.id;
+}
+
+function cancelReject() {
+  rejectingCandidateId.value = "";
+}
+
+function submitReject(candidate) {
+  emit("rejectCandidate", {
+    candidateId: candidate.id,
+    reason: rejectReasons[candidate.id] || "",
+  });
 }
 
 function cancelVersionForm() {
@@ -106,6 +124,7 @@ watch(
   () => props.detail?.playbook?.id,
   () => {
     cancelVersionForm();
+    cancelReject();
     Object.keys(rejectReasons).forEach((key) => delete rejectReasons[key]);
   },
 );
@@ -168,7 +187,7 @@ watch(
             :key="version.id"
             class="replay-playbook-detail__version"
           >
-            <details :open="version.id === playbook.currentVersion?.id">
+            <details>
               <summary>
                 <strong>v{{ version.versionNumber }}</strong>
                 <span>{{ version.changeSummary || "未填写变更说明" }}</span>
@@ -176,16 +195,18 @@ watch(
               </summary>
               <pre>{{ version.content }}</pre>
             </details>
-            <div class="replay-playbook-detail__version-actions">
+            <details class="replay-playbook-detail__version-menu">
+              <summary :aria-label="`v${version.versionNumber} 版本操作`"><Ellipsis :size="16" /></summary>
+              <div class="replay-playbook-detail__version-actions">
               <UiButton
                 type="button"
                 size="sm"
                 variant="secondary"
                 :aria-label="`基于 v${version.versionNumber} 修改`"
                 :disabled="Boolean(activeAction)"
-                @click="startVersionEdit(version)"
+                @click="startVersionEdit(version); $event.currentTarget.closest('details')?.removeAttribute('open')"
               >
-                基于此版本修改
+                <template #prefix><Pencil :size="14" /></template>基于此版本修改
               </UiButton>
               <UiButton
                 v-if="version.id !== playbook.currentVersion?.id"
@@ -195,14 +216,15 @@ watch(
                 :aria-label="`删除 v${version.versionNumber}`"
                 :title="versionDeleteHint(version)"
                 :disabled="!version.canDelete || Boolean(activeAction)"
-                @click="emit('deleteVersion', version)"
+                @click="emit('deleteVersion', version); $event.currentTarget.closest('details')?.removeAttribute('open')"
               >
-                删除此版本
+                <template #prefix><Trash2 :size="14" /></template>删除此版本
               </UiButton>
               <small v-if="version.deletionBlockReason === 'referenced'">
                 已被历史记录引用，不能删除
               </small>
-            </div>
+              </div>
+            </details>
           </article>
         </div>
         <p v-else class="replay-playbook-detail__empty">
@@ -235,25 +257,17 @@ watch(
             <small v-if="candidate.reason">
               拒绝原因：{{ candidate.reason }}
             </small>
-            <div class="replay-playbook-detail__candidate-actions">
-              <UiButton
-                v-if="getCandidateSessionId(candidate)"
-                type="button"
-                size="sm"
-                variant="secondary"
-                @click="emit('openSource', candidate)"
-              >
-                打开源演练
-              </UiButton>
-              <template v-if="candidate.state === 'pending'">
-                <UiButton
-                  type="button"
-                  size="sm"
-                  :disabled="Boolean(activeAction)"
-                  @click="startAccept(candidate)"
-                >
-                  采纳并生成版本
-                </UiButton>
+            <details class="replay-playbook-detail__candidate-menu">
+              <summary aria-label="候选改进操作"><Ellipsis :size="16" /></summary>
+              <div>
+                <button v-if="getCandidateSessionId(candidate)" type="button" @click="emit('openSource', candidate); $event.currentTarget.closest('details')?.removeAttribute('open')">打开源演练</button>
+                <template v-if="candidate.state === 'pending'">
+                  <button type="button" :disabled="Boolean(activeAction)" @click="startAccept(candidate); $event.currentTarget.closest('details')?.removeAttribute('open')">采纳并生成版本</button>
+                  <button class="replay-playbook-detail__candidate-reject-action" type="button" :disabled="Boolean(activeAction)" @click="startReject(candidate); $event.currentTarget.closest('details')?.removeAttribute('open')">拒绝</button>
+                </template>
+              </div>
+            </details>
+            <div v-if="rejectingCandidateId === candidate.id" class="replay-playbook-detail__candidate-actions">
                 <label>
                   <span>拒绝原因（可选）</span>
                   <UiInput
@@ -268,21 +282,16 @@ watch(
                   variant="secondary"
                   :loading="activeAction === `reject:${candidate.id}`"
                   :disabled="Boolean(activeAction)"
-                  @click="
-                    emit('rejectCandidate', {
-                      candidateId: candidate.id,
-                      reason: rejectReasons[candidate.id] || '',
-                    })
-                  "
+                  @click="submitReject(candidate)"
                 >
-                  拒绝
+                  确认拒绝
                 </UiButton>
-              </template>
+                <UiButton type="button" size="sm" variant="secondary" :disabled="Boolean(activeAction)" @click="cancelReject">取消</UiButton>
             </div>
           </article>
         </div>
         <p v-else class="replay-playbook-detail__empty">
-          暂无候选改进。复盘中的调整建议需要人工加入，且不会自动修改战法。
+          暂无候选改进。关联了本战法的演练，可将复盘建议加入这里等待处理。
         </p>
       </section>
     </template>
@@ -358,8 +367,24 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-top: 0.75rem;
+  margin-top: 0;
+  padding: 0.35rem;
+  border: 1px solid var(--ql-color-border-soft);
+  border-radius: 8px;
+  background: var(--ql-color-bg-surface-strong);
+  box-shadow: var(--ql-shadow-popover);
 }
+
+.replay-playbook-detail__version-actions :deep(.ql-ui-button) {
+  border-width: 0;
+  min-height: 30px;
+  padding-inline: 0.55rem;
+}
+
+.replay-playbook-detail__version { position: relative; padding-right: 3.5rem; }
+.replay-playbook-detail__version-menu { position: absolute; top: 0.6rem; right: 0.6rem; }
+.replay-playbook-detail__version-menu > summary { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 7px; color: var(--ql-color-text-muted); cursor: pointer; list-style: none; }
+.replay-playbook-detail__version-menu[open] .replay-playbook-detail__version-actions { position: absolute; z-index: 5; top: 32px; right: 0; display: grid; min-width: 164px; }
 
 .replay-playbook-detail__version-actions small {
   color: var(--ql-color-text-muted);
@@ -404,7 +429,11 @@ watch(
   min-width: 0;
 }
 
-.replay-playbook-detail__versions summary {
+.replay-playbook-detail__version > details:first-child {
+  margin-right: 2.75rem;
+}
+
+.replay-playbook-detail__version > details:first-child > summary {
   align-items: center;
   cursor: pointer;
   display: grid;
@@ -412,13 +441,13 @@ watch(
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
-.replay-playbook-detail__versions summary span {
+.replay-playbook-detail__version > details:first-child > summary span {
   color: var(--ql-color-text-muted);
   font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
 
-.replay-playbook-detail__versions summary small {
+.replay-playbook-detail__version > details:first-child > summary small {
   color: var(--ql-color-text-subtle);
   font-size: 0.6875rem;
 }
@@ -435,6 +464,15 @@ watch(
   gap: 0.75rem;
   justify-content: space-between;
 }
+
+.replay-playbook-detail__candidate { position: relative; padding-right: 3rem; }
+.replay-playbook-detail__candidate-menu { position: absolute; top: 0.55rem; right: 0.55rem; }
+.replay-playbook-detail__candidate-menu > summary { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 7px; color: var(--ql-color-text-muted); cursor: pointer; list-style: none; }
+.replay-playbook-detail__candidate-menu > summary:hover { background: var(--ql-color-bg-surface-strong); color: var(--ql-color-text-strong); }
+.replay-playbook-detail__candidate-menu > div { position: absolute; z-index: 6; right: 0; bottom: 32px; display: grid; min-width: 150px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
+.replay-playbook-detail__candidate-menu button { border: 0; border-radius: 6px; padding: 8px 9px; color: var(--ql-color-text-body); background: transparent; cursor: pointer; font: inherit; font-size: 11px; text-align: left; }
+.replay-playbook-detail__candidate-menu button:hover:not(:disabled) { background: var(--ql-color-bg-muted); }
+.replay-playbook-detail__candidate-menu .replay-playbook-detail__candidate-reject-action { color: var(--ql-color-danger); }
 
 .replay-playbook-detail__candidate header > span {
   border-radius: 999px;
@@ -509,11 +547,11 @@ watch(
     flex-direction: column;
   }
 
-  .replay-playbook-detail__versions summary {
+  .replay-playbook-detail__version > details:first-child > summary {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .replay-playbook-detail__versions summary small {
+  .replay-playbook-detail__version > details:first-child > summary small {
     grid-column: 1 / -1;
   }
 }

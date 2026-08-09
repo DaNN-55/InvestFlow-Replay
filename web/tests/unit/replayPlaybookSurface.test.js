@@ -73,7 +73,7 @@ describe("replay playbook frontend surface", () => {
     assert.match(panelSource, /ReplayPlaybookDetail/u);
     assert.match(listSource, /新建战法/u);
     assert.match(listSource, /当前 v/u);
-    assert.match(listSource, /条待处理/u);
+    assert.match(listSource, /条候选改进/u);
     assert.match(listSource, /aria-label="战法操作"/u);
     assert.match(listSource, /修改名称/u);
     assert.match(listSource, /删除战法/u);
@@ -110,8 +110,8 @@ describe("replay playbook frontend surface", () => {
     assert.match(marketViewSource, /onActivated\(loadReplayPlaybooks\)/u);
     assert.doesNotMatch(marketViewSource, /onMounted\(loadReplayPlaybooks\)/u);
     assert.match(marketViewSource, /:playbooks="playbooks"/u);
-    assert.match(reviewSource, /关联战法（可选）/u);
-    assert.match(reviewSource, /不关联战法 \/ 自由填写/u);
+    assert.match(reviewSource, /参考战法（可选）/u);
+    assert.match(reviewSource, /不参考战法 \/ 自由填写/u);
     assert.match(reviewSource, /自由填写战法名称（可选）/u);
     assert.match(reviewSource, /payload\.playbookId = selectedPlaybook\.value\.id/u);
     assert.match(
@@ -119,7 +119,7 @@ describe("replay playbook frontend surface", () => {
       /payload\.playbookVersionId = selectedPlaybook\.value\.currentVersion\.id/u,
     );
     assert.doesNotMatch(reviewSource, /payload\.playbookVersionNumber/u);
-    assert.match(reviewSource, /关联战法 · v/u);
+    assert.match(reviewSource, /参考战法 · v/u);
     assert.match(reviewSource, /const linkedVersionReady = computed/u);
     assert.match(reviewSource, /linkedVersionReady\.value/u);
     assert.match(reviewSource, /避免静默丢失关联/u);

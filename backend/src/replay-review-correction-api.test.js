@@ -121,7 +121,7 @@ describe("replay review corrections API", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("freezes concurrent first saves and appends immutable blind corrections", async () => {
+  it("freezes first saves while allowing correction maintenance", async () => {
     const created = await request(app)
       .post("/api/quant/replay/sessions")
       .send({ gameLength: 20, seed: 1 })
@@ -285,29 +285,38 @@ describe("replay review corrections API", () => {
         { revision_number: 2, count: 1 },
       ],
     );
-    assert.throws(
-      () =>
-        directDb
-          .prepare(
-            "UPDATE replay_review_corrections SET change_note = 'x' WHERE id = ?",
-          )
-          .run(correctionOne.body.correction.id),
-      /append-only/,
-    );
-    assert.throws(
-      () =>
-        directDb
-          .prepare("DELETE FROM replay_review_corrections WHERE id = ?")
-          .run(correctionOne.body.correction.id),
-      /append-only/,
-    );
     directDb.close();
+
+    const updatedCorrection = await request(app)
+      .patch(`/api/quant/replay/sessions/${sessionId}/reviews/blind/corrections/${correctionOne.body.correction.id}`)
+      .send({
+        actionId: "update-blind-correction",
+        expectedRevision: correctionTwo.body.session.revision,
+        changeNote: "修改后的入场确认条件",
+        ...blindReview({ confidence: 4 }),
+      })
+      .expect(200);
+    assert.equal(updatedCorrection.body.correction.changeNote, "修改后的入场确认条件");
+    assert.equal(updatedCorrection.body.correction.revisionNumber, 1);
+
+    const deletedCorrection = await request(app)
+      .delete(`/api/quant/replay/sessions/${sessionId}/reviews/blind/corrections/${correctionOne.body.correction.id}`)
+      .send({
+        actionId: "delete-blind-correction",
+        expectedRevision: updatedCorrection.body.session.revision,
+      })
+      .expect(200);
+    assert.equal(deletedCorrection.body.deleted, true);
+    assert.deepEqual(
+      deletedCorrection.body.session.corrections.map((item) => item.revisionNumber),
+      [2],
+    );
 
     const revealed = await request(app)
       .post(`/api/quant/replay/sessions/${sessionId}/reveal`)
       .send({
         actionId: "reveal-after-corrections",
-        expectedRevision: correctionTwo.body.session.revision,
+        expectedRevision: deletedCorrection.body.session.revision,
       })
       .expect(200);
     assert.equal(revealed.body.session.revealed, true);
@@ -362,7 +371,7 @@ describe("replay review corrections API", () => {
       postCorrection.body.session.review.postReview,
       postReview(),
     );
-    assert.equal(postCorrection.body.session.corrections.length, 3);
+    assert.equal(postCorrection.body.session.corrections.length, 2);
     const scoreAfterCorrectionDb = new DatabaseSync(dbPath, {
       readOnly: true,
     });
@@ -379,7 +388,7 @@ describe("replay review corrections API", () => {
       .expect(200);
     const historyItem = history.body.items.find((item) => item.id === sessionId);
     assert.deepEqual(historyItem.correctionSummary, {
-      blindCount: 2,
+      blindCount: 1,
       postCount: 1,
     });
     const detail = await request(app)

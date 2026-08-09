@@ -118,17 +118,18 @@ watch(() => props.draft, syncDraft, { immediate: true, deep: true });
 
 <style scoped>
 .replay-playbook-version-form {
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--ql-color-border-strong);
   border-radius: 10px;
   display: grid;
   gap: 0.875rem;
   min-width: 0;
   padding: 1rem;
-  background: #f8fbff;
+  background: var(--ql-color-primary-soft);
 }
 
 .replay-playbook-version-form h4 {
   color: var(--ql-color-text-strong);
+  background: var(--ql-color-bg-surface-strong);
   font-size: 0.875rem;
   font-weight: 800;
   margin: 0;

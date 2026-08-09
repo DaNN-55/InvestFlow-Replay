@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import { ChevronDown, ChevronUp } from "lucide-vue-next";
+import { ChevronDown, ChevronUp, Ellipsis, ExternalLink, RefreshCw, Trash2 } from "lucide-vue-next";
 
 import {
   buildReplayHistoryScoreDimensions,
@@ -49,7 +49,7 @@ const scoreDimensions = computed(() =>
   buildReplayHistoryScoreDimensions(props.item.scoreCard),
 );
 const scoreMetrics = computed(() =>
-  buildReplayScoreMetrics(props.item.scoreCard),
+  buildReplayScoreMetrics(props.item.scoreCard, { benchmarkCode: props.item.benchmarkCode }),
 );
 const scoreWeightSnapshot = computed(() =>
   buildReplayScoreWeightSnapshot(props.item.scoreCard),
@@ -162,30 +162,14 @@ function isPositiveMetric(metric) {
         </span>
       </div>
       <div class="replay-history-detail__actions">
-        <UiButton type="button" size="sm" @click="emit('open', item)">
-          打开演练
-        </UiButton>
-        <UiButton
-          v-if="item.revealed"
-          type="button"
-          size="sm"
-          variant="secondary"
-          :loading="retrainState.loading"
-          :disabled="retrainState.loading"
-          @click="emit('retrain', item)"
-        >
-          复练此行情
-        </UiButton>
-        <UiButton
-          type="button"
-          size="sm"
-          variant="danger"
-          :loading="deleteState.loading"
-          :disabled="deleteState.loading || retrainState.loading"
-          @click="emit('delete', item)"
-        >
-          删除记录
-        </UiButton>
+        <details class="replay-history-detail__action-menu">
+          <summary aria-label="演练记录操作"><Ellipsis :size="17" /></summary>
+          <div>
+            <button type="button" @click="emit('open', item)"><ExternalLink :size="14" />打开演练</button>
+            <button v-if="item.revealed" type="button" :disabled="retrainState.loading" @click="emit('retrain', item)"><RefreshCw :size="14" />复练此行情</button>
+            <button type="button" class="replay-history-detail__action-menu-danger" :disabled="deleteState.loading || retrainState.loading" @click="emit('delete', item)"><Trash2 :size="14" />删除记录</button>
+          </div>
+        </details>
         <small
           v-if="retrainState.error || deleteState.error"
           class="replay-history-detail__action-error"
@@ -198,7 +182,7 @@ function isPositiveMetric(metric) {
 
     <dl class="replay-history-detail__facts">
       <div>
-        <dt>训练类型</dt>
+        <dt>演练次数</dt>
         <dd>{{ attemptPresentation.label }}</dd>
       </div>
       <div>
@@ -211,13 +195,6 @@ function isPositiveMetric(metric) {
       <div>
         <dt>完成原因</dt>
         <dd>{{ formatReplayCompletionReason(item.completionReason) }}</dd>
-      </div>
-      <div v-if="item.trainingConfig?.mode === 'playbook'">
-        <dt>专项战法</dt>
-        <dd>
-          {{ item.trainingConfig.playbookName || "未命名战法" }} ·
-          v{{ item.trainingConfig.playbookVersionNumber ?? "—" }}
-        </dd>
       </div>
       <div v-if="item.revealed">
         <dt>行情区间</dt>
@@ -515,17 +492,11 @@ function isPositiveMetric(metric) {
             }}
           </dd>
         </div>
-        <div>
-          <dt>战法符合度</dt>
-          <dd>
-            {{
-              playbookFitApplicable && item.postReview.playbookFitScore != null
-                ? `${item.postReview.playbookFitScore} / 5`
-                : "不适用"
-            }}
-          </dd>
+        <div v-if="playbookFitApplicable">
+          <dt>战法复核</dt>
+          <dd>{{ item.postReview.playbookFitScore }} / 5</dd>
         </div>
-        <div>
+        <div v-if="linkedPlaybook">
           <dt>执行复盘</dt>
           <dd>{{ item.postReview.executionReview }}</dd>
         </div>
@@ -645,6 +616,14 @@ function isPositiveMetric(metric) {
   justify-content: flex-end;
   gap: 0.5rem;
 }
+
+.replay-history-detail__action-menu { position: relative; }
+.replay-history-detail__action-menu > summary { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; color: var(--ql-color-text-muted); background: var(--ql-color-bg-surface-strong); cursor: pointer; list-style: none; }
+.replay-history-detail__action-menu > div { position: absolute; z-index: 8; top: 36px; right: 0; display: grid; min-width: 150px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
+.replay-history-detail__action-menu button { display: flex; align-items: center; gap: 7px; padding: 8px 9px; border: 0; border-radius: 6px; color: var(--ql-color-text-body); background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
+.replay-history-detail__action-menu button:hover:not(:disabled) { background: var(--ql-color-bg-muted); }
+.replay-history-detail__action-menu button:disabled { cursor: not-allowed; opacity: 0.5; }
+.replay-history-detail__action-menu .replay-history-detail__action-menu-danger { color: var(--ql-color-danger); }
 
 .replay-history-detail__action-error {
   flex-basis: 100%;
@@ -849,6 +828,16 @@ function isPositiveMetric(metric) {
   background: rgba(236, 253, 245, 0.36);
 }
 
+:global(html[data-theme="dark"] .replay-history-detail__order-column--buy) {
+  border-color: rgba(248, 113, 113, 0.24);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+:global(html[data-theme="dark"] .replay-history-detail__order-column--sell) {
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(52, 211, 153, 0.08);
+}
+
 .replay-history-detail__order-empty {
   color: var(--ql-color-text-subtle);
   font-size: 0.75rem;
@@ -993,7 +982,13 @@ function isPositiveMetric(metric) {
 }
 
 .replay-history-detail__dimensions {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.replay-history-detail__dimensions > div {
+  min-height: 64px;
+  padding: 0.625rem 0.75rem;
 }
 
 .replay-history-detail__dimensions strong,
@@ -1010,21 +1005,21 @@ function isPositiveMetric(metric) {
 }
 
 .replay-history-detail__value--positive {
-  color: #047857 !important;
+  color: var(--ql-color-success) !important;
 }
 
 .replay-history-detail__data-card--positive {
-  border-color: #a7f3d0 !important;
-  background: #ecfdf5 !important;
+  border-color: rgba(16, 185, 129, 0.32) !important;
+  background: var(--ql-color-success-soft) !important;
   box-shadow: inset 3px 0 0 #10b981;
 }
 
 .replay-history-detail__data-card--positive strong {
-  color: #047857;
+  color: var(--ql-color-success);
 }
 
 .replay-history-detail__not-applicable {
-  color: #64748b !important;
+  color: var(--ql-color-text-muted) !important;
 }
 
 @media (max-width: 720px) {

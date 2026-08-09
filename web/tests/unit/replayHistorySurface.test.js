@@ -133,7 +133,7 @@ describe("replay history tracking surface", () => {
       "相对个股超额",
       "最大回撤",
       "指数基准收益率",
-      "相对指数超额",
+      "indexExcessReturnPct",
     ]) {
       assert.match(
         `${detailSource}\n${scorePresentationSource}`,
@@ -175,6 +175,7 @@ describe("replay history tracking surface", () => {
     assert.match(recordsSource, /api\.deleteReplaySession/u);
     assert.match(recordsSource, /@delete="requestDeleteReplay"/u);
     assert.match(detailSource, /删除记录/u);
+    assert.match(detailSource, /演练记录操作/u);
     assert.match(detailSource, /replay-history-detail__reviews/u);
     assert.match(detailSource, /replay-history-detail__order-columns/u);
     assert.match(detailSource, /replay-history-detail__order-column--buy/u);

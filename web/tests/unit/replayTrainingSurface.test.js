@@ -13,7 +13,6 @@ const contextUrl = new URL(
   "../../src/components/replay/ReplayTrainingContext.vue",
   import.meta.url,
 );
-const contextSource = readFileSync(contextUrl, "utf8");
 const viewSource = readSource("../../src/views/MarketReplayView.vue");
 const reviewSource = readSource(
   "../../src/components/replay/ReplayReviewPanel.vue",
@@ -25,7 +24,7 @@ const historyDetailSource = readSource(
   "../../src/components/replay-history/ReplayHistoryDetail.vue",
 );
 
-describe("replay playbook training surface", () => {
+describe("free replay training surface", () => {
   it("creates new training only in free mode without a specialist entry", () => {
     assert.match(setupSource, /trainingMode: "free"/u);
     assert.doesNotMatch(setupSource, /战法专项/u);
@@ -33,55 +32,30 @@ describe("replay playbook training surface", () => {
     assert.doesNotMatch(setupSource, /playbookVersionId/u);
   });
 
-  it("keeps the route view as a composition surface for frozen context", () => {
-    assert.equal(existsSync(contextUrl), true);
-    assert.match(viewSource, /ReplayTrainingContext/u);
-    assert.match(
-      viewSource,
-      /<ReplayTrainingContext :training-config="session\.trainingConfig" \/>/u,
-    );
+  it("removes the retired specialist context from the replay route", () => {
+    assert.equal(existsSync(contextUrl), false);
+    assert.doesNotMatch(viewSource, /ReplayTrainingContext/u);
     assert.match(viewSource, /:playbooks="playbooks"/u);
   });
 
-  it("shows the frozen playbook name, version and original plain text", () => {
-    assert.match(contextSource, /trainingConfig\?\.mode === "playbook"/u);
-    assert.match(contextSource, /trainingConfig\.playbookName/u);
-    assert.match(contextSource, /playbookVersionNumber/u);
-    assert.match(contextSource, /\{\{ playbookContent \}\}/u);
-    assert.match(contextSource, /战法后续修改不会影响本局记录/u);
-    assert.doesNotMatch(contextSource, /v-html/u);
-    assert.match(contextSource, /@media \(max-width: 480px\)/u);
-    assert.match(contextSource, /overflow-wrap: anywhere/u);
+  it("offers an optional frozen playbook reference during free review", () => {
+    assert.match(reviewSource, /参考战法（可选）/u);
+    assert.match(
+      reviewSource,
+      /payload\.playbookId = selectedPlaybook\.value\.id/u,
+    );
+    assert.match(
+      reviewSource,
+      /payload\.playbookVersionId = selectedPlaybook\.value\.currentVersion\.id/u,
+    );
+    assert.match(reviewSource, /保存后冻结/u);
+    assert.doesNotMatch(reviewSource, /isPlaybookTraining/u);
   });
 
-  it("prevents a specialist blind review from rebinding to a newer version", () => {
-    assert.match(
-      reviewSource,
-      /props\.session\.trainingConfig \?\? \{ mode: "free" \}/u,
-    );
-    assert.match(
-      reviewSource,
-      /payload\.playbookId = trainingConfig\.value\.playbookId/u,
-    );
-    assert.match(
-      reviewSource,
-      /payload\.playbookVersionId = trainingConfig\.value\.playbookVersionId/u,
-    );
-    assert.match(reviewSource, /盲评只能使用本局版本，不能改绑/u);
-    assert.match(
-      reviewSource,
-      /v-if="!isPlaybookTraining && !selectedPlaybook"/u,
-    );
-  });
-
-  it("labels specialist sessions in both history list and detail", () => {
-    assert.match(historyListSource, /item\?\.trainingConfig/u);
-    assert.match(historyListSource, /专项 · \{\{ formatTrainingLabel\(item\) \}\}/u);
-    assert.match(
-      historyDetailSource,
-      /item\.trainingConfig\?\.mode === 'playbook'/u,
-    );
-    assert.match(historyDetailSource, /item\.trainingConfig\.playbookName/u);
-    assert.match(historyDetailSource, /playbookVersionNumber/u);
+  it("does not label retired specialist sessions in history", () => {
+    assert.doesNotMatch(historyListSource, /formatTrainingLabel/u);
+    assert.doesNotMatch(historyListSource, /专项/u);
+    assert.doesNotMatch(historyDetailSource, /专项战法/u);
+    assert.doesNotMatch(historyDetailSource, /trainingConfig\?\.mode/u);
   });
 });
