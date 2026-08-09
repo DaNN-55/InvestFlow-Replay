@@ -15,20 +15,14 @@ from .tdx_market_cache import (
 )
 
 
-def _load_searchable_instruments() -> list[dict[str, Any]]:
-    return []
-
-
-class ReplayService:
+class ReplayMarketSupply:
     def __init__(
         self,
         store: Any | None = None,
-        runs_root: Any | None = None,
         minute_replay_provider: Any | None = None,
         market_data_provider: Any | None = None,
     ) -> None:
-        del runs_root
-        self.store = store or DuckDbBarStore(source_db_path=MARKET_DB_PATH)
+        self.daily_store = store or DuckDbBarStore(source_db_path=MARKET_DB_PATH)
         self.minute_provider = minute_replay_provider or TdxMinuteReplayProvider(
             MINUTE_REPLAY_DB_PATH
         )
@@ -52,15 +46,12 @@ class ReplayService:
             return {"sourceDataVersion": None, "items": [], "initialization": initialization}
         try:
             return {
-                "sourceDataVersion": self.store.source_data_version(),
-                "items": self.store.list_replay_benchmarks(),
+                "sourceDataVersion": self.daily_store.source_data_version(),
+                "items": self.daily_store.list_replay_benchmarks(),
                 "initialization": initialization,
             }
         except (FileNotFoundError, ValueError) as exc:
             raise QuantWorkbenchError(str(exc), 409) from exc
-
-    def get_replay_benchmarks(self) -> dict[str, Any]:
-        return self.benchmarks()
 
     @staticmethod
     def _file_size(path: Path) -> int:
@@ -116,8 +107,8 @@ class ReplayService:
         self,
         game_length: int,
         benchmark_code: str,
-        seed: int | None,
-        interval: str,
+        seed: int | None = None,
+        interval: str = "1d",
         *,
         excluded_ts_codes: tuple[str, ...] = (),
         recent_window_end_dates: tuple[date, ...] = (),
@@ -146,7 +137,7 @@ class ReplayService:
             raise QuantWorkbenchError("benchmarkCode 不能为空", 400)
         try:
             if normalized_interval == "1d":
-                return self.store.create_replay_scenario(
+                return self.daily_store.create_replay_scenario(
                     game_length=int(game_length),
                     benchmark_code=benchmark,
                     seed=seed,
@@ -156,7 +147,7 @@ class ReplayService:
             last_error: Exception | None = None
             for attempt in range(6):
                 candidate_seed = None if seed is None else int(seed) + attempt
-                daily = self.store.create_replay_scenario(
+                daily = self.daily_store.create_replay_scenario(
                     game_length=20,
                     benchmark_code=benchmark,
                     seed=candidate_seed,
@@ -189,34 +180,13 @@ class ReplayService:
         except ValueError as exc:
             raise QuantWorkbenchError(str(exc), 404) from exc
 
-    def create_replay_scenario(
-        self,
-        game_length: int,
-        benchmark_code: str,
-        seed: int | None = None,
-        interval: str = "1d",
-        excluded_ts_codes: tuple[str, ...] = (),
-        recent_window_end_dates: tuple[date, ...] = (),
-    ) -> dict[str, Any]:
-        return self.create_scenario(
-            game_length,
-            benchmark_code,
-            seed,
-            interval,
-            excluded_ts_codes=excluded_ts_codes,
-            recent_window_end_dates=recent_window_end_dates,
-        )
-
     def search_instruments(self, keyword: str, limit: int = 8) -> dict[str, Any]:
         self.market_provider.ensure_ready()
         text = str(keyword or "").strip().lower()
-        cached_names = self.store.source_instrument_name_map()
+        cached_names = self.daily_store.source_instrument_name_map()
         items = [
             {"orderBookId": code, "name": name}
             for code, name in cached_names.items()
             if not text or text in str(code).lower() or text in str(name).lower()
         ]
         return {"items": items[: max(1, min(int(limit), 50))]}
-
-
-EngineService = ReplayService

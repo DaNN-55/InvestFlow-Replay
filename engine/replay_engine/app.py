@@ -7,7 +7,7 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 from .errors import QuantWorkbenchError
-from .service import ReplayService
+from .service import ReplayMarketSupply
 
 
 class ReplayScenarioRequest(BaseModel):
@@ -24,7 +24,7 @@ class ReplayStockPrefetchRequest(BaseModel):
     targetReserve: int = Field(default=12, ge=1, le=24)
 
 
-service = ReplayService()
+market_supply = ReplayMarketSupply()
 app = FastAPI(title="InvestFlow Replay Engine")
 
 
@@ -40,17 +40,17 @@ def health():
 
 @app.get("/internal/replay/benchmarks")
 def benchmarks(retry: bool = False):
-    return service.benchmarks(retry_failed=retry)
+    return market_supply.benchmarks(retry_failed=retry)
 
 
 @app.get("/internal/replay/cache/status")
 def cache_status():
-    return service.cache_status()
+    return market_supply.cache_status()
 
 
 @app.post("/internal/replay/scenarios")
 def create_scenario(request: ReplayScenarioRequest):
-    return service.create_scenario(
+    return market_supply.create_scenario(
         request.gameLength,
         request.benchmarkCode,
         request.seed,
@@ -62,7 +62,7 @@ def create_scenario(request: ReplayScenarioRequest):
 
 @app.post("/internal/replay/cache/stocks/prefetch")
 def prefetch_stocks(request: ReplayStockPrefetchRequest):
-    return service.prefetch_replay_stocks(
+    return market_supply.prefetch_replay_stocks(
         tuple(request.excludedTsCodes),
         target_reserve=request.targetReserve,
     )

@@ -3,12 +3,11 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 import pandas as pd
 
 from replay_engine.data_store import DuckDbBarStore
-from replay_engine.service import EngineService
+from replay_engine.service import ReplayMarketSupply
 from replay_engine.tdx_market_cache import TdxMarketCache
 
 
@@ -36,6 +35,10 @@ class RecordingMarketProvider:
             "message": "ready",
             "error": "",
         }
+
+    def ensure_unseen_stock_available(self, excluded_ts_codes, *, target_count):
+        self.prefetch_call = (excluded_ts_codes, target_count)
+        return True
 
 
 class InitializingMarketProvider(RecordingMarketProvider):
@@ -96,7 +99,64 @@ class RecordingMinuteProvider:
         return {"interval": "hybrid", "sourceDataVersion": "minute-cache"}
 
 
+class CacheStatusStub:
+    def __init__(self, path: Path, statistics: dict):
+        self.path = path
+        self._statistics = statistics
+
+    def statistics(self):
+        return self._statistics
+
+
+class CacheStatusMarketProvider(RecordingMarketProvider):
+    def __init__(self, path: Path):
+        super().__init__()
+        self.cache = CacheStatusStub(
+            path,
+            {"instrumentCount": 12, "lastSuccessAt": "2026-08-09T10:00:00"},
+        )
+
+    def replay_cache_status(self):
+        return {"state": "ready", "ready": True, "message": "ready"}
+
+    def pool_status(self):
+        return {"state": "running", "completed": 2, "total": 4}
+
+
+class CacheStatusMinuteProvider(RecordingMinuteProvider):
+    def __init__(self, path: Path):
+        super().__init__()
+        self.store = CacheStatusStub(path, {"fiveMinuteBarCount": 2400})
+
+
 class TdxRuntimeIntegrationTest(unittest.TestCase):
+    def test_supply_owns_cache_status_and_stock_reserve(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            market_path = root / "market.duckdb"
+            minute_path = root / "minute.duckdb"
+            market_path.write_bytes(b"market")
+            minute_path.write_bytes(b"minute-bars")
+            provider = CacheStatusMarketProvider(market_path)
+            supply = ReplayMarketSupply(
+                store=ReplayStoreStub(),
+                market_data_provider=provider,
+                minute_replay_provider=CacheStatusMinuteProvider(minute_path),
+            )
+
+            status = supply.cache_status()
+            reserve = supply.prefetch_replay_stocks(
+                ("600000.SH",), target_reserve=8
+            )
+
+            self.assertEqual(status["state"], "running")
+            self.assertEqual(status["activeTask"], status["stockPool"])
+            self.assertEqual(status["storage"]["marketBytes"], 6)
+            self.assertEqual(status["storage"]["minuteBytes"], 11)
+            self.assertEqual(status["lastSuccessAt"], "2026-08-09T10:00:00")
+            self.assertEqual(reserve, {"available": True, "targetReserve": 8})
+            self.assertEqual(provider.prefetch_call, (("600000.SH",), 8))
+
     def test_local_replay_cache_reports_tdx_source_mode(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "market.duckdb"
@@ -114,14 +174,13 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
     def test_replay_entry_points_prepare_tdx_cache_before_reading(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             provider = RecordingMarketProvider()
-            service = EngineService(
+            supply = ReplayMarketSupply(
                 store=ReplayStoreStub(),
-                runs_root=Path(directory) / "runs",
                 market_data_provider=provider,
             )
 
-            benchmarks = service.get_replay_benchmarks()
-            scenario = service.create_replay_scenario(
+            benchmarks = supply.benchmarks()
+            scenario = supply.create_scenario(
                 game_length=20,
                 benchmark_code="000001.SH",
                 seed=1,
@@ -136,13 +195,12 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
     def test_replay_benchmarks_returns_initialization_progress_without_blocking(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             provider = InitializingMarketProvider()
-            service = EngineService(
+            supply = ReplayMarketSupply(
                 store=ReplayStoreStub(),
-                runs_root=Path(directory) / "runs",
                 market_data_provider=provider,
             )
 
-            benchmarks = service.get_replay_benchmarks()
+            benchmarks = supply.benchmarks()
 
             self.assertEqual(benchmarks["items"], [])
             self.assertEqual(benchmarks["initialization"]["completed"], 3)
@@ -154,14 +212,13 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
             provider = RecordingMarketProvider()
             provider.cache = DailyHistoryCacheStub()
             minute_provider = RecordingMinuteProvider()
-            service = EngineService(
+            supply = ReplayMarketSupply(
                 store=ReplayStoreStub(),
-                runs_root=Path(directory) / "runs",
                 market_data_provider=provider,
                 minute_replay_provider=minute_provider,
             )
 
-            scenario = service.create_replay_scenario(
+            scenario = supply.create_scenario(
                 game_length=20,
                 benchmark_code="000001.SH",
                 seed=1,
@@ -176,14 +233,12 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
     def test_instrument_search_uses_tdx_cached_names(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             provider = RecordingMarketProvider()
-            service = EngineService(
+            supply = ReplayMarketSupply(
                 store=ReplayStoreStub(),
-                runs_root=Path(directory) / "runs",
                 market_data_provider=provider,
             )
 
-            with patch("replay_engine.service._load_searchable_instruments", return_value=[]):
-                result = service.search_instruments("浦发", limit=8)
+            result = supply.search_instruments("浦发", limit=8)
 
             self.assertEqual(result["items"][0]["name"], "浦发银行")
             self.assertEqual(result["items"][0]["orderBookId"], "600000.XSHG")
