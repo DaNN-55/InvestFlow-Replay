@@ -9,7 +9,7 @@ import {
   TrendingUp,
   Undo2,
 } from "lucide-vue-next";
-import { computed, shallowRef, toRef } from "vue";
+import { computed, shallowRef } from "vue";
 
 import { useReplayKlineChart } from "../composables/useReplayKlineChart.js";
 import { REPLAY_DRAWING_TOOLS } from "../utils/replayKlineDrawings.js";
@@ -33,14 +33,6 @@ const props = defineProps({
 });
 
 const host = shallowRef(null);
-const visibleRange = shallowRef({
-  startLabel: "",
-  endLabel: "",
-  visibleCount: 0,
-  total: 0,
-});
-const chartError = shallowRef("");
-
 const subPaneCount = computed(() =>
   (props.indicators?.builtins?.panes?.length ?? 0) +
   (props.indicators?.custom?.filter(
@@ -56,32 +48,21 @@ const drawingIcons = Object.freeze({
   fibonacci: ChartNoAxesCombined,
 });
 
-const {
-  activeDrawingTool,
-  selectedDrawingId,
-  hasDrawings,
-  startDrawing,
-  undoDrawing,
-  deleteSelectedDrawing,
-  clearDrawings,
-} = useReplayKlineChart({
+const chartModel = computed(() => ({
+  bars: props.bars,
+  trades: props.trades,
+  indicators: props.indicators,
+}));
+const { state, drawing, commands } = useReplayKlineChart({
   host,
-  bars: toRef(props, "bars"),
-  trades: toRef(props, "trades"),
-  indicators: toRef(props, "indicators"),
-  onVisibleRangeChange: (range) => {
-    visibleRange.value = range;
-  },
-  onError: (message) => {
-    chartError.value = message;
-  },
+  model: chartModel,
 });
 </script>
 
 <template>
   <div class="replay-kline-chart">
-    <p v-if="chartError" class="replay-kline-chart__error" role="alert">
-      {{ chartError }}
+    <p v-if="state.error" class="replay-kline-chart__error" role="alert">
+      {{ state.error }}
     </p>
     <div class="replay-kline-chart__drawing-toolbar" role="toolbar" aria-label="K线画图工具">
       <button
@@ -90,10 +71,10 @@ const {
         type="button"
         :aria-label="tool.label"
         :title="tool.label"
-        :aria-pressed="activeDrawingTool === tool.id"
-        :class="{ 'replay-kline-chart__drawing-button--active': activeDrawingTool === tool.id }"
+        :aria-pressed="drawing.activeTool === tool.id"
+        :class="{ 'replay-kline-chart__drawing-button--active': drawing.activeTool === tool.id }"
         class="replay-kline-chart__drawing-button"
-        @click="startDrawing(tool.id)"
+        @click="commands.startDrawing(tool.id)"
       >
         <component :is="drawingIcons[tool.id]" :size="15" />
       </button>
@@ -103,8 +84,8 @@ const {
         class="replay-kline-chart__drawing-button"
         aria-label="撤销"
         title="撤销最后一笔画图"
-        :disabled="!hasDrawings"
-        @click="undoDrawing"
+        :disabled="!drawing.hasDrawings"
+        @click="commands.undoDrawing"
       >
         <Undo2 :size="15" />
       </button>
@@ -113,8 +94,8 @@ const {
         class="replay-kline-chart__drawing-button"
         aria-label="删除选中"
         title="删除选中的画图"
-        :disabled="!selectedDrawingId"
-        @click="deleteSelectedDrawing"
+        :disabled="!drawing.selectedId"
+        @click="commands.deleteSelectedDrawing"
       >
         <Trash2 :size="15" />
       </button>
@@ -123,8 +104,8 @@ const {
         class="replay-kline-chart__drawing-button"
         aria-label="清空画图"
         title="清空全部画图"
-        :disabled="!hasDrawings"
-        @click="clearDrawings"
+        :disabled="!drawing.hasDrawings"
+        @click="commands.clearDrawings"
       >
         <Eraser :size="15" />
       </button>
@@ -136,11 +117,11 @@ const {
       data-testid="replay-klinecharts-host"
     />
     <div class="replay-kline-chart__status" aria-live="polite">
-      <span v-if="visibleRange.startLabel && visibleRange.endLabel">
-        可视范围 {{ visibleRange.startLabel }} 至 {{ visibleRange.endLabel }}
+      <span v-if="state.visibleRange.startLabel && state.visibleRange.endLabel">
+        可视范围 {{ state.visibleRange.startLabel }} 至 {{ state.visibleRange.endLabel }}
       </span>
       <span>
-        可视 {{ visibleRange.visibleCount }} / 共 {{ visibleRange.total }} 根
+        可视 {{ state.visibleRange.visibleCount }} / 共 {{ state.visibleRange.total }} 根
       </span>
       <span>Ctrl/⌘ + 滚轮缩放 · 拖拽平移</span>
     </div>

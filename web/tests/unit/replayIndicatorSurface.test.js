@@ -54,16 +54,23 @@ describe("replay indicator frontend surface", () => {
     assert.match(lifecycleSource, /ResizeObserver/u);
     assert.match(lifecycleSource, /MutationObserver/u);
     assert.match(lifecycleSource, /OnVisibleRangeChange/u);
-    assert.match(lifecycleSource, /OnCrosshairChange/u);
     assert.match(lifecycleSource, /scrollToRealTime/u);
     assert.match(lifecycleSource, /addEventListener\("wheel"/u);
     assert.match(candlestickSource, /Ctrl\/⌘ \+ 滚轮缩放/u);
     assert.match(candlestickSource, /shallowRef/u);
     assert.match(candlestickSource, /replay-klinecharts-host/u);
+    assert.match(candlestickSource, /const \{ state, drawing, commands \}/u);
+    assert.match(lifecycleSource, /return \{[\s\S]*?state,[\s\S]*?drawing,[\s\S]*?commands:/u);
+  });
+
+  it("updates stable indicators in place instead of rebuilding them on every bar", () => {
+    assert.match(lifecycleSource, /indicatorStructureKey/u);
+    assert.match(lifecycleSource, /overrideIndicator/u);
+    assert.match(lifecycleSource, /tradeOverlayKey/u);
   });
 
   it("uses native built-ins, VOL and isolated custom indicator errors", () => {
-    assert.match(lifecycleSource, /createIndicator\("VOL"/u);
+    assert.match(lifecycleSource, /createIndicator\(createReplayBuiltinIndicatorConfig\("VOL"\)/u);
     assert.match(indicatorSource, /MA: \[5, 10, 30, 60\]/u);
     assert.match(indicatorSource, /BOLL: \[20, 2\]/u);
     assert.match(indicatorSource, /MACD: \[12, 26, 9\]/u);

@@ -6,6 +6,7 @@ import {
   registerOverlay,
 } from "klinecharts";
 import {
+  computed,
   nextTick,
   onActivated,
   onBeforeUnmount,
@@ -85,42 +86,57 @@ function resolveChartStyles(mainIndicatorLegends) {
 
 export function useReplayKlineChart({
   host,
-  bars,
-  trades,
-  indicators,
-  onVisibleRangeChange,
-  onCrosshairChange,
-  onError,
+  model,
 }) {
   const chart = shallowRef(null);
   const activeDrawingTool = shallowRef("");
   const selectedDrawingId = shallowRef("");
   const hasDrawings = shallowRef(false);
+  const visibleRange = shallowRef({
+    startLabel: "",
+    endLabel: "",
+    visibleCount: 0,
+    total: 0,
+  });
+  const error = shallowRef("");
+  const bars = computed(() => model.value?.bars ?? []);
+  const trades = computed(() => model.value?.trades ?? []);
+  const indicators = computed(() => model.value?.indicators ?? {
+    builtins: { main: [], panes: [] },
+    custom: [],
+  });
   let appliedData = [];
   let labelByTimestamp = new Map();
   let resizeObserver = null;
   let themeObserver = null;
   let indicatorInstances = [];
+  let indicatorStructureKey = "";
   let overlayIds = [];
+  let tradeOverlayKey = "";
   let drawingIds = [];
   let pendingDrawingId = "";
 
-  function reportError(error) {
-    onError?.(error instanceof Error ? error.message : String(error));
+  function reportError(cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    chartError(message);
+  }
+
+  function chartError(message) {
+    error.value = message;
   }
 
   function emitVisibleRange(range) {
     const total = appliedData.length;
     const start = Math.max(0, Math.floor(range?.from ?? 0));
     const endExclusive = Math.min(total, Math.ceil(range?.to ?? total));
-    onVisibleRangeChange?.({
+    visibleRange.value = {
       start,
       endExclusive,
       visibleCount: Math.max(0, endExclusive - start),
       total,
       startLabel: labelByTimestamp.get(appliedData[start]?.timestamp) ?? "",
       endLabel: labelByTimestamp.get(appliedData[endExclusive - 1]?.timestamp) ?? "",
-    });
+    };
   }
 
   function removeIndicators() {
@@ -132,6 +148,7 @@ export function useReplayKlineChart({
       current.removeIndicator(instance.paneId, instance.name);
     }
     indicatorInstances = [];
+    indicatorStructureKey = "";
   }
 
   function createIndicator(name, placement, paneId) {
@@ -171,8 +188,29 @@ export function useReplayKlineChart({
     if (!current) {
       return;
     }
-    removeIndicators();
     const model = indicators.value ?? { builtins: {}, custom: [] };
+    const nextStructureKey = JSON.stringify({
+      main: model.builtins?.main ?? [],
+      panes: model.builtins?.panes ?? [],
+      custom: (model.custom ?? []).filter((item) => !item.error && item.series?.length)
+        .map((item) => [item.id, item.placement]),
+    });
+    if (indicatorStructureKey === nextStructureKey) {
+      for (const custom of model.custom ?? []) {
+        const instance = indicatorInstances.find((item) => item.customId === custom.id);
+        if (!instance || custom.error || !custom.series?.length) continue;
+        try {
+          const template = createReplayCustomIndicatorTemplate(custom, appliedData.length);
+          registerIndicator(template);
+          current.overrideIndicator(template, instance.paneId);
+        } catch (error) {
+          reportError(error);
+        }
+      }
+      return;
+    }
+    removeIndicators();
+    indicatorStructureKey = nextStructureKey;
     for (const name of model.builtins?.main ?? []) {
       createIndicator(name, "main", CANDLE_PANE_ID);
     }
@@ -194,7 +232,7 @@ export function useReplayKlineChart({
             : { id: `replay-custom-${custom.id}`, height: 126, minHeight: 80 },
         );
         if (paneId) {
-          indicatorInstances.push({ paneId, name: replayCustomIndicatorName(custom.id) });
+          indicatorInstances.push({ paneId, name: replayCustomIndicatorName(custom.id), customId: custom.id });
         }
       } catch (error) {
         reportError(error);
@@ -207,11 +245,14 @@ export function useReplayKlineChart({
     if (!current) {
       return;
     }
+    const descriptions = adaptReplayTrades(trades.value, appliedData);
+    const nextTradeOverlayKey = JSON.stringify(descriptions);
+    if (nextTradeOverlayKey === tradeOverlayKey) return;
+    tradeOverlayKey = nextTradeOverlayKey;
     for (const id of overlayIds) {
       current.removeOverlay(id);
     }
     overlayIds = [];
-    const descriptions = adaptReplayTrades(trades.value, appliedData);
     for (const description of descriptions) {
       const id = current.createOverlay({
         name: TRADE_OVERLAY_NAME,
@@ -304,6 +345,10 @@ export function useReplayKlineChart({
     }
     chart.value.removeOverlay({ groupId: REPLAY_DRAWING_GROUP_ID });
     drawingIds = [];
+    indicatorInstances = [];
+    indicatorStructureKey = "";
+    overlayIds = [];
+    tradeOverlayKey = "";
     pendingDrawingId = "";
     activeDrawingTool.value = "";
     selectedDrawingId.value = "";
@@ -348,7 +393,7 @@ export function useReplayKlineChart({
       syncIndicators();
       syncTrades();
       emitVisibleRange(current.getVisibleRange());
-      onError?.("");
+      chartError("");
     } catch (error) {
       reportError(error);
     }
@@ -386,16 +431,13 @@ export function useReplayKlineChart({
       return;
     }
     chart.value.setPaneOptions(REPLAY_CANDLE_PANE_OPTIONS);
-    chart.value.createIndicator("VOL", false, {
+    chart.value.createIndicator(createReplayBuiltinIndicatorConfig("VOL"), false, {
       id: "replay-volume",
       height: 92,
       minHeight: 72,
       dragEnabled: false,
     });
     chart.value.subscribeAction(ActionType.OnVisibleRangeChange, emitVisibleRange);
-    if (onCrosshairChange) {
-      chart.value.subscribeAction(ActionType.OnCrosshairChange, onCrosshairChange);
-    }
     resizeObserver = new ResizeObserver(() => chart.value?.resize());
     resizeObserver.observe(host.value);
     themeObserver = new MutationObserver(() =>
@@ -418,9 +460,6 @@ export function useReplayKlineChart({
     themeObserver?.disconnect();
     if (chart.value) {
       chart.value.unsubscribeAction(ActionType.OnVisibleRangeChange, emitVisibleRange);
-      if (onCrosshairChange) {
-        chart.value.unsubscribeAction(ActionType.OnCrosshairChange, onCrosshairChange);
-      }
       dispose(chart.value);
       chart.value = null;
     }
@@ -439,17 +478,24 @@ export function useReplayKlineChart({
   watch(trades, syncTrades);
   watch(indicators, syncIndicators, { deep: true });
 
+  const state = computed(() => ({
+    visibleRange: visibleRange.value,
+    error: error.value,
+  }));
+  const drawing = computed(() => ({
+    activeTool: activeDrawingTool.value,
+    selectedId: selectedDrawingId.value,
+    hasDrawings: hasDrawings.value,
+  }));
+
   return {
-    chart,
-    activeDrawingTool,
-    selectedDrawingId,
-    hasDrawings,
-    applyBars,
-    syncIndicators,
-    startDrawing,
-    undoDrawing,
-    deleteSelectedDrawing,
-    clearDrawings,
-    dispose: unmountChart,
+    state,
+    drawing,
+    commands: {
+      startDrawing,
+      undoDrawing,
+      deleteSelectedDrawing,
+      clearDrawings,
+    },
   };
 }
