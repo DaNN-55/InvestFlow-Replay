@@ -32,8 +32,8 @@ describe("replay lifecycle", () => {
       hybridSession({ revealedFutureBars: 3, revision: 7 }),
     ];
     const lifecycle = createReplayLifecycle({
-      database: {
-        advanceReplaySession(command) {
+      store: {
+        advanceSession(command) {
           calls.push(command);
           return { session: sessions.shift(), advanced: true, idempotent: false };
         },
@@ -63,8 +63,8 @@ describe("replay lifecycle", () => {
   it("does not replay internal steps for an idempotent day command", () => {
     const calls = [];
     const lifecycle = createReplayLifecycle({
-      database: {
-        advanceReplaySession(command) {
+      store: {
+        advanceSession(command) {
           calls.push(command);
           return {
             session: hybridSession({ revealedFutureBars: 1, revision: 5 }),
@@ -87,18 +87,18 @@ describe("replay lifecycle", () => {
 
   it("keeps order and finish timestamps behind the lifecycle seam", () => {
     const calls = [];
-    const database = {
-      submitReplayOrder(command) {
+    const store = {
+      submitOrder(command) {
         calls.push(["order", command]);
         return { created: true };
       },
-      finishReplaySession(command) {
+      finishSession(command) {
         calls.push(["finish", command]);
         return { finished: true };
       },
     };
     const lifecycle = createReplayLifecycle({
-      database,
+      store,
       now: () => "2026-08-09T00:00:00.000Z",
     });
 
@@ -124,13 +124,13 @@ describe("replay lifecycle", () => {
   it("freezes linked playbook identity inside blind reviews", () => {
     let saved;
     const lifecycle = createReplayLifecycle({
-      database: {
-        getReplaySession: () => ({ id: "session-1" }),
-        getReplayPlaybookVersionLink: () => ({
+      store: {
+        getSession: () => ({ id: "session-1" }),
+        getPlaybookVersionLink: () => ({
           playbookName: "龙头战法",
           versionNumber: 3,
         }),
-        saveReplayBlindReview(command) {
+        saveBlindReview(command) {
           saved = command;
           return { saved: true };
         },
@@ -153,16 +153,16 @@ describe("replay lifecycle", () => {
 
   it("requires playbook fit only when the blind review linked a version", () => {
     const saved = [];
-    const database = {
-      getReplaySession: () => ({
+    const store = {
+      getSession: () => ({
         review: { blindReview: { playbookId: "p1", playbookVersionId: "v1" } },
       }),
-      saveReplayPostReview(command) {
+      savePostReview(command) {
         saved.push(command);
         return { saved: true };
       },
     };
-    const lifecycle = createReplayLifecycle({ database });
+    const lifecycle = createReplayLifecycle({ store });
     const normalized = {
       actionId: "post-1",
       expectedRevision: 5,
@@ -182,9 +182,9 @@ describe("replay lifecycle", () => {
   it("removes inapplicable playbook fields from free post reviews", () => {
     let saved;
     const lifecycle = createReplayLifecycle({
-      database: {
-        getReplaySession: () => ({ review: { blindReview: {} } }),
-        saveReplayPostReview(command) {
+      store: {
+        getSession: () => ({ review: { blindReview: {} } }),
+        savePostReview(command) {
           saved = command;
           return { saved: true };
         },

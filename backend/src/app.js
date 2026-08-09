@@ -33,6 +33,7 @@ import { createDatabase } from "./db.js";
 import { createMainlineRankingStore } from "./mainline-ranking-store.js";
 import { createEngineClient, EngineClientError } from "./engine-client.js";
 import { createReplayLifecycle } from "./replay-lifecycle.js";
+import { createReplayLifecycleStore } from "./replay-lifecycle-store.js";
 import {
   applyRuntimeEnvironmentUpdates,
   buildRuntimeEnvironmentUpdates,
@@ -2961,7 +2962,10 @@ function buildPdfReportLines(run, metrics) {
 export function createApp(options = {}) {
   const clock = typeof options.clock === "function" ? options.clock : () => new Date();
   const database = createDatabase(options.dbPath);
-  const replayLifecycle = createReplayLifecycle({ database, now: isoNow });
+  const replayLifecycle = createReplayLifecycle({
+    store: createReplayLifecycleStore(database),
+    now: isoNow,
+  });
   const mainlineRankingStore = createMainlineRankingStore(options.rankingDbPath);
   const engine = createEngineClient(options.engineUrl);
   const workspace = createWorkspaceService(options.workspaceRoot);

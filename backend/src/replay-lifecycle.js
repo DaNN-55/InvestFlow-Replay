@@ -12,7 +12,7 @@ function lifecycleError(message, status = 400) {
 }
 
 export function createReplayLifecycle({
-  database,
+  store,
   now = () => new Date().toISOString(),
 }) {
   function submitOrder({
@@ -22,7 +22,7 @@ export function createReplayLifecycle({
     order,
     requestPayload,
   }) {
-    return database.submitReplayOrder({
+    return store.submitOrder({
       sessionId,
       actionId,
       expectedRevision,
@@ -33,7 +33,7 @@ export function createReplayLifecycle({
   }
 
   function advanceOnce({ sessionId, actionId, expectedRevision, mode, step }) {
-    return database.advanceReplaySession({
+    return store.advanceSession({
       sessionId,
       actionId: `${actionId}:${step}`,
       expectedRevision,
@@ -99,7 +99,7 @@ export function createReplayLifecycle({
     completionReason = "early",
     requestPayload,
   }) {
-    return database.finishReplaySession({
+    return store.finishSession({
       sessionId,
       actionId,
       expectedRevision,
@@ -110,7 +110,7 @@ export function createReplayLifecycle({
   }
 
   function requireSession(sessionId) {
-    const session = database.getReplaySession(sessionId);
+    const session = store.getSession(sessionId);
     if (!session) {
       throw lifecycleError("找不到行情演练会话", 404);
     }
@@ -121,7 +121,7 @@ export function createReplayLifecycle({
     if (!review.playbookId) {
       return;
     }
-    const link = database.getReplayPlaybookVersionLink(
+    const link = store.getPlaybookVersionLink(
       review.playbookId,
       review.playbookVersionId,
     );
@@ -152,7 +152,7 @@ export function createReplayLifecycle({
   function saveBlindReview({ sessionId, normalized }) {
     requireSession(sessionId);
     linkBlindReviewToPlaybook(normalized.review, normalized.requestPayload);
-    return database.saveReplayBlindReview({
+    return store.saveBlindReview({
       sessionId,
       actionId: normalized.actionId,
       expectedRevision: normalized.expectedRevision,
@@ -167,7 +167,7 @@ export function createReplayLifecycle({
     applyPostReviewRules(session, normalized.review, normalized.requestPayload, {
       required: true,
     });
-    return database.saveReplayPostReview({
+    return store.savePostReview({
       sessionId,
       actionId: normalized.actionId,
       expectedRevision: normalized.expectedRevision,
@@ -178,7 +178,7 @@ export function createReplayLifecycle({
   }
 
   function saveReviewDraft({ sessionId, stage, normalized }) {
-    return database.saveReplayReviewDraft({
+    return store.saveReviewDraft({
       sessionId,
       stage,
       draft: normalized.draft,
@@ -188,7 +188,7 @@ export function createReplayLifecycle({
   }
 
   function deleteReviewDraft({ sessionId, stage, expectedRevision }) {
-    return database.deleteReplayReviewDraft({
+    return store.deleteReviewDraft({
       sessionId,
       stage,
       expectedRevision,
@@ -205,7 +205,7 @@ export function createReplayLifecycle({
         required: true,
       });
     }
-    return database.appendReplayReviewCorrection({
+    return store.appendReviewCorrection({
       sessionId,
       stage,
       actionId: normalized.actionId,
@@ -232,7 +232,7 @@ export function createReplayLifecycle({
       });
     }
     normalized.requestPayload.review = normalized.review;
-    return database.updateReplayReviewCorrection({
+    return store.updateReviewCorrection({
       sessionId,
       correctionId,
       stage,
@@ -252,7 +252,7 @@ export function createReplayLifecycle({
     actionId,
     expectedRevision,
   }) {
-    return database.deleteReplayReviewCorrection({
+    return store.deleteReviewCorrection({
       sessionId,
       correctionId,
       stage,
@@ -263,7 +263,7 @@ export function createReplayLifecycle({
   }
 
   function revealSession({ sessionId, actionId, expectedRevision }) {
-    return database.revealReplaySession({
+    return store.revealSession({
       sessionId,
       actionId,
       expectedRevision,
