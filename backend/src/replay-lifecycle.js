@@ -229,8 +229,17 @@ export function createReplayLifecycle({
     };
   }
 
+  function getEffectiveBlindReview(session) {
+    const latestBlindCorrection = (session.corrections ?? [])
+      .filter((correction) => correction.stage === "blind")
+      .at(-1);
+    return latestBlindCorrection?.fullReviewSnapshot ??
+      session.review?.blindReview ??
+      null;
+  }
+
   function applyPostReviewRules(session, review, requestPayload, { required }) {
-    const blindReview = session.review?.blindReview;
+    const blindReview = getEffectiveBlindReview(session);
     const requiresPlaybookFit =
       Boolean(String(blindReview?.playbookId ?? "").trim()) &&
       Boolean(String(blindReview?.playbookVersionId ?? "").trim());

@@ -120,6 +120,9 @@ describe("replay playbook frontend surface", () => {
     );
     assert.doesNotMatch(reviewSource, /payload\.playbookVersionNumber/u);
     assert.match(reviewSource, /参考战法 · v/u);
+    assert.match(reviewSource, /战法复核/u);
+    assert.match(reviewSource, /战法调整建议/u);
+    assert.match(reviewSource, /effectivePostReview\.strategyAdjustment/u);
     assert.match(reviewSource, /const linkedVersionReady = computed/u);
     assert.match(reviewSource, /linkedVersionReady\.value/u);
     assert.match(reviewSource, /避免静默丢失关联/u);

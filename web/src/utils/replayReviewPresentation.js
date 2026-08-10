@@ -72,6 +72,11 @@ export function buildReplayBlindReviewPrefill(session = {}) {
     reasonTags: Array.isArray(latestBuy.decision.reasonTags)
       ? [...new Set(latestBuy.decision.reasonTags.map(String))].slice(0, 8)
       : [],
+    stopLossPrice:
+      Number(latestBuy.decision.stopLossPrice) > 0
+        ? Number(latestBuy.decision.stopLossPrice)
+        : null,
+    invalidationRule: latestBuy.decision.invalidationRule ?? null,
   };
 }
 

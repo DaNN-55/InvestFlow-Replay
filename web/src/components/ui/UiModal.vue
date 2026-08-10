@@ -9,12 +9,13 @@ import {
 } from "reka-ui";
 import { X } from "lucide-vue-next";
 
-defineProps({
+const props = defineProps({
   open: { type: Boolean, default: false },
   title: { type: String, default: "" },
   description: { type: String, default: "" },
   busy: { type: Boolean, default: false },
   panelClass: { type: String, default: "" },
+  variant: { type: String, default: "dialog" },
 });
 
 const emit = defineEmits(["close"]);
@@ -28,14 +29,21 @@ function handleOpenUpdate(open) {
 <template>
   <DialogRoot :open="open" @update:open="handleOpenUpdate">
     <DialogPortal>
-      <DialogOverlay class="ui-modal__overlay">
+      <DialogOverlay
+        class="ui-modal__overlay"
+        :class="{ 'ui-modal__overlay--drawer': props.variant === 'drawer' }"
+      >
         <DialogContent
           as-child
           @escape-key-down="busy ? $event.preventDefault() : undefined"
           @interact-outside="busy ? $event.preventDefault() : undefined"
           @pointer-down-outside="busy ? $event.preventDefault() : undefined"
         >
-          <section class="ui-modal__panel" :class="panelClass" :data-busy="String(busy)">
+          <section
+            class="ui-modal__panel"
+            :class="[panelClass, { 'ui-modal__panel--drawer': props.variant === 'drawer' }]"
+            :data-busy="String(busy)"
+          >
             <header class="ui-modal__header">
               <div>
                 <DialogTitle as-child><h2>{{ title }}</h2></DialogTitle>
@@ -75,6 +83,23 @@ function handleOpenUpdate(open) {
   border-radius: 14px;
   background: var(--ql-panel);
   box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24);
+}
+
+.ui-modal__overlay--drawer {
+  place-items: stretch end;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.ui-modal__panel--drawer {
+  width: min(560px, 100vw);
+  max-height: 100vh;
+  min-height: 100vh;
+  border-block: 0;
+  border-right: 0;
+  border-radius: 14px 0 0 14px;
+  box-shadow: -18px 0 54px rgba(15, 23, 42, 0.18);
 }
 
 .ui-modal__header {

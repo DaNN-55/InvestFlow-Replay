@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, reactive, shallowRef, watch } from "vue";
 
 import { api } from "../services/api";
 import { buildStandaloneTradeRecordPayload } from "../utils/tradeRecordPresentation.js";
+import TradeRecordStrategyPicker from "./TradeRecordStrategyPicker.vue";
 import UiButton from "./ui/UiButton.vue";
 import UiDrawer from "./ui/UiDrawer.vue";
 import UiInput from "./ui/UiInput.vue";
@@ -39,6 +40,13 @@ const candidates = shallowRef([]);
 const candidatesOpen = shallowRef(false);
 const lookupLoading = shallowRef(false);
 const lookupError = shallowRef("");
+const playbooks = shallowRef([]);
+const playbooksLoading = shallowRef(false);
+const playbooksError = shallowRef("");
+const creatingPlaybook = shallowRef(false);
+const strategyError = shallowRef("");
+const strategyDraft = shallowRef(createEmptyStrategyDraft());
+const legacyStrategyAvailable = shallowRef(false);
 const isEditMode = computed(() => props.mode === "edit");
 const drawerTitle = computed(() => isEditMode.value ? "修改交易追踪" : "新建交易追踪");
 const drawerDescription = computed(() => isEditMode.value
@@ -46,6 +54,7 @@ const drawerDescription = computed(() => isEditMode.value
   : "不依赖市场扫描或个股诊断，先建一笔交易，再按实际发生逐笔记录。");
 let searchTimer = 0;
 let searchVersion = 0;
+let playbookRequestVersion = 0;
 let selectedQuery = "";
 
 function createEmptyForm() {
@@ -54,22 +63,38 @@ function createEmptyForm() {
     stockName: "",
     accountType: "simulated",
     tradeType: "system",
-    strategyName: "",
-    strategyVersion: "",
+  };
+}
+
+function createEmptyStrategyDraft() {
+  return {
+    mode: "none",
+    playbookId: "",
+    name: "",
+    version: "",
+    content: "",
+    changeSummary: "",
   };
 }
 
 function resetForm() {
   const initial = props.initialValues ?? {};
-  const strategy = initial.strategyProfile ?? {};
+  const strategy = isEditMode.value ? initial.strategyProfile ?? {} : {};
   Object.assign(form, createEmptyForm(), isEditMode.value ? {
     stockCode: String(initial.stockCode ?? ""),
     stockName: String(initial.stockName ?? ""),
     accountType: String(initial.accountType ?? "simulated"),
     tradeType: String(initial.tradeType ?? "system"),
-    strategyName: String(strategy.name ?? ""),
-    strategyVersion: String(strategy.version ?? ""),
   } : {});
+  strategyDraft.value = strategy?.name
+    ? {
+        ...createEmptyStrategyDraft(),
+        mode: "legacy",
+        name: String(strategy.name ?? ""),
+        version: String(strategy.version ?? ""),
+      }
+    : createEmptyStrategyDraft();
+  legacyStrategyAvailable.value = strategyDraft.value.mode === "legacy";
   selectedQuery = form.stockCode
     ? `${form.stockName ? `${form.stockName} ` : ""}${form.stockCode}`
     : "";
@@ -77,6 +102,34 @@ function resetForm() {
   candidates.value = [];
   candidatesOpen.value = false;
   lookupError.value = "";
+  strategyError.value = "";
+}
+
+async function loadPlaybooks() {
+  const requestVersion = ++playbookRequestVersion;
+  playbooksLoading.value = true;
+  playbooksError.value = "";
+  try {
+    const result = await api.listReplayPlaybooks();
+    if (requestVersion !== playbookRequestVersion) return;
+    playbooks.value = Array.isArray(result?.items) ? result.items : [];
+    const strategy = isEditMode.value ? props.initialValues?.strategyProfile ?? {} : {};
+    const matched = playbooks.value.find((item) => item.id === strategy.key);
+    if (matched) {
+      strategyDraft.value = {
+        ...createEmptyStrategyDraft(),
+        mode: "library",
+        playbookId: matched.id,
+      };
+    }
+  } catch (error) {
+    if (requestVersion === playbookRequestVersion) {
+      playbooks.value = [];
+      playbooksError.value = error?.message ?? "战法库加载失败";
+    }
+  } finally {
+    if (requestVersion === playbookRequestVersion) playbooksLoading.value = false;
+  }
 }
 
 function selectCandidate(item) {
@@ -98,18 +151,74 @@ function closeCandidates() {
   }, 120);
 }
 
-function submit() {
+function selectedPlaybookProfile() {
+  const selected = playbooks.value.find((item) => item.id === strategyDraft.value.playbookId);
+  if (!selected) return null;
+  const versionNumber = Number(selected.currentVersion?.versionNumber ?? 1);
+  const initialStrategy = isEditMode.value ? props.initialValues?.strategyProfile ?? {} : {};
+  const version = initialStrategy.key === selected.id && initialStrategy.version
+    ? String(initialStrategy.version)
+    : `v${versionNumber}`;
+  return {
+    key: selected.id,
+    name: selected.name,
+    version,
+  };
+}
+
+async function strategyProfileForSubmit() {
+  const draft = strategyDraft.value;
+  if (draft.mode === "none") return null;
+  if (draft.mode === "library") return selectedPlaybookProfile();
+  if (draft.mode === "legacy") {
+    return { key: "custom", name: draft.name, version: draft.version };
+  }
+  creatingPlaybook.value = true;
+  try {
+    const result = await api.createReplayPlaybook({
+      name: String(draft.name ?? "").trim(),
+      content: String(draft.content ?? "").trim(),
+      changeSummary: String(draft.changeSummary ?? "").trim(),
+    });
+    const created = result?.playbook;
+    return {
+      key: String(created?.id ?? ""),
+      name: String(created?.name ?? draft.name).trim(),
+      version: `v${Number(created?.currentVersion?.versionNumber ?? 1)}`,
+    };
+  } finally {
+    creatingPlaybook.value = false;
+  }
+}
+
+const strategySelectionReady = computed(() => {
+  const draft = strategyDraft.value;
+  if (draft.mode === "none") return true;
+  if (draft.mode === "library") return Boolean(selectedPlaybookProfile());
+  if (draft.mode === "legacy") return Boolean(String(draft.name ?? "").trim());
+  return Boolean(
+    String(draft.name ?? "").trim() &&
+    String(draft.changeSummary ?? "").trim() &&
+    String(draft.content ?? "").length <= 12000,
+  );
+});
+
+async function submit() {
   if (!form.stockCode.trim()) return;
+  strategyError.value = "";
+  let strategyProfile;
+  try {
+    strategyProfile = await strategyProfileForSubmit();
+  } catch (error) {
+    strategyError.value = error?.message ?? "战法创建失败";
+    return;
+  }
   const payload = buildStandaloneTradeRecordPayload({
     stockCode: form.stockCode,
     stockName: form.stockName,
     accountType: form.accountType,
     tradeType: form.tradeType,
-    strategyProfile: {
-      key: "custom",
-      name: form.strategyName,
-      version: form.strategyVersion,
-    },
+    strategyProfile,
   });
   if (isEditMode.value) {
     const { status: _status, ...updates } = payload;
@@ -129,7 +238,12 @@ function submit() {
 watch(
   () => props.open,
   (open) => {
-    if (open) resetForm();
+    if (open) {
+      resetForm();
+      loadPlaybooks();
+    } else {
+      playbookRequestVersion += 1;
+    }
   },
 );
 
@@ -232,22 +346,24 @@ onBeforeUnmount(() => {
         </label>
       </section>
 
-      <section>
-        <h3>战法（可选）</h3>
-        <label>
-          <span>战法名称</span>
-          <UiInput v-model="form.strategyName" type="text" placeholder="没有就先留空" :disabled="saving" />
-        </label>
-        <label>
-          <span>版本</span>
-          <UiInput v-model="form.strategyVersion" type="text" placeholder="如 v1" :disabled="saving" />
-        </label>
-      </section>
+      <TradeRecordStrategyPicker
+        v-model="strategyDraft"
+        :playbooks="playbooks"
+        :loading="playbooksLoading"
+        :error="playbooksError"
+        :disabled="saving || creatingPlaybook"
+        :allow-legacy="isEditMode && legacyStrategyAvailable"
+      />
 
       <p v-if="error" class="trade-record-create__error">{{ error }}</p>
+      <p v-if="strategyError" class="trade-record-create__error">{{ strategyError }}</p>
       <div class="trade-record-create__actions">
         <UiButton type="button" variant="secondary" :disabled="saving" @click="emit('close')">取消</UiButton>
-        <UiButton type="submit" :loading="saving" :disabled="saving || !/^\d{6}$/u.test(form.stockCode)">
+        <UiButton
+          type="submit"
+          :loading="saving || creatingPlaybook"
+          :disabled="saving || creatingPlaybook || !strategySelectionReady || !/^\d{6}$/u.test(form.stockCode)"
+        >
           {{ isEditMode ? "保存修改" : "创建追踪单" }}
         </UiButton>
       </div>

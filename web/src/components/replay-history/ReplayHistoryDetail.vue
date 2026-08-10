@@ -13,12 +13,13 @@ import {
   buildReplayScoreMetrics,
   buildReplayScoreWeightSnapshot,
   formatReplayScoreMetric,
-  isReplayPlaybookComplianceApplicable,
 } from "../../utils/replayScorePresentation.js";
 import {
+  buildReplayBlindReviewPrefill,
   formatReplayInvalidationRule,
   formatReplayReasonTags,
 } from "../../utils/replayReviewPresentation.js";
+import { getLatestReplayReviewSnapshot } from "../../utils/replayReviewCorrections.js";
 import ReplayReviewTimeline from "../replay/ReplayReviewTimeline.vue";
 import ReplayOrderDecisionSnapshot from "../replay/ReplayOrderDecisionSnapshot.vue";
 import UiButton from "../ui/UiButton.vue";
@@ -43,7 +44,50 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["open", "addCandidate", "retrain", "delete"]);
+const emit = defineEmits([
+  "open",
+  "addCandidate",
+  "retrain",
+  "delete",
+  "editCorrection",
+  "deleteCorrection",
+]);
+
+const latestBlindCorrection = computed(() =>
+  (props.item.corrections ?? []).filter((item) => item.stage === "blind").at(-1) ?? null,
+);
+const latestPostCorrection = computed(() =>
+  (props.item.corrections ?? []).filter((item) => item.stage === "post").at(-1) ?? null,
+);
+const effectiveBlindReview = computed(() =>
+  getLatestReplayReviewSnapshot({
+    stage: "blind",
+    originalReview: props.item.blindReview,
+    corrections: props.item.corrections,
+  }),
+);
+const displayedBlindReview = computed(() => {
+  if (!effectiveBlindReview.value) return null;
+  const decisionPrefill = buildReplayBlindReviewPrefill(props.item);
+  return {
+    ...effectiveBlindReview.value,
+    stopLossPrice:
+      effectiveBlindReview.value.stopLossPrice ??
+      decisionPrefill?.stopLossPrice ??
+      null,
+    invalidationRule:
+      effectiveBlindReview.value.invalidationRule ??
+      decisionPrefill?.invalidationRule ??
+      null,
+  };
+});
+const effectivePostReview = computed(() =>
+  getLatestReplayReviewSnapshot({
+    stage: "post",
+    originalReview: props.item.postReview,
+    corrections: props.item.corrections,
+  }),
+);
 
 const scoreDimensions = computed(() =>
   buildReplayHistoryScoreDimensions(props.item.scoreCard),
@@ -55,15 +99,17 @@ const scoreWeightSnapshot = computed(() =>
   buildReplayScoreWeightSnapshot(props.item.scoreCard),
 );
 const playbookFitApplicable = computed(
-  () => isReplayPlaybookComplianceApplicable(props.item),
+  () =>
+    Boolean(effectiveBlindReview.value?.playbookId) &&
+    Boolean(effectiveBlindReview.value?.playbookVersionId),
 );
 const linkedPlaybook = computed(
   () =>
-    Boolean(props.item.blindReview?.playbookId) &&
-    Boolean(props.item.blindReview?.playbookVersionId),
+    Boolean(effectiveBlindReview.value?.playbookId) &&
+    Boolean(effectiveBlindReview.value?.playbookVersionId),
 );
 const hasAdjustment = computed(() =>
-  Boolean(props.item.postReview?.strategyAdjustment?.trim()),
+  Boolean(effectivePostReview.value?.strategyAdjustment?.trim()),
 );
 const existingCandidate = computed(
   () =>
@@ -399,118 +445,122 @@ function isPositiveMetric(metric) {
       </p>
     </section>
 
-    <div class="replay-history-detail__reviews">
-      <details class="replay-history-detail__review-section" open>
-        <summary>
-          <h3>揭晓前整局确认</h3>
-          <span class="replay-history-detail__review-collapse--open" title="折叠">
-            <ChevronUp :size="17" />
-          </span>
-          <span class="replay-history-detail__review-collapse--closed" title="展开">
-            <ChevronDown :size="17" />
-          </span>
-        </summary>
-        <div class="replay-history-detail__review-body">
-        <dl v-if="item.blindReview" class="replay-history-detail__review">
+    <details class="replay-history-detail__reviews" open>
+      <summary class="replay-history-detail__reviews-summary">
         <div>
+          <h3>两阶段复盘</h3>
+          <p>揭晓前确认与揭晓后复盘共用一个展开区域。</p>
+        </div>
+        <ChevronDown class="replay-history-detail__reviews-chevron" :size="17" />
+      </summary>
+      <div class="replay-history-detail__reviews-grid">
+      <section class="replay-history-detail__review-section">
+        <h3>揭晓前整局确认</h3>
+        <div class="replay-history-detail__review-body">
+        <p v-if="latestBlindCorrection" class="replay-history-detail__effective-version">
+          当前有效版本 · 已修正至第 {{ latestBlindCorrection.revisionNumber }} 版
+        </p>
+        <dl v-if="displayedBlindReview" class="replay-history-detail__review">
+        <div class="replay-history-detail__review-field--compact">
           <dt>战法名称</dt>
-          <dd>{{ item.blindReview.strategyName || "未指定" }}</dd>
-          <small v-if="item.blindReview.playbookVersionNumber">
-            关联战法 · v{{ item.blindReview.playbookVersionNumber }}，已冻结
+          <dd>{{ displayedBlindReview.strategyName || "未指定" }}</dd>
+          <small v-if="displayedBlindReview.playbookVersionNumber">
+            关联战法 · v{{ displayedBlindReview.playbookVersionNumber }}，已冻结
           </small>
         </div>
-        <div>
+        <div class="replay-history-detail__review-field--compact">
           <dt>判断信心</dt>
-          <dd>{{ item.blindReview.confidence }} / 5</dd>
+          <dd>{{ displayedBlindReview.confidence }} / 5</dd>
         </div>
-        <div>
+        <div class="replay-history-detail__review-field--wide">
           <dt>判断理由</dt>
-          <dd>{{ formatReplayReasonTags(item.blindReview.reasonTags) }}</dd>
+          <dd>{{ formatReplayReasonTags(displayedBlindReview.reasonTags) }}</dd>
         </div>
-        <div>
+        <div class="replay-history-detail__review-field--compact">
           <dt>止损价</dt>
           <dd>
             {{
-              Number(item.blindReview.stopLossPrice) > 0
-                ? Number(item.blindReview.stopLossPrice)
+              Number(displayedBlindReview.stopLossPrice) > 0
+                ? Number(displayedBlindReview.stopLossPrice)
                 : "未记录"
             }}
           </dd>
         </div>
-        <div>
+        <div class="replay-history-detail__review-field--compact">
           <dt>判断失效条件</dt>
           <dd>
-            {{ formatReplayInvalidationRule(item.blindReview.invalidationRule) }}
+            {{ formatReplayInvalidationRule(displayedBlindReview.invalidationRule) }}
           </dd>
         </div>
-        <div>
+        <div class="replay-history-detail__review-field--wide">
           <dt>核心判断</dt>
-          <dd>{{ item.blindReview.thesis }}</dd>
+          <dd>{{ displayedBlindReview.thesis }}</dd>
         </div>
-        <div>
+        <div class="replay-history-detail__review-field--wide">
           <dt>交易计划</dt>
-          <dd>{{ item.blindReview.tradePlan }}</dd>
+          <dd>{{ displayedBlindReview.tradePlan }}</dd>
         </div>
-        <div>
+        <div class="replay-history-detail__review-field--wide">
           <dt>风险计划</dt>
-          <dd>{{ item.blindReview.riskPlan }}</dd>
+          <dd>{{ displayedBlindReview.riskPlan }}</dd>
         </div>
         </dl>
         <p v-else class="replay-history-detail__empty">
           尚未保存盲评。
         </p>
         </div>
-      </details>
+      </section>
 
-      <details class="replay-history-detail__review-section" open>
-        <summary>
-          <h3>揭晓后复盘</h3>
-          <span class="replay-history-detail__review-collapse--open" title="折叠">
-            <ChevronUp :size="17" />
-          </span>
-          <span class="replay-history-detail__review-collapse--closed" title="展开">
-            <ChevronDown :size="17" />
-          </span>
-        </summary>
+      <section class="replay-history-detail__review-section">
+        <h3>揭晓后复盘</h3>
         <div class="replay-history-detail__review-body">
-        <dl v-if="item.postReview" class="replay-history-detail__review">
+        <p v-if="latestPostCorrection" class="replay-history-detail__effective-version">
+          当前有效版本 · 已修正至第 {{ latestPostCorrection.revisionNumber }} 版
+        </p>
+        <dl v-if="effectivePostReview" class="replay-history-detail__review">
         <div>
           <dt>判断结果</dt>
-          <dd>{{ outcomeLabels[item.postReview.outcome] || item.postReview.outcome }}</dd>
+          <dd>{{ outcomeLabels[effectivePostReview.outcome] || effectivePostReview.outcome }}</dd>
         </div>
         <div>
           <dt>执行纪律</dt>
-          <dd>{{ item.postReview.disciplineScore }} / 5</dd>
+          <dd>{{ effectivePostReview.disciplineScore }} / 5</dd>
         </div>
         <div>
           <dt>风险控制</dt>
           <dd>
             {{
-              item.postReview.riskControlScore == null
+              effectivePostReview.riskControlScore == null
                 ? "旧记录未保存"
-                : `${item.postReview.riskControlScore} / 5`
+                : `${effectivePostReview.riskControlScore} / 5`
             }}
           </dd>
         </div>
         <div v-if="playbookFitApplicable">
           <dt>战法复核</dt>
-          <dd>{{ item.postReview.playbookFitScore }} / 5</dd>
+          <dd>
+            {{
+              effectivePostReview.playbookFitScore == null
+                ? "旧记录未保存"
+                : `${effectivePostReview.playbookFitScore} / 5`
+            }}
+          </dd>
         </div>
-        <div v-if="linkedPlaybook">
+        <div>
           <dt>执行复盘</dt>
-          <dd>{{ item.postReview.executionReview }}</dd>
+          <dd>{{ effectivePostReview.executionReview }}</dd>
         </div>
         <div>
           <dt>错误与不足</dt>
-          <dd>{{ item.postReview.mistakes }}</dd>
+          <dd>{{ effectivePostReview.mistakes }}</dd>
         </div>
         <div>
           <dt>经验总结</dt>
-          <dd>{{ item.postReview.lessons }}</dd>
+          <dd>{{ effectivePostReview.lessons }}</dd>
         </div>
         <div>
           <dt>战法调整建议</dt>
-          <dd>{{ item.postReview.strategyAdjustment || "未填写" }}</dd>
+          <dd>{{ effectivePostReview.strategyAdjustment || "未填写" }}</dd>
           <small>候选改进，不会直接修改原战法</small>
           <div
             v-if="hasAdjustment"
@@ -557,8 +607,9 @@ function isPositiveMetric(metric) {
           尚未保存事后复盘。
         </p>
         </div>
-      </details>
-    </div>
+      </section>
+      </div>
+    </details>
 
     <ReplayReviewTimeline
       :blind-review="item.blindReview"
@@ -566,6 +617,9 @@ function isPositiveMetric(metric) {
       :corrections="item.corrections"
       :revealed="item.revealed"
       :show-original="false"
+      editable
+      @edit-correction="emit('editCorrection', $event)"
+      @delete-correction="emit('deleteCorrection', $event)"
     />
   </article>
 </template>
@@ -691,58 +745,73 @@ function isPositiveMetric(metric) {
 }
 
 .replay-history-detail__reviews {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.replay-history-detail__review-section {
-  min-width: 0;
-}
-
-.replay-history-detail__review-section + .replay-history-detail__review-section {
-  border-left: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.replay-history-detail__review-section > summary {
-  align-items: center;
-  cursor: pointer;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
-  list-style: none;
   padding: 1rem;
 }
 
-.replay-history-detail__review-section > summary::-webkit-details-marker {
+.replay-history-detail__reviews-summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+}
+
+.replay-history-detail__reviews-summary::-webkit-details-marker {
   display: none;
 }
 
-.replay-history-detail__review-section > summary h3 {
+.replay-history-detail__reviews-summary h3,
+.replay-history-detail__reviews-summary p,
+.replay-history-detail__review-section > h3 {
+  margin: 0;
+}
+
+.replay-history-detail__reviews-summary h3,
+.replay-history-detail__review-section > h3 {
   color: var(--ql-color-text-strong);
   font-size: 0.875rem;
   font-weight: 800;
 }
 
-.replay-history-detail__review-section > summary span {
-  color: var(--ql-color-text-subtle);
-  font-size: 0.6875rem;
-  font-weight: 600;
+.replay-history-detail__reviews-summary p {
+  color: var(--ql-color-text-muted);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
 }
 
-.replay-history-detail__review-collapse--closed,
-.replay-history-detail__review-section:not([open])
-  .replay-history-detail__review-collapse--open {
-  display: none;
+.replay-history-detail__reviews-chevron {
+  color: var(--ql-color-text-muted);
+  transition: transform 160ms ease;
 }
 
-.replay-history-detail__review-section:not([open])
-  .replay-history-detail__review-collapse--closed {
-  display: inline;
+.replay-history-detail__reviews[open] .replay-history-detail__reviews-chevron {
+  transform: rotate(180deg);
+}
+
+.replay-history-detail__reviews-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 1rem;
+}
+
+.replay-history-detail__review-section {
+  border: 1px solid var(--ql-color-border-soft);
+  border-radius: 10px;
+  background: var(--ql-color-bg-muted);
+  min-width: 0;
+  padding: 0.875rem;
 }
 
 .replay-history-detail__review-body {
-  border-top: 1px solid rgba(15, 23, 42, 0.06);
-  padding: 1rem;
+  padding-top: 0.75rem;
+}
+
+.replay-history-detail__effective-version {
+  margin: 0 0 0.75rem;
+  color: var(--ql-accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
 }
 
 .replay-history-detail__review {
@@ -751,7 +820,7 @@ function isPositiveMetric(metric) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.replay-history-detail__review > div:nth-child(n + 3) {
+.replay-history-detail__review-field--wide {
   grid-column: 1 / -1;
 }
 
@@ -1059,19 +1128,14 @@ function isPositiveMetric(metric) {
     grid-template-columns: 1fr;
   }
 
-  .replay-history-detail__review > div:nth-child(n + 3) {
+  .replay-history-detail__review-field--wide {
     grid-column: auto;
   }
 }
 
 @media (max-width: 1100px) {
-  .replay-history-detail__reviews {
+  .replay-history-detail__reviews-grid {
     grid-template-columns: 1fr;
-  }
-
-  .replay-history-detail__review-section + .replay-history-detail__review-section {
-    border-top: 1px solid rgba(15, 23, 42, 0.08);
-    border-left: 0;
   }
 }
 </style>

@@ -11,7 +11,7 @@ const DEFAULT_DB_PATH = resolve(
   "..",
   "..",
   "storage",
-  "quantflow-workbench.sqlite",
+  "replay.sqlite",
 );
 
 const REPLAY_SCENARIO_FINGERPRINT_VERSION = "replay-scenario-v3";
@@ -108,96 +108,13 @@ function parseJson(value, fallback, context = {}) {
   }
 }
 
-function normalizeTagList(tags) {
-  return Array.from(
-    new Set(
-      (Array.isArray(tags) ? tags : [])
-        .map((item) => String(item ?? "").trim())
-        .filter(Boolean),
-    ),
-  );
-}
 
-function rowToParameterSet(row) {
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row.id,
-    benchmarkCode: String(snapshot?.benchmark?.code ?? ""),
-    strategyId: row.strategy_id,
-    name: row.name,
-    params: parseJson(
-      row.params_json,
-      {},
-      {
-        fieldName: "parameter_sets.params_json",
-        rowId: row.id,
-        strict: true,
-      },
-    ),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
 
-function rowToRun(row) {
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row.id,
-    title: row.title ?? "",
-    strategyId: row.strategy_id,
-    parameterSetId: row.parameter_set_id,
-    symbol: row.symbol,
-    exchange: row.exchange,
-    interval: row.interval,
-    startDate: row.start_date,
-    endDate: row.end_date,
-    capital: row.capital,
-    slippage: row.slippage,
-    rate: row.rate,
-    status: row.status,
-    errorMessage: row.error_message,
-    summary: parseJson(row.summary_json, null, {
-      fieldName: "backtest_runs.summary_json",
-      rowId: row.id,
-      strict: true,
-    }),
-    artifacts: parseJson(row.artifacts_json, null, {
-      fieldName: "backtest_runs.artifacts_json",
-      rowId: row.id,
-      strict: true,
-    }),
-    request: parseJson(row.request_json, null, {
-      fieldName: "backtest_runs.request_json",
-      rowId: row.id,
-      strict: true,
-    }),
-    strategyVersionId: row.strategy_version_id ?? null,
-    tags: normalizeTagList(
-      parseJson(row.tags_json, [], {
-        fieldName: "backtest_runs.tags_json",
-        rowId: row.id,
-        strict: true,
-      }),
-    ),
-    notes: row.notes ?? "",
-    starred: Boolean(row.starred ?? 0),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
 
-function rowToRunSummary(row) {
-  const run = rowToRun(row);
-  if (!run) {
-    return null;
-  }
-  const { artifacts: _artifacts, request: _request, ...summary } = run;
-  return summary;
-}
+
+
+
+
 
 function createReplayScenarioIdentity({
   snapshot,
@@ -623,6 +540,14 @@ function normalizeExpectedReplayDraftRevision(value) {
 
 function roundReplayNumber(value) {
   return Number(Number(value).toFixed(10));
+}
+
+function roundReplayExecutionPrice(value, side) {
+  const scaled = Number(value) * 100;
+  const tick = side === "buy"
+    ? Math.ceil(scaled - 1e-8)
+    : Math.floor(scaled + 1e-8);
+  return roundReplayNumber(tick / 100);
 }
 
 function roundReplayMetric(value) {
@@ -1104,155 +1029,17 @@ function calculateReplayAdvanceTransition(current) {
   };
 }
 
-function rowToSyncLog(row) {
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row.id,
-    symbol: row.symbol,
-    exchange: row.exchange,
-    interval: row.interval,
-    startDate: row.start_date,
-    endDate: row.end_date,
-    status: row.status,
-    provider: row.provider,
-    barsSynced: row.bars_synced,
-    message: row.message,
-    createdAt: row.created_at,
-  };
-}
 
-function rowToTask(row) {
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row.id,
-    type: row.type,
-    title: row.title,
-    status: row.status,
-    request: parseJson(
-      row.request_json,
-      {},
-      {
-        fieldName: "analysis_tasks.request_json",
-        rowId: row.id,
-        strict: true,
-      },
-    ),
-    result: parseJson(row.result_json, null, {
-      fieldName: "analysis_tasks.result_json",
-      rowId: row.id,
-      strict: true,
-    }),
-    errorMessage: row.error_message,
-    relatedRunIds: parseJson(row.related_run_ids_json, [], {
-      fieldName: "analysis_tasks.related_run_ids_json",
-      rowId: row.id,
-      strict: true,
-    }),
-    tags: normalizeTagList(
-      parseJson(row.tags_json, [], {
-        fieldName: "analysis_tasks.tags_json",
-        rowId: row.id,
-        strict: true,
-      }),
-    ),
-    notes: row.notes ?? "",
-    starred: Boolean(row.starred ?? 0),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
 
-function rowToSystemLog(row) {
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row.id,
-    scope: row.scope,
-    level: row.level,
-    title: row.title,
-    message: row.message,
-    payload: parseJson(row.payload_json, null, {
-      fieldName: "system_logs.payload_json",
-      rowId: row.id,
-      strict: false,
-    }),
-    createdAt: row.created_at,
-  };
-}
 
-function rowToStrategyVersion(row) {
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row.id,
-    strategyId: row.strategy_id,
-    sourcePath: row.source_path,
-    sourceHash: row.source_hash,
-    sourceCode: row.source_code,
-    summary: parseJson(row.summary_json, null, {
-      fieldName: "strategy_versions.summary_json",
-      rowId: row.id,
-      strict: true,
-    }),
-    createdAt: row.created_at,
-  };
-}
 
-function rowToDecisionAnalysisSnapshot(row) {
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row.id,
-    analysisType: row.analysis_type,
-    analysisDate: row.analysis_date,
-    sourceKey: row.source_key,
-    stockCode: row.stock_code ?? "",
-    stockName: row.stock_name ?? "",
-    title: row.title ?? "",
-    summary: parseJson(row.summary_json, null, {
-      fieldName: "decision_analysis_snapshots.summary_json",
-      rowId: row.id,
-      strict: true,
-    }),
-    payload: parseJson(row.payload_json, null, {
-      fieldName: "decision_analysis_snapshots.payload_json",
-      rowId: row.id,
-      strict: true,
-    }),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
 
-function rowToStockQueryRecord(row) {
-  if (!row) {
-    return null;
-  }
-  return {
-    id: row.id,
-    queryDate: row.query_date,
-    stockCode: row.stock_code,
-    stockName: row.stock_name,
-    inputText: row.input_text ?? "",
-    analysisDate: row.analysis_date ?? "",
-    action: row.action ?? "",
-    technicalScore: row.technical_score,
-    opportunityScore: row.opportunity_score,
-    summary: parseJson(row.summary_json, null, {
-      fieldName: "stock_query_records.summary_json",
-      rowId: row.id,
-      strict: true,
-    }),
-    createdAt: row.created_at,
-  };
-}
+
+
+
+
+
+
 
 function ensureColumn(db, tableName, columnName, columnDefinition) {
   const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
@@ -1264,45 +1051,9 @@ function ensureColumn(db, tableName, columnName, columnDefinition) {
   }
 }
 
-function normalizePaginationOptions(options = {}, defaults = {}) {
-  const defaultPage = Number(defaults.page ?? 1);
-  const defaultPageSize = Number(defaults.pageSize ?? 20);
-  const maxPageSize = Number(defaults.maxPageSize ?? 500);
-  const page = Math.max(1, Number(options.page ?? defaultPage) || defaultPage);
-  const pageSize = Math.max(
-    1,
-    Math.min(
-      Number(options.pageSize ?? defaultPageSize) || defaultPageSize,
-      maxPageSize,
-    ),
-  );
-  const offset = (page - 1) * pageSize;
-  return {
-    page,
-    pageSize,
-    offset,
-  };
-}
 
-function buildTagFilterSql({ filterTag, tableAlias, tagTableName, idColumn }) {
-  const values = [];
-  if (!filterTag) {
-    return {
-      joinSql: "",
-      whereSql: "",
-      values,
-    };
-  }
-  values.push(String(filterTag).trim());
-  return {
-    joinSql: `
-      INNER JOIN ${tagTableName} AS ${tagTableName}_filter
-        ON ${tagTableName}_filter.${idColumn} = ${tableAlias}.id
-    `,
-    whereSql: `${tagTableName}_filter.tag = ?`,
-    values,
-  };
-}
+
+
 
 export function createDatabase(dbPath = DEFAULT_DB_PATH) {
   mkdirSync(dirname(dbPath), { recursive: true });
@@ -1310,118 +1061,6 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
   const db = new DatabaseSync(dbPath);
   let closed = false;
   db.exec(`
-    CREATE TABLE IF NOT EXISTS parameter_sets (
-      id TEXT PRIMARY KEY,
-      strategy_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      params_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS backtest_runs (
-      id TEXT PRIMARY KEY,
-      title TEXT,
-      strategy_id TEXT NOT NULL,
-      parameter_set_id TEXT,
-      symbol TEXT NOT NULL,
-      exchange TEXT NOT NULL,
-      interval TEXT NOT NULL,
-      start_date TEXT NOT NULL,
-      end_date TEXT NOT NULL,
-      capital REAL NOT NULL,
-      slippage REAL NOT NULL,
-      rate REAL NOT NULL,
-      status TEXT NOT NULL,
-      error_message TEXT,
-      summary_json TEXT,
-      artifacts_json TEXT,
-      tags_json TEXT NOT NULL DEFAULT '[]',
-      notes TEXT NOT NULL DEFAULT '',
-      starred INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS data_sync_logs (
-      id TEXT PRIMARY KEY,
-      symbol TEXT NOT NULL,
-      exchange TEXT NOT NULL,
-      interval TEXT NOT NULL,
-      start_date TEXT NOT NULL,
-      end_date TEXT NOT NULL,
-      status TEXT NOT NULL,
-      provider TEXT NOT NULL,
-      bars_synced INTEGER NOT NULL DEFAULT 0,
-      message TEXT,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS analysis_tasks (
-      id TEXT PRIMARY KEY,
-      type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      status TEXT NOT NULL,
-      request_json TEXT NOT NULL,
-      result_json TEXT,
-      error_message TEXT,
-      related_run_ids_json TEXT NOT NULL DEFAULT '[]',
-      tags_json TEXT NOT NULL DEFAULT '[]',
-      notes TEXT NOT NULL DEFAULT '',
-      starred INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS system_logs (
-      id TEXT PRIMARY KEY,
-      scope TEXT NOT NULL,
-      level TEXT NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      payload_json TEXT,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS strategy_versions (
-      id TEXT PRIMARY KEY,
-      strategy_id TEXT NOT NULL,
-      source_path TEXT NOT NULL,
-      source_hash TEXT NOT NULL,
-      source_code TEXT NOT NULL,
-      summary_json TEXT,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS decision_analysis_snapshots (
-      id TEXT PRIMARY KEY,
-      analysis_type TEXT NOT NULL,
-      analysis_date TEXT NOT NULL,
-      source_key TEXT NOT NULL,
-      stock_code TEXT,
-      stock_name TEXT,
-      title TEXT NOT NULL,
-      summary_json TEXT,
-      payload_json TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      UNIQUE (analysis_type, analysis_date, source_key)
-    );
-
-    CREATE TABLE IF NOT EXISTS stock_query_records (
-      id TEXT PRIMARY KEY,
-      query_date TEXT NOT NULL,
-      stock_code TEXT NOT NULL,
-      stock_name TEXT NOT NULL,
-      input_text TEXT NOT NULL DEFAULT '',
-      analysis_date TEXT,
-      action TEXT,
-      technical_score REAL,
-      opportunity_score REAL,
-      summary_json TEXT,
-      created_at TEXT NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS decision_execution_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       simulated_account_equity REAL,
@@ -1430,18 +1069,6 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       default_max_account_risk_pct REAL NOT NULL,
       lot_size INTEGER NOT NULL,
       updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS backtest_run_tags (
-      run_id TEXT NOT NULL,
-      tag TEXT NOT NULL,
-      PRIMARY KEY (run_id, tag)
-    );
-
-    CREATE TABLE IF NOT EXISTS analysis_task_tags (
-      task_id TEXT NOT NULL,
-      tag TEXT NOT NULL,
-      PRIMARY KEY (task_id, tag)
     );
 
     CREATE TABLE IF NOT EXISTS replay_sessions (
@@ -1600,24 +1227,6 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       UNIQUE (session_id, playbook_id)
     );
 
-    CREATE INDEX IF NOT EXISTS idx_backtest_run_tags_tag
-      ON backtest_run_tags(tag);
-
-    CREATE INDEX IF NOT EXISTS idx_analysis_task_tags_tag
-      ON analysis_task_tags(tag);
-
-    CREATE INDEX IF NOT EXISTS idx_decision_analysis_snapshots_date_type
-      ON decision_analysis_snapshots(analysis_date DESC, analysis_type);
-
-    CREATE INDEX IF NOT EXISTS idx_decision_analysis_snapshots_stock
-      ON decision_analysis_snapshots(stock_code, analysis_date DESC);
-
-    CREATE INDEX IF NOT EXISTS idx_stock_query_records_date
-      ON stock_query_records(query_date DESC, created_at DESC);
-
-    CREATE INDEX IF NOT EXISTS idx_stock_query_records_stock
-      ON stock_query_records(stock_code, query_date DESC);
-
     CREATE INDEX IF NOT EXISTS idx_replay_sessions_updated
       ON replay_sessions(updated_at DESC);
 
@@ -1676,15 +1285,6 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
     DROP TRIGGER IF EXISTS replay_review_corrections_no_delete;
   `);
 
-  ensureColumn(db, "backtest_runs", "request_json", "TEXT");
-  ensureColumn(db, "backtest_runs", "strategy_version_id", "TEXT");
-  ensureColumn(db, "backtest_runs", "title", "TEXT");
-  ensureColumn(db, "backtest_runs", "tags_json", "TEXT NOT NULL DEFAULT '[]'");
-  ensureColumn(db, "backtest_runs", "notes", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "backtest_runs", "starred", "INTEGER NOT NULL DEFAULT 0");
-  ensureColumn(db, "analysis_tasks", "tags_json", "TEXT NOT NULL DEFAULT '[]'");
-  ensureColumn(db, "analysis_tasks", "notes", "TEXT NOT NULL DEFAULT ''");
-  ensureColumn(db, "analysis_tasks", "starred", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "replay_sessions", "revision", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "replay_sessions", "completion_reason", "TEXT");
   ensureColumn(db, "replay_sessions", "revealed_at", "TEXT");
@@ -2268,101 +1868,11 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
     ).run(nextVersionId, replayPlaybookSeededAt);
   }
 
-  function replaceRunTags(runId, tags) {
-    const normalizedTags = normalizeTagList(tags);
-    db.prepare(
-      `
-      DELETE FROM backtest_run_tags
-      WHERE run_id = ?
-    `,
-    ).run(runId);
-    if (!normalizedTags.length) {
-      return;
-    }
-    db.prepare(
-      `
-      INSERT INTO backtest_run_tags (run_id, tag)
-      VALUES (?, ?)
-    `,
-    ).run(runId, normalizedTags[0]);
-    for (const tag of normalizedTags.slice(1)) {
-      db.prepare(
-        `
-        INSERT INTO backtest_run_tags (run_id, tag)
-        VALUES (?, ?)
-      `,
-      ).run(runId, tag);
-    }
-  }
 
-  function replaceTaskTags(taskId, tags) {
-    const normalizedTags = normalizeTagList(tags);
-    db.prepare(
-      `
-      DELETE FROM analysis_task_tags
-      WHERE task_id = ?
-    `,
-    ).run(taskId);
-    if (!normalizedTags.length) {
-      return;
-    }
-    db.prepare(
-      `
-      INSERT INTO analysis_task_tags (task_id, tag)
-      VALUES (?, ?)
-    `,
-    ).run(taskId, normalizedTags[0]);
-    for (const tag of normalizedTags.slice(1)) {
-      db.prepare(
-        `
-        INSERT INTO analysis_task_tags (task_id, tag)
-        VALUES (?, ?)
-      `,
-      ).run(taskId, tag);
-    }
-  }
 
-  function backfillTagTables() {
-    const runRows = db
-      .prepare(
-        `
-      SELECT id, tags_json
-      FROM backtest_runs
-    `,
-      )
-      .all();
-    for (const row of runRows) {
-      replaceRunTags(
-        row.id,
-        parseJson(row.tags_json, [], {
-          fieldName: "backtest_runs.tags_json",
-          rowId: row.id,
-          strict: false,
-        }),
-      );
-    }
 
-    const taskRows = db
-      .prepare(
-        `
-      SELECT id, tags_json
-      FROM analysis_tasks
-    `,
-      )
-      .all();
-    for (const row of taskRows) {
-      replaceTaskTags(
-        row.id,
-        parseJson(row.tags_json, [], {
-          fieldName: "analysis_tasks.tags_json",
-          rowId: row.id,
-          strict: false,
-        }),
-      );
-    }
-  }
 
-  backfillTagTables();
+
 
   function readReplayAction(sessionId, actionId) {
     const row = db
@@ -2744,531 +2254,33 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       return this.getDecisionExecutionSettings();
     },
 
-    saveDecisionAnalysisSnapshot(snapshot) {
-      const now = snapshot.updatedAt ?? new Date().toISOString();
-      const id = snapshot.id ?? randomUUID();
-      const createdAt = snapshot.createdAt ?? now;
-      db.prepare(
-        `
-        INSERT INTO decision_analysis_snapshots (
-          id,
-          analysis_type,
-          analysis_date,
-          source_key,
-          stock_code,
-          stock_name,
-          title,
-          summary_json,
-          payload_json,
-          created_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(analysis_type, analysis_date, source_key)
-        DO UPDATE SET
-          stock_code = excluded.stock_code,
-          stock_name = excluded.stock_name,
-          title = excluded.title,
-          summary_json = excluded.summary_json,
-          payload_json = excluded.payload_json,
-          updated_at = excluded.updated_at
-      `,
-      ).run(
-        id,
-        snapshot.analysisType,
-        snapshot.analysisDate,
-        snapshot.sourceKey,
-        snapshot.stockCode ?? null,
-        snapshot.stockName ?? null,
-        snapshot.title,
-        snapshot.summary ? JSON.stringify(snapshot.summary) : null,
-        JSON.stringify(snapshot.payload ?? {}),
-        createdAt,
-        now,
-      );
-      return this.findDecisionAnalysisSnapshot(
-        snapshot.analysisType,
-        snapshot.analysisDate,
-        snapshot.sourceKey,
-      );
-    },
 
-    findDecisionAnalysisSnapshot(analysisType, analysisDate, sourceKey) {
-      const row = db
-        .prepare(
-          `
-          SELECT *
-          FROM decision_analysis_snapshots
-          WHERE analysis_type = ?
-            AND analysis_date = ?
-            AND source_key = ?
-        `,
-        )
-        .get(analysisType, analysisDate, sourceKey);
-      return rowToDecisionAnalysisSnapshot(row);
-    },
 
-    listDecisionAnalysisSnapshots({ analysisType, sourceKey, limit = 5 }) {
-      const normalizedLimit = Math.max(1, Math.min(30, Math.floor(Number(limit) || 5)));
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM decision_analysis_snapshots
-          WHERE analysis_type = ?
-            AND source_key = ?
-          ORDER BY analysis_date DESC
-          LIMIT ?
-        `,
-        )
-        .all(analysisType, sourceKey, normalizedLimit);
-      return rows.map(rowToDecisionAnalysisSnapshot);
-    },
 
-    createStockQueryRecord(record) {
-      const createdAt = record.createdAt ?? new Date().toISOString();
-      const id = record.id ?? randomUUID();
-      db.prepare(
-        `
-        INSERT INTO stock_query_records (
-          id,
-          query_date,
-          stock_code,
-          stock_name,
-          input_text,
-          analysis_date,
-          action,
-          technical_score,
-          opportunity_score,
-          summary_json,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      ).run(
-        id,
-        record.queryDate,
-        record.stockCode,
-        record.stockName,
-        record.inputText ?? "",
-        record.analysisDate ?? null,
-        record.action ?? null,
-        record.technicalScore ?? null,
-        record.opportunityScore ?? null,
-        record.summary ? JSON.stringify(record.summary) : null,
-        createdAt,
-      );
-      const row = db
-        .prepare(
-          `
-          SELECT *
-          FROM stock_query_records
-          WHERE id = ?
-        `,
-        )
-        .get(id);
-      return rowToStockQueryRecord(row);
-    },
 
-    queryStockQueryRecords(filters = {}, options = {}) {
-      const clauses = [];
-      const values = [];
-      if (filters.queryDate) {
-        clauses.push("query_date = ?");
-        values.push(String(filters.queryDate).trim());
-      }
-      if (filters.stockCode) {
-        clauses.push("stock_code = ?");
-        values.push(String(filters.stockCode).trim());
-      }
-      if (filters.keyword) {
-        clauses.push("(stock_code LIKE ? OR stock_name LIKE ? OR input_text LIKE ? OR summary_json LIKE ?)");
-        const keyword = `%${String(filters.keyword).trim()}%`;
-        values.push(keyword, keyword, keyword, keyword);
-      }
 
-      const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-      const pagination = normalizePaginationOptions(options, {
-        page: 1,
-        pageSize: 50,
-        maxPageSize: 300,
-      });
-      const totalRow = db
-        .prepare(
-          `
-          SELECT COUNT(*) AS total
-          FROM stock_query_records
-          ${where}
-        `,
-        )
-        .get(...values);
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM stock_query_records
-          ${where}
-          ORDER BY query_date DESC, created_at DESC
-          LIMIT ?
-          OFFSET ?
-        `,
-        )
-        .all(...values, pagination.pageSize, pagination.offset);
-      return {
-        items: rows.map(rowToStockQueryRecord),
-        total: Number(totalRow?.total ?? 0),
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-      };
-    },
 
-    deleteStockQueryRecord(recordId) {
-      const result = db
-        .prepare("DELETE FROM stock_query_records WHERE id = ?")
-        .run(String(recordId ?? "").trim());
-      return result.changes > 0;
-    },
 
-    saveParameterSet(parameterSet) {
-      const statement = db.prepare(`
-        INSERT INTO parameter_sets (
-          id,
-          strategy_id,
-          name,
-          params_json,
-          created_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
-      `);
-      statement.run(
-        parameterSet.id,
-        parameterSet.strategyId,
-        parameterSet.name,
-        JSON.stringify(parameterSet.params),
-        parameterSet.createdAt,
-        parameterSet.updatedAt,
-      );
-      return this.getParameterSet(parameterSet.id);
-    },
 
-    listParameterSets() {
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM parameter_sets
-          ORDER BY updated_at DESC
-        `,
-        )
-        .all();
-      return rows.map(rowToParameterSet);
-    },
 
-    getParameterSet(id) {
-      const row = db
-        .prepare(
-          `
-          SELECT *
-          FROM parameter_sets
-          WHERE id = ?
-        `,
-        )
-        .get(id);
-      return rowToParameterSet(row);
-    },
 
-    createRun(run) {
-      const normalizedTags = normalizeTagList(run.tags);
-      db.prepare(
-        `
-        INSERT INTO backtest_runs (
-          id,
-          title,
-          strategy_id,
-          parameter_set_id,
-          symbol,
-          exchange,
-          interval,
-          start_date,
-          end_date,
-          capital,
-          slippage,
-          rate,
-          status,
-          error_message,
-          summary_json,
-          artifacts_json,
-          request_json,
-          strategy_version_id,
-          tags_json,
-          notes,
-          starred,
-          created_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      ).run(
-        run.id,
-        run.title ?? "",
-        run.strategyId,
-        run.parameterSetId,
-        run.symbol,
-        run.exchange,
-        run.interval,
-        run.startDate,
-        run.endDate,
-        run.capital,
-        run.slippage,
-        run.rate,
-        run.status,
-        run.errorMessage ?? null,
-        run.summary ? JSON.stringify(run.summary) : null,
-        run.artifacts ? JSON.stringify(run.artifacts) : null,
-        run.request ? JSON.stringify(run.request) : null,
-        run.strategyVersionId ?? null,
-        JSON.stringify(normalizedTags),
-        run.notes ?? "",
-        run.starred ? 1 : 0,
-        run.createdAt,
-        run.updatedAt,
-      );
-      replaceRunTags(run.id, normalizedTags);
-      return this.getRun(run.id);
-    },
 
-    updateRun(runId, patch) {
-      const current = this.getRun(runId);
-      if (!current) {
-        return null;
-      }
-      const next = {
-        ...current,
-        ...patch,
-      };
-      const normalizedTags = normalizeTagList(next.tags);
-      db.prepare(
-        `
-        UPDATE backtest_runs
-        SET
-          title = ?,
-          symbol = ?,
-          exchange = ?,
-          interval = ?,
-          start_date = ?,
-          end_date = ?,
-          capital = ?,
-          slippage = ?,
-          rate = ?,
-          status = ?,
-          error_message = ?,
-          summary_json = ?,
-          artifacts_json = ?,
-          request_json = ?,
-          strategy_version_id = ?,
-          tags_json = ?,
-          notes = ?,
-          starred = ?,
-          updated_at = ?
-        WHERE id = ?
-      `,
-      ).run(
-        next.title ?? "",
-        next.symbol,
-        next.exchange,
-        next.interval,
-        next.startDate,
-        next.endDate,
-        next.capital,
-        next.slippage,
-        next.rate,
-        next.status,
-        next.errorMessage ?? null,
-        next.summary ? JSON.stringify(next.summary) : null,
-        next.artifacts ? JSON.stringify(next.artifacts) : null,
-        next.request ? JSON.stringify(next.request) : null,
-        next.strategyVersionId ?? null,
-        JSON.stringify(normalizedTags),
-        next.notes ?? "",
-        next.starred ? 1 : 0,
-        next.updatedAt,
-        runId,
-      );
-      replaceRunTags(runId, normalizedTags);
-      return this.getRun(runId);
-    },
 
-    queryRuns(filters = {}, options = {}) {
-      const clauses = [];
-      const values = [];
-      const tagFilter = buildTagFilterSql({
-        filterTag: filters.tag,
-        tableAlias: "backtest_runs",
-        tagTableName: "backtest_run_tags",
-        idColumn: "run_id",
-      });
 
-      if (filters.status) {
-        clauses.push("status = ?");
-        values.push(filters.status);
-      }
-      if (filters.strategyId) {
-        clauses.push("strategy_id = ?");
-        values.push(filters.strategyId);
-      }
-      if (filters.starred === true) {
-        clauses.push("starred = 1");
-      }
-      if (filters.keyword) {
-        clauses.push(`(
-          title LIKE ?
-          OR strategy_id LIKE ?
-          OR symbol LIKE ?
-          OR notes LIKE ?
-          OR EXISTS (
-            SELECT 1
-            FROM backtest_run_tags AS backtest_run_tags_keyword
-            WHERE backtest_run_tags_keyword.run_id = backtest_runs.id
-              AND backtest_run_tags_keyword.tag LIKE ?
-          )
-        )`);
-        const keyword = `%${String(filters.keyword).trim()}%`;
-        values.push(keyword, keyword, keyword, keyword, keyword);
-      }
-      if (tagFilter.whereSql) {
-        clauses.push(tagFilter.whereSql);
-        values.push(...tagFilter.values);
-      }
 
-      const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-      const pagination = normalizePaginationOptions(options, {
-        page: 1,
-        pageSize: 20,
-        maxPageSize: 200,
-      });
-      const totalRow = db
-        .prepare(
-          `
-          SELECT COUNT(*) AS total
-          FROM backtest_runs
-          ${tagFilter.joinSql}
-          ${where}
-        `,
-        )
-        .get(...values);
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM backtest_runs
-          ${tagFilter.joinSql}
-          ${where}
-          ORDER BY created_at DESC
-          LIMIT ?
-          OFFSET ?
-        `,
-        )
-        .all(...values, pagination.pageSize, pagination.offset);
-      return {
-        items: rows.map(rowToRun),
-        total: Number(totalRow?.total ?? 0),
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-      };
-    },
 
-    listRuns(filters = {}) {
-      const clauses = [];
-      const values = [];
-      const tagFilter = buildTagFilterSql({
-        filterTag: filters.tag,
-        tableAlias: "backtest_runs",
-        tagTableName: "backtest_run_tags",
-        idColumn: "run_id",
-      });
 
-      if (filters.status) {
-        clauses.push("status = ?");
-        values.push(filters.status);
-      }
-      if (filters.strategyId) {
-        clauses.push("strategy_id = ?");
-        values.push(filters.strategyId);
-      }
-      if (filters.starred === true) {
-        clauses.push("starred = 1");
-      }
-      if (filters.keyword) {
-        clauses.push(`(
-          title LIKE ?
-          OR strategy_id LIKE ?
-          OR symbol LIKE ?
-          OR notes LIKE ?
-          OR EXISTS (
-            SELECT 1
-            FROM backtest_run_tags AS backtest_run_tags_keyword
-            WHERE backtest_run_tags_keyword.run_id = backtest_runs.id
-              AND backtest_run_tags_keyword.tag LIKE ?
-          )
-        )`);
-        const keyword = `%${String(filters.keyword).trim()}%`;
-        values.push(keyword, keyword, keyword, keyword, keyword);
-      }
-      if (tagFilter.whereSql) {
-        clauses.push(tagFilter.whereSql);
-        values.push(...tagFilter.values);
-      }
 
-      const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM backtest_runs
-          ${tagFilter.joinSql}
-          ${where}
-          ORDER BY created_at DESC
-        `,
-        )
-        .all(...values);
-      return rows.map(rowToRun);
-    },
 
-    listRecentRunSummaries(limit = 5) {
-      const normalizedLimit = Math.max(
-        1,
-        Math.min(Number.parseInt(limit, 10) || 5, 20),
-      );
-      const rows = db
-        .prepare(
-          `
-          SELECT
-            id,
-            title,
-            strategy_id,
-            parameter_set_id,
-            symbol,
-            exchange,
-            interval,
-            start_date,
-            end_date,
-            capital,
-            slippage,
-            rate,
-            status,
-            error_message,
-            summary_json,
-            strategy_version_id,
-            tags_json,
-            notes,
-            starred,
-            created_at,
-            updated_at
-          FROM backtest_runs
-          ORDER BY created_at DESC
-          LIMIT ?
-        `,
-        )
-        .all(normalizedLimit);
-      return rows.map(rowToRunSummary);
-    },
+
+
+
+
+
+
+
+
+
 
     getReplayScenarioUsage() {
       const rows = db.prepare(
@@ -3472,7 +2484,11 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         .get(sessionId);
       const session = rowToReplaySession(row);
       return session
-        ? { ...session, review: readReplayReview(sessionId) }
+        ? {
+            ...session,
+            review: readReplayReview(sessionId),
+            corrections: readReplayReviewCorrections(sessionId),
+          }
         : null;
     },
 
@@ -5452,12 +4468,13 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           }
 
           const slippageDirection = orderRow.side === "buy" ? 1 : -1;
-          const price = roundReplayNumber(
+          const price = roundReplayExecutionPrice(
             open *
               (1 +
                 (slippageDirection *
                   Number(current.costConfig.slippageBps)) /
                   10000),
+            orderRow.side,
           );
           const quantity = replayOrderQuantity(
             order,
@@ -5701,621 +4718,48 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       }
     },
 
-    getRun(runId) {
-      const row = db
-        .prepare(
-          `
-          SELECT *
-          FROM backtest_runs
-          WHERE id = ?
-        `,
-        )
-        .get(runId);
-      return rowToRun(row);
-    },
 
-    deleteRun(runId) {
-      const current = this.getRun(runId);
-      if (!current) {
-        return null;
-      }
 
-      db.prepare(
-        `
-        DELETE FROM backtest_runs
-        WHERE id = ?
-      `,
-      ).run(runId);
-      db.prepare(
-        `
-        DELETE FROM backtest_run_tags
-        WHERE run_id = ?
-      `,
-      ).run(runId);
 
-      return current;
-    },
 
-    addSyncLog(log) {
-      db.prepare(
-        `
-        INSERT INTO data_sync_logs (
-          id,
-          symbol,
-          exchange,
-          interval,
-          start_date,
-          end_date,
-          status,
-          provider,
-          bars_synced,
-          message,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      ).run(
-        log.id,
-        log.symbol,
-        log.exchange,
-        log.interval,
-        log.startDate,
-        log.endDate,
-        log.status,
-        log.provider,
-        log.barsSynced,
-        log.message ?? null,
-        log.createdAt,
-      );
-      return log;
-    },
 
-    listRecentSyncLogs(limit = 10) {
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM data_sync_logs
-          ORDER BY created_at DESC
-          LIMIT ?
-        `,
-        )
-        .all(limit);
-      return rows.map(rowToSyncLog);
-    },
 
-    createTask(task) {
-      const normalizedTags = normalizeTagList(task.tags);
-      db.prepare(
-        `
-        INSERT INTO analysis_tasks (
-          id,
-          type,
-          title,
-          status,
-          request_json,
-          result_json,
-          error_message,
-          related_run_ids_json,
-          tags_json,
-          notes,
-          starred,
-          created_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      ).run(
-        task.id,
-        task.type,
-        task.title,
-        task.status,
-        JSON.stringify(task.request ?? {}),
-        task.result ? JSON.stringify(task.result) : null,
-        task.errorMessage ?? null,
-        JSON.stringify(task.relatedRunIds ?? []),
-        JSON.stringify(normalizedTags),
-        task.notes ?? "",
-        task.starred ? 1 : 0,
-        task.createdAt,
-        task.updatedAt,
-      );
-      replaceTaskTags(task.id, normalizedTags);
-      return this.getTask(task.id);
-    },
 
-    updateTask(taskId, patch) {
-      const current = this.getTask(taskId);
-      if (!current) {
-        return null;
-      }
-      const next = {
-        ...current,
-        ...patch,
-      };
-      const normalizedTags = normalizeTagList(next.tags);
-      db.prepare(
-        `
-        UPDATE analysis_tasks
-        SET
-          type = ?,
-          title = ?,
-          status = ?,
-          request_json = ?,
-          result_json = ?,
-          error_message = ?,
-          related_run_ids_json = ?,
-          tags_json = ?,
-          notes = ?,
-          starred = ?,
-          updated_at = ?
-        WHERE id = ?
-      `,
-      ).run(
-        next.type,
-        next.title,
-        next.status,
-        JSON.stringify(next.request ?? {}),
-        next.result ? JSON.stringify(next.result) : null,
-        next.errorMessage ?? null,
-        JSON.stringify(next.relatedRunIds ?? []),
-        JSON.stringify(normalizedTags),
-        next.notes ?? "",
-        next.starred ? 1 : 0,
-        next.updatedAt,
-        taskId,
-      );
-      replaceTaskTags(taskId, normalizedTags);
-      return this.getTask(taskId);
-    },
 
-    queryTasks(filters = {}, options = {}) {
-      const clauses = [];
-      const values = [];
-      const tagFilter = buildTagFilterSql({
-        filterTag: filters.tag,
-        tableAlias: "analysis_tasks",
-        tagTableName: "analysis_task_tags",
-        idColumn: "task_id",
-      });
 
-      if (filters.status) {
-        clauses.push("status = ?");
-        values.push(filters.status);
-      }
-      if (filters.type) {
-        clauses.push("type = ?");
-        values.push(filters.type);
-      }
-      if (Array.isArray(filters.excludeTypes) && filters.excludeTypes.length) {
-        clauses.push(
-          `type NOT IN (${filters.excludeTypes.map(() => "?").join(", ")})`,
-        );
-        values.push(...filters.excludeTypes);
-      }
-      if (filters.starred === true) {
-        clauses.push("starred = 1");
-      }
-      if (filters.keyword) {
-        clauses.push("(title LIKE ? OR notes LIKE ? OR request_json LIKE ?)");
-        const keyword = `%${String(filters.keyword).trim()}%`;
-        values.push(keyword, keyword, keyword);
-      }
-      if (tagFilter.whereSql) {
-        clauses.push(tagFilter.whereSql);
-        values.push(...tagFilter.values);
-      }
 
-      const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-      const pagination = normalizePaginationOptions(options, {
-        page: 1,
-        pageSize: 20,
-        maxPageSize: 200,
-      });
-      const totalRow = db
-        .prepare(
-          `
-          SELECT COUNT(*) AS total
-          FROM analysis_tasks
-          ${tagFilter.joinSql}
-          ${where}
-        `,
-        )
-        .get(...values);
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM analysis_tasks
-          ${tagFilter.joinSql}
-          ${where}
-          ORDER BY created_at DESC
-          LIMIT ?
-          OFFSET ?
-        `,
-        )
-        .all(...values, pagination.pageSize, pagination.offset);
-      return {
-        items: rows.map(rowToTask),
-        total: Number(totalRow?.total ?? 0),
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-      };
-    },
 
-    listTasks(filters = {}) {
-      const clauses = [];
-      const values = [];
-      const tagFilter = buildTagFilterSql({
-        filterTag: filters.tag,
-        tableAlias: "analysis_tasks",
-        tagTableName: "analysis_task_tags",
-        idColumn: "task_id",
-      });
 
-      if (filters.status) {
-        clauses.push("status = ?");
-        values.push(filters.status);
-      }
-      if (filters.type) {
-        clauses.push("type = ?");
-        values.push(filters.type);
-      }
-      if (Array.isArray(filters.excludeTypes) && filters.excludeTypes.length) {
-        clauses.push(
-          `type NOT IN (${filters.excludeTypes.map(() => "?").join(", ")})`,
-        );
-        values.push(...filters.excludeTypes);
-      }
-      if (filters.starred === true) {
-        clauses.push("starred = 1");
-      }
-      if (filters.keyword) {
-        clauses.push("(title LIKE ? OR notes LIKE ? OR request_json LIKE ?)");
-        const keyword = `%${String(filters.keyword).trim()}%`;
-        values.push(keyword, keyword, keyword);
-      }
-      if (tagFilter.whereSql) {
-        clauses.push(tagFilter.whereSql);
-        values.push(...tagFilter.values);
-      }
 
-      const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM analysis_tasks
-          ${tagFilter.joinSql}
-          ${where}
-          ORDER BY created_at DESC
-        `,
-        )
-        .all(...values);
-      return rows.map(rowToTask);
-    },
 
-    getTask(taskId) {
-      const row = db
-        .prepare(
-          `
-          SELECT *
-          FROM analysis_tasks
-          WHERE id = ?
-        `,
-        )
-        .get(taskId);
-      return rowToTask(row);
-    },
 
-    deleteTask(taskId) {
-      const current = this.getTask(taskId);
-      if (!current) {
-        return null;
-      }
-      db.prepare(
-        `
-        DELETE FROM analysis_tasks
-        WHERE id = ?
-      `,
-      ).run(taskId);
-      db.prepare(
-        `
-        DELETE FROM analysis_task_tags
-        WHERE task_id = ?
-      `,
-      ).run(taskId);
-      return current;
-    },
 
-    addSystemLog(log) {
-      db.prepare(
-        `
-        INSERT INTO system_logs (
-          id,
-          scope,
-          level,
-          title,
-          message,
-          payload_json,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-      ).run(
-        log.id,
-        log.scope,
-        log.level,
-        log.title,
-        log.message,
-        log.payload ? JSON.stringify(log.payload) : null,
-        log.createdAt,
-      );
-      return log;
-    },
 
-    querySystemLogs(filters = {}, options = {}) {
-      const clauses = [];
-      const values = [];
 
-      if (filters.level) {
-        clauses.push("level = ?");
-        values.push(String(filters.level).trim());
-      }
-      if (filters.scope) {
-        clauses.push("scope = ?");
-        values.push(String(filters.scope).trim());
-      }
-      if (filters.keyword) {
-        clauses.push(
-          "(title LIKE ? OR message LIKE ? OR scope LIKE ? OR level LIKE ? OR payload_json LIKE ?)",
-        );
-        const keyword = `%${String(filters.keyword).trim()}%`;
-        values.push(keyword, keyword, keyword, keyword, keyword);
-      }
 
-      const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-      const pagination = normalizePaginationOptions(options, {
-        page: 1,
-        pageSize: 50,
-        maxPageSize: 500,
-      });
-      const totalRow = db
-        .prepare(
-          `
-          SELECT COUNT(*) AS total
-          FROM system_logs
-          ${where}
-        `,
-        )
-        .get(...values);
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM system_logs
-          ${where}
-          ORDER BY created_at DESC
-          LIMIT ?
-          OFFSET ?
-        `,
-        )
-        .all(...values, pagination.pageSize, pagination.offset);
-      return {
-        items: rows.map(rowToSystemLog),
-        total: Number(totalRow?.total ?? 0),
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-      };
-    },
 
-    listSystemLogs(limit = 100) {
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM system_logs
-          ORDER BY created_at DESC
-          LIMIT ?
-        `,
-        )
-        .all(limit);
-      return rows.map(rowToSystemLog);
-    },
 
-    deleteSystemLog(logId) {
-      const current = db
-        .prepare(
-          `
-          SELECT *
-          FROM system_logs
-          WHERE id = ?
-        `,
-        )
-        .get(logId);
-      if (!current) {
-        return null;
-      }
-      db.prepare(
-        `
-        DELETE FROM system_logs
-        WHERE id = ?
-      `,
-      ).run(logId);
-      return rowToSystemLog(current);
-    },
 
-    clearSystemLogs() {
-      const result = db
-        .prepare(
-          `
-        DELETE FROM system_logs
-      `,
-        )
-        .run();
-      return {
-        deletedCount: Number(result.changes ?? 0),
-      };
-    },
 
-    saveStrategyVersion(version) {
-      db.prepare(
-        `
-        INSERT INTO strategy_versions (
-          id,
-          strategy_id,
-          source_path,
-          source_hash,
-          source_code,
-          summary_json,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-      ).run(
-        version.id,
-        version.strategyId,
-        version.sourcePath,
-        version.sourceHash,
-        version.sourceCode,
-        version.summary ? JSON.stringify(version.summary) : null,
-        version.createdAt,
-      );
-      return this.getStrategyVersion(version.id);
-    },
 
-    findStrategyVersion(strategyId, sourcePath, sourceHash) {
-      const row = db
-        .prepare(
-          `
-          SELECT *
-          FROM strategy_versions
-          WHERE strategy_id = ? AND source_path = ? AND source_hash = ?
-          ORDER BY created_at DESC
-          LIMIT 1
-        `,
-        )
-        .get(strategyId, sourcePath, sourceHash);
-      return rowToStrategyVersion(row);
-    },
 
-    getStrategyVersion(versionId) {
-      const row = db
-        .prepare(
-          `
-          SELECT *
-          FROM strategy_versions
-          WHERE id = ?
-        `,
-        )
-        .get(versionId);
-      return rowToStrategyVersion(row);
-    },
 
-    queryStrategyVersions(strategyId = null, options = {}) {
-      const clauses = [];
-      const values = [];
-      if (strategyId) {
-        clauses.push("strategy_id = ?");
-        values.push(strategyId);
-      }
-      const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-      const pagination = normalizePaginationOptions(options, {
-        page: 1,
-        pageSize: 20,
-        maxPageSize: 200,
-      });
-      const totalRow = db
-        .prepare(
-          `
-          SELECT COUNT(*) AS total
-          FROM strategy_versions
-          ${where}
-        `,
-        )
-        .get(...values);
-      const rows = db
-        .prepare(
-          `
-          SELECT *
-          FROM strategy_versions
-          ${where}
-          ORDER BY created_at DESC
-          LIMIT ?
-          OFFSET ?
-        `,
-        )
-        .all(...values, pagination.pageSize, pagination.offset);
-      return {
-        items: rows.map(rowToStrategyVersion),
-        total: Number(totalRow?.total ?? 0),
-        page: pagination.page,
-        pageSize: pagination.pageSize,
-      };
-    },
 
-    listStrategyVersions(strategyId = null) {
-      const rows = strategyId
-        ? db
-            .prepare(
-              `
-            SELECT *
-            FROM strategy_versions
-            WHERE strategy_id = ?
-            ORDER BY created_at DESC
-          `,
-            )
-            .all(strategyId)
-        : db
-            .prepare(
-              `
-            SELECT *
-            FROM strategy_versions
-            ORDER BY created_at DESC
-          `,
-            )
-            .all();
-      return rows.map(rowToStrategyVersion);
-    },
 
-    deleteStrategyVersion(versionId) {
-      const current = db
-        .prepare(
-          `
-          SELECT *
-          FROM strategy_versions
-          WHERE id = ?
-        `,
-        )
-        .get(versionId);
-      if (!current) {
-        return null;
-      }
-      db.prepare(
-        `
-        DELETE FROM strategy_versions
-        WHERE id = ?
-      `,
-      ).run(versionId);
-      return rowToStrategyVersion(current);
-    },
 
-    clearStrategyVersions(strategyId = null) {
-      const result = strategyId
-        ? db
-            .prepare(
-              `
-            DELETE FROM strategy_versions
-            WHERE strategy_id = ?
-          `,
-            )
-            .run(strategyId)
-        : db
-            .prepare(
-              `
-            DELETE FROM strategy_versions
-          `,
-            )
-            .run();
-      return {
-        deletedCount: Number(result.changes ?? 0),
-      };
-    },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   };
 }

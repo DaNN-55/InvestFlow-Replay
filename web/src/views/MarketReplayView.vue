@@ -342,9 +342,10 @@ onBeforeUnmount(() => {
         <UiModal
           :open="reviewDialogOpen"
           :busy="['savingBlindReview', 'savingPostReview'].includes(attemptState.activity)"
-          title="两阶段复盘 · 决策记录与评分"
+          title="两阶段复盘"
           description="逐笔委托记录回答每次为什么操作；这里负责整局盲评、揭晓后复盘和评分。"
           panel-class="market-replay-review-dialog"
+          variant="drawer"
           @close="reviewDialogOpen = false"
         >
           <ReplayReviewPanel
@@ -365,8 +366,6 @@ onBeforeUnmount(() => {
             @save-post="handleSavePost"
             @add-blind-correction="commands.addBlindCorrection"
             @add-post-correction="commands.addPostCorrection"
-            @update-correction="commands.updateCorrection"
-            @delete-correction="commands.deleteCorrection"
           />
         </UiModal>
       </template>
@@ -394,11 +393,11 @@ onBeforeUnmount(() => {
 }
 
 :global(.market-replay-review-dialog) {
-  width: min(1040px, calc(100vw - 32px));
+  width: min(560px, 100vw);
 }
 
 :global(.market-replay-review-dialog .ui-modal__body) {
-  padding-block: 4px;
+  padding: 4px 0;
 }
 
 .market-replay__header {

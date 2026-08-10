@@ -74,6 +74,13 @@ describe("replay blind review payload", () => {
               thesis: " 最近一次买入判断 ",
               plan: " 最近一次买入计划 ",
               riskPlan: " 最近一次风险计划 ",
+              stopLossPrice: 9.8,
+              invalidationRule: {
+                basis: "close",
+                operator: "lte",
+                threshold: 9.5,
+                note: "收盘跌破结构低点",
+              },
             },
           },
         ],
@@ -84,6 +91,13 @@ describe("replay blind review payload", () => {
         thesis: "最近一次买入判断",
         tradePlan: "最近一次买入计划",
         riskPlan: "最近一次风险计划",
+        stopLossPrice: 9.8,
+        invalidationRule: {
+          basis: "close",
+          operator: "lte",
+          threshold: 9.5,
+          note: "收盘跌破结构低点",
+        },
       },
     );
   });

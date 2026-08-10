@@ -50,7 +50,7 @@ const form = reactive({
     minCommission: 5,
     stampTaxRate: 0.0005,
     transferFeeRate: 0.00001,
-    slippageBps: 0,
+    slippageBps: 5,
   },
 });
 const lengthOptions = computed(() =>

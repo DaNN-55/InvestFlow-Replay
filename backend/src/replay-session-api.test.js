@@ -881,16 +881,16 @@ describe("replay session API", () => {
       { ...validPostReview(), strategyAdjustment: "" },
     );
     assert.deepEqual(saved.body.session.scoreCard.metrics, {
-      totalReturnPct: 0.0419,
+      totalReturnPct: 0.0289,
       maxDrawdownPct: 0,
-      totalTradingCosts: 8.06,
+      totalTradingCosts: 8.064,
       realizedPnl: 0,
-      unrealizedPnl: 41.94,
-      endingCapitalUtilizationPct: 26.0391,
-      averageCapitalUtilizationPct: 26.0391,
-      maxCapitalUtilizationPct: 26.0391,
+      unrealizedPnl: 28.936,
+      endingCapitalUtilizationPct: 26.0425,
+      averageCapitalUtilizationPct: 26.0425,
+      maxCapitalUtilizationPct: 26.0425,
       stockBuyAndHoldReturnPct: 0.3854,
-      strategyVsStockBuyAndHoldPct: -0.3434,
+      strategyVsStockBuyAndHoldPct: -0.3564,
       indexBenchmarkReturnPct: null,
       indexExcessReturnPct: null,
       indexBenchmarkStatus: "unavailable",
@@ -898,7 +898,7 @@ describe("replay session API", () => {
     assert.deepEqual(saved.body.session.scoreCard.breakdown, {
       executionDiscipline: 30,
       riskControl: 25,
-      returnPerformance: 9.41,
+      returnPerformance: 9.4,
       reviewQuality: 12.5,
     });
     assert.equal(saved.body.session.scoreCard.algorithmVersion, "replay-score-v3");
@@ -909,7 +909,7 @@ describe("replay session API", () => {
       reviewQuality: 12.5,
     });
     assert.equal(saved.body.session.scoreCard.appliedWeightTotal, 100);
-    assert.equal(saved.body.session.scoreCard.total, 76.91);
+    assert.equal(saved.body.session.scoreCard.total, 76.9);
     assert.equal(
       Object.hasOwn(
         saved.body.session.scoreCard.applicability,
@@ -933,7 +933,7 @@ describe("replay session API", () => {
       ...validPostReview(),
       strategyAdjustment: "",
     });
-    assert.equal(JSON.parse(storedReview.score_json).total, 76.91);
+    assert.equal(JSON.parse(storedReview.score_json).total, 76.9);
     const snapshotDb = new DatabaseSync(dbPath);
     assert.throws(
       () =>
@@ -1012,7 +1012,7 @@ describe("replay session API", () => {
       frozen.body.session.scoreCard.breakdown.executionDiscipline,
       30,
     );
-    assert.equal(frozen.body.session.scoreCard.total, 76.91);
+    assert.equal(frozen.body.session.scoreCard.total, 76.9);
   });
 
   it("validates both review stages and enforces their state gates", async () => {
@@ -1135,16 +1135,16 @@ describe("replay session API", () => {
     assert.equal(reviewed.completionReason, "early");
     assert.equal(reviewed.account.positionQuantity, 100);
     assert.deepEqual(reviewed.scoreCard.metrics, {
-      totalReturnPct: -2.0081,
-      maxDrawdownPct: 2.0081,
-      totalTradingCosts: 8.06,
+      totalReturnPct: -2.0211,
+      maxDrawdownPct: 2.0211,
+      totalTradingCosts: 8.064,
       realizedPnl: 0,
-      unrealizedPnl: -2008.06,
-      endingCapitalUtilizationPct: 24.4918,
-      averageCapitalUtilizationPct: 24.8732,
-      maxCapitalUtilizationPct: 25.2546,
+      unrealizedPnl: -2021.064,
+      endingCapitalUtilizationPct: 24.4951,
+      averageCapitalUtilizationPct: 24.8765,
+      maxCapitalUtilizationPct: 25.2579,
       stockBuyAndHoldReturnPct: -7.5145,
-      strategyVsStockBuyAndHoldPct: 5.5064,
+      strategyVsStockBuyAndHoldPct: 5.4934,
       indexBenchmarkReturnPct: null,
       indexExcessReturnPct: null,
       indexBenchmarkStatus: "unavailable",
@@ -1152,10 +1152,10 @@ describe("replay session API", () => {
     assert.deepEqual(reviewed.scoreCard.breakdown, {
       executionDiscipline: 22.5,
       riskControl: 25,
-      returnPerformance: 7.49,
+      returnPerformance: 7.48,
       reviewQuality: 12.5,
     });
-    assert.equal(reviewed.scoreCard.total, 67.49);
+    assert.equal(reviewed.scoreCard.total, 67.48);
   });
 
   it("keeps score financial metrics consistent across partial exits", async () => {

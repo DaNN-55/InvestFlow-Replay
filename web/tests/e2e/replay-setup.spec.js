@@ -9,3 +9,10 @@ test("新开训练不再提供战法专项入口", async ({ page }) => {
   await expect(page.getByText("战法专项", { exact: true })).toHaveCount(0);
   await expect(page.getByText("专项战法", { exact: true })).toHaveCount(0);
 });
+
+test("新演练默认使用非零滑点", async ({ page }) => {
+  await page.goto(`${replayUrl}/decision/market-replay`);
+  await page.getByText("高级成本设置", { exact: true }).click();
+
+  await expect(page.getByLabel("滑点（bps）")).toHaveValue("5");
+});

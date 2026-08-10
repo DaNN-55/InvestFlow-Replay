@@ -12,12 +12,11 @@ import { getLatestReplayReviewSnapshot } from "../../utils/replayReviewCorrectio
 import {
   buildReplayBlindReviewPayload,
   buildReplayBlindReviewPrefill,
+  formatReplayInvalidationRule,
   formatReplayReasonTags,
   REPLAY_REASON_TAG_OPTIONS,
 } from "../../utils/replayReviewPresentation.js";
 import ReplayReviewCorrectionForm from "./ReplayReviewCorrectionForm.vue";
-import ReplayReviewTimeline from "./ReplayReviewTimeline.vue";
-import ConfirmDialog from "../ConfirmDialog.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 
@@ -73,8 +72,6 @@ const emit = defineEmits([
   "savePost",
   "addBlindCorrection",
   "addPostCorrection",
-  "updateCorrection",
-  "deleteCorrection",
   "draftChange",
   "deleteDraft",
 ]);
@@ -87,6 +84,8 @@ const blindForm = reactive({
   riskPlan: "",
   confidence: 3,
   reasonTags: [],
+  stopLossPrice: null,
+  invalidationRule: null,
 });
 const postForm = reactive({
   outcome: "partial",
@@ -99,8 +98,6 @@ const postForm = reactive({
   strategyAdjustment: "",
 });
 const correctionStage = shallowRef("");
-const editingCorrection = shallowRef(null);
-const pendingCorrectionDelete = shallowRef(null);
 const contentCollapsed = shallowRef(false);
 let lastBlindDraftSignature = "";
 let lastPostDraftSignature = "";
@@ -123,10 +120,44 @@ const postReview = computed(() => review.value.postReview ?? null);
 const corrections = computed(() =>
   Array.isArray(props.session.corrections) ? props.session.corrections : [],
 );
+const latestBlindCorrection = computed(() =>
+  corrections.value.filter((item) => item.stage === "blind").at(-1) ?? null,
+);
+const latestPostCorrection = computed(() =>
+  corrections.value.filter((item) => item.stage === "post").at(-1) ?? null,
+);
+const effectiveBlindReview = computed(() =>
+  getLatestReplayReviewSnapshot({
+    stage: "blind",
+    originalReview: blindReview.value,
+    corrections: corrections.value,
+  }),
+);
+const displayedBlindReview = computed(() => {
+  if (!effectiveBlindReview.value) return null;
+  return {
+    ...effectiveBlindReview.value,
+    stopLossPrice:
+      effectiveBlindReview.value.stopLossPrice ??
+      blindDecisionPrefill.value?.stopLossPrice ??
+      null,
+    invalidationRule:
+      effectiveBlindReview.value.invalidationRule ??
+      blindDecisionPrefill.value?.invalidationRule ??
+      null,
+  };
+});
+const effectivePostReview = computed(() =>
+  getLatestReplayReviewSnapshot({
+    stage: "post",
+    originalReview: postReview.value,
+    corrections: corrections.value,
+  }),
+);
 const playbookFitApplicable = computed(
   () =>
-    Boolean(blindReview.value?.playbookId) &&
-    Boolean(blindReview.value?.playbookVersionId),
+    Boolean(effectiveBlindReview.value?.playbookId) &&
+    Boolean(effectiveBlindReview.value?.playbookVersionId),
 );
 const selectedPlaybook = computed(
   () =>
@@ -194,7 +225,7 @@ const latestCorrectionSnapshot = computed(() => {
   if (!correctionStage.value) {
     return null;
   }
-  return editingCorrection.value?.fullReviewSnapshot ?? getLatestReplayReviewSnapshot({
+  const snapshot = getLatestReplayReviewSnapshot({
     stage: correctionStage.value,
     originalReview:
       correctionStage.value === "blind"
@@ -202,6 +233,9 @@ const latestCorrectionSnapshot = computed(() => {
         : postReview.value,
     corrections: corrections.value,
   });
+  return correctionStage.value === "blind"
+    ? displayedBlindReview.value ?? snapshot
+    : snapshot;
 });
 
 function syncBlindForm() {
@@ -210,7 +244,10 @@ function syncBlindForm() {
     props.session.reviewDrafts?.blind ??
     null;
   const sourceBlind =
-    blindReview.value ?? serverBlindDraft ?? blindDecisionPrefill.value;
+    blindReview.value ??
+    props.reviewDrafts.blind ??
+    serverBlindDraft ??
+    blindDecisionPrefill.value;
   Object.assign(blindForm, {
     playbookId: sourceBlind?.playbookId ?? "",
     strategyName: sourceBlind?.strategyName ?? "",
@@ -221,6 +258,8 @@ function syncBlindForm() {
     reasonTags: Array.isArray(sourceBlind?.reasonTags)
       ? [...sourceBlind.reasonTags]
       : [],
+    stopLossPrice: sourceBlind?.stopLossPrice ?? null,
+    invalidationRule: sourceBlind?.invalidationRule ?? null,
   });
   lastBlindDraftSignature = JSON.stringify(buildBlindPayload());
 }
@@ -230,7 +269,8 @@ function syncPostForm() {
     props.session.reviewDrafts?.post?.data ??
     props.session.reviewDrafts?.post ??
     null;
-  const postReview = review.value.postReview ?? serverPostDraft;
+  const postReview =
+    review.value.postReview ?? props.reviewDrafts.post ?? serverPostDraft;
   Object.assign(postForm, {
     outcome: postReview?.outcome ?? "partial",
     executionReview: postReview?.executionReview ?? "",
@@ -258,8 +298,8 @@ function buildBlindPayload() {
     riskPlan: blindForm.riskPlan.trim(),
     confidence: Number(blindForm.confidence),
     reasonTags: [...blindForm.reasonTags].slice(0, 8),
-    stopLossPrice: null,
-    invalidationRule: null,
+    stopLossPrice: blindForm.stopLossPrice,
+    invalidationRule: blindForm.invalidationRule,
   });
   if (selectedPlaybook.value?.currentVersion?.id) {
     payload.playbookId = selectedPlaybook.value.id;
@@ -309,6 +349,8 @@ function clearDraft(stage) {
       riskPlan: "",
       confidence: 3,
       reasonTags: [],
+      stopLossPrice: null,
+      invalidationRule: null,
     });
     lastBlindDraftSignature = JSON.stringify(buildBlindPayload());
   } else {
@@ -328,31 +370,14 @@ function clearDraft(stage) {
 }
 
 function openCorrection(stage) {
-  editingCorrection.value = null;
   correctionStage.value = stage;
-}
-
-function editCorrection(correction) {
-  editingCorrection.value = correction;
-  correctionStage.value = correction.stage;
 }
 
 function closeCorrection() {
   correctionStage.value = "";
-  editingCorrection.value = null;
 }
 
 function submitCorrection(payload) {
-  if (editingCorrection.value) {
-    emit(
-      "updateCorrection",
-      editingCorrection.value.id,
-      editingCorrection.value.stage,
-      payload,
-    );
-    closeCorrection();
-    return;
-  }
   if (correctionStage.value === "blind") {
     emit("addBlindCorrection", payload);
     return;
@@ -360,16 +385,6 @@ function submitCorrection(payload) {
   if (correctionStage.value === "post") {
     emit("addPostCorrection", payload);
   }
-}
-
-function confirmDeleteCorrection() {
-  if (!pendingCorrectionDelete.value) return;
-  emit(
-    "deleteCorrection",
-    pendingCorrectionDelete.value.id,
-    pendingCorrectionDelete.value.stage,
-  );
-  pendingCorrectionDelete.value = null;
 }
 
 function formatScore(value) {
@@ -671,21 +686,13 @@ watch(
         stage="blind"
         :snapshot="latestCorrectionSnapshot"
         :loading="savingBlindCorrection"
-        :editing="Boolean(editingCorrection)"
-        :initial-change-note="editingCorrection?.changeNote || ''"
+        :editing="false"
+        initial-change-note=""
         :playbooks="playbooks"
         :playbooks-loading="playbooksLoading"
         :playbooks-error="playbooksError"
         @cancel="closeCorrection"
         @submit="submitCorrection"
-      />
-      <ReplayReviewTimeline
-        editable
-        :blind-review="blindReview"
-        :corrections="corrections"
-        :revealed="false"
-        @edit-correction="editCorrection"
-        @delete-correction="pendingCorrectionDelete = $event"
       />
     </div>
 
@@ -701,38 +708,51 @@ watch(
             盲评已冻结
           </span>
         </div>
-        <dl v-if="blindReview" class="replay-review__frozen-grid">
+        <p v-if="latestBlindCorrection" class="replay-review__effective-version">
+          当前有效版本 · 已修正至第 {{ latestBlindCorrection.revisionNumber }} 版
+        </p>
+        <dl v-if="displayedBlindReview" class="replay-review__frozen-grid">
           <div>
             <dt>战法名称</dt>
-            <dd>{{ blindReview.strategyName || "未指定" }}</dd>
+            <dd>{{ displayedBlindReview.strategyName || "未指定" }}</dd>
             <small
               v-if="
-                blindReview.playbookId &&
-                blindReview.playbookVersionNumber
+                displayedBlindReview.playbookId &&
+                displayedBlindReview.playbookVersionNumber
               "
             >
-              参考战法 · v{{ blindReview.playbookVersionNumber }}，已冻结
+              参考战法 · v{{ displayedBlindReview.playbookVersionNumber }}，已冻结
             </small>
           </div>
           <div>
             <dt>判断信心</dt>
-            <dd>{{ blindReview.confidence }} / 5</dd>
+            <dd>{{ displayedBlindReview.confidence }} / 5</dd>
           </div>
           <div>
             <dt>判断理由</dt>
-            <dd>{{ formatReplayReasonTags(blindReview.reasonTags) }}</dd>
+            <dd>{{ formatReplayReasonTags(displayedBlindReview.reasonTags) }}</dd>
+          </div>
+          <div>
+            <dt>止损价</dt>
+            <dd>{{ displayedBlindReview.stopLossPrice ?? "未记录" }}</dd>
+          </div>
+          <div>
+            <dt>判断失效条件</dt>
+            <dd>
+              {{ formatReplayInvalidationRule(displayedBlindReview.invalidationRule) }}
+            </dd>
           </div>
           <div>
             <dt>核心判断</dt>
-            <dd>{{ blindReview.thesis }}</dd>
+            <dd>{{ displayedBlindReview.thesis }}</dd>
           </div>
           <div>
             <dt>交易计划</dt>
-            <dd>{{ blindReview.tradePlan }}</dd>
+            <dd>{{ displayedBlindReview.tradePlan }}</dd>
           </div>
           <div>
             <dt>风险计划</dt>
-            <dd>{{ blindReview.riskPlan }}</dd>
+            <dd>{{ displayedBlindReview.riskPlan }}</dd>
           </div>
         </dl>
         <div v-else class="replay-review__legacy">
@@ -755,8 +775,8 @@ watch(
           stage="blind"
           :snapshot="latestCorrectionSnapshot"
           :loading="savingBlindCorrection"
-          :editing="Boolean(editingCorrection)"
-          :initial-change-note="editingCorrection?.changeNote || ''"
+          :editing="false"
+          initial-change-note=""
           :playbooks="playbooks"
           :playbooks-loading="playbooksLoading"
           :playbooks-error="playbooksError"
@@ -896,7 +916,10 @@ watch(
         <p class="replay-review__intro">
           原始评分不会改变。后续反思请追加修正，不会重算或覆盖首次评分。
         </p>
-        <dl v-if="postReview" class="replay-review__frozen-grid">
+        <p v-if="latestPostCorrection" class="replay-review__effective-version">
+          当前有效版本 · 已修正至第 {{ latestPostCorrection.revisionNumber }} 版
+        </p>
+        <dl v-if="effectivePostReview" class="replay-review__frozen-grid">
           <div>
             <dt>判断结果</dt>
             <dd>
@@ -905,28 +928,42 @@ watch(
                   correct: "正确",
                   partial: "部分正确",
                   wrong: "错误",
-                }[postReview.outcome] || postReview.outcome
+                }[effectivePostReview.outcome] || effectivePostReview.outcome
               }}
             </dd>
           </div>
           <div>
             <dt>执行纪律 / 风险控制</dt>
             <dd>
-              {{ postReview.disciplineScore }} / 5 ·
-              {{ postReview.riskControlScore ?? "旧记录未保存" }} / 5
+              {{ effectivePostReview.disciplineScore }} / 5 ·
+              {{ effectivePostReview.riskControlScore ?? "旧记录未保存" }} / 5
+            </dd>
+          </div>
+          <div v-if="playbookFitApplicable">
+            <dt>战法复核</dt>
+            <dd>
+              {{
+                effectivePostReview.playbookFitScore == null
+                  ? "旧记录未保存"
+                  : `${effectivePostReview.playbookFitScore} / 5`
+              }}
             </dd>
           </div>
           <div>
             <dt>执行复盘</dt>
-            <dd>{{ postReview.executionReview }}</dd>
+            <dd>{{ effectivePostReview.executionReview }}</dd>
           </div>
           <div>
             <dt>错误与不足</dt>
-            <dd>{{ postReview.mistakes }}</dd>
+            <dd>{{ effectivePostReview.mistakes }}</dd>
           </div>
           <div>
             <dt>经验总结</dt>
-            <dd>{{ postReview.lessons }}</dd>
+            <dd>{{ effectivePostReview.lessons }}</dd>
+          </div>
+          <div v-if="playbookFitApplicable">
+            <dt>战法调整建议</dt>
+            <dd>{{ effectivePostReview.strategyAdjustment || "未填写" }}</dd>
           </div>
         </dl>
         <UiButton
@@ -945,8 +982,8 @@ watch(
           :snapshot="latestCorrectionSnapshot"
           :playbook-fit-applicable="playbookFitApplicable"
           :loading="savingPostCorrection"
-          :editing="Boolean(editingCorrection)"
-          :initial-change-note="editingCorrection?.changeNote || ''"
+          :editing="false"
+          initial-change-note=""
           @cancel="closeCorrection"
           @submit="submitCorrection"
         />
@@ -1008,26 +1045,8 @@ watch(
           </div>
         </div>
       </section>
-      <ReplayReviewTimeline
-        editable
-        class="replay-review__timeline"
-        :blind-review="blindReview"
-        :post-review="postReview"
-        :corrections="corrections"
-        :revealed="revealed"
-        @edit-correction="editCorrection"
-        @delete-correction="pendingCorrectionDelete = $event"
-      />
     </div>
     </div>
-    <ConfirmDialog
-      :open="Boolean(pendingCorrectionDelete)"
-      title="删除这条复盘修正？"
-      message="删除后，这条修正将不再出现在时间线中；原始盲评、原始复盘和原始评分不会改变。"
-      confirm-text="确认删除"
-      @cancel="pendingCorrectionDelete = null"
-      @confirm="confirmDeleteCorrection"
-    />
   </section>
 </template>
 
@@ -1118,10 +1137,6 @@ watch(
   padding: 14px;
 }
 
-.replay-review__timeline {
-  grid-column: 1 / -1;
-}
-
 .replay-review__frozen {
   display: flex;
   flex-direction: column;
@@ -1129,7 +1144,7 @@ watch(
 
 .replay-review__revealed {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   align-items: stretch;
 }
 
@@ -1138,7 +1153,7 @@ watch(
 }
 
 .replay-review__revealed > :nth-child(2) {
-  border-left: 1px solid var(--ql-line);
+  border-top: 1px solid var(--ql-line);
 }
 
 .replay-review__correction-trigger {
@@ -1217,6 +1232,13 @@ watch(
   color: var(--ql-color-text-muted);
   font-size: 11px;
   line-height: 1.6;
+}
+
+.replay-review__effective-version {
+  margin: 0;
+  color: var(--ql-accent);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .replay-review__decision-prefill {
@@ -1404,8 +1426,9 @@ watch(
 }
 
 .replay-review__score {
+  order: -1;
   grid-column: 1 / -1;
-  border-top: 1px solid var(--ql-line);
+  border-bottom: 1px solid var(--ql-line);
   background: var(--ql-color-bg-surface-strong);
 }
 
@@ -1460,7 +1483,7 @@ watch(
 }
 
 .replay-review__dimensions {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .replay-review__metrics {
@@ -1509,9 +1532,6 @@ watch(
     border-left: 0;
   }
 
-  .replay-review__dimensions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 760px) {

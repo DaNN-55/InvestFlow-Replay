@@ -52,6 +52,17 @@ const record = {
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/quant/replay/playbooks") {
+      await route.fulfill({
+        json: {
+          items: [
+            { id: "playbook-breakout", name: "突破战法", currentVersion: { versionNumber: 2 } },
+            { id: "playbook-pullback", name: "回踩战法", currentVersion: { versionNumber: 1 } },
+          ],
+        },
+      });
+      return;
+    }
     if (url.pathname === "/api/quant/decision/stocks/search") {
       await route.fulfill({
         json: {
@@ -147,6 +158,28 @@ test("新建交易通过代码或名称选择后同步显示股票身份", async
   await drawer.getByRole("button", { name: "浦发银行 600000" }).click();
   await expect(drawer.getByText("浦发银行", { exact: true })).toBeVisible();
   await expect(drawer.getByText("600000", { exact: true })).toBeVisible();
+});
+
+test("新建交易可以不选战法、选择战法库或创建首版战法", async ({ page }) => {
+  await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
+  await page.getByRole("button", { name: "新建交易", exact: true }).click();
+
+  const drawer = page.getByRole("dialog", { name: "新建交易追踪" });
+  const strategy = drawer.locator(".trade-record-strategy-picker");
+  const mode = strategy.locator("select").first();
+  await expect(mode).toHaveValue("none");
+  await expect(strategy.locator("select")).toHaveCount(1);
+
+  await mode.selectOption("library");
+  const library = strategy.locator("select").nth(1);
+  await expect(library).toContainText("突破战法 · v2");
+  await expect(library).toContainText("回踩战法 · v1");
+
+  await mode.selectOption("new");
+  await expect(drawer.getByLabel("战法名称", { exact: true })).toBeVisible();
+  await expect(drawer.getByLabel("首版正文", { exact: true })).toBeVisible();
+  await expect(drawer.getByLabel("创建说明", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("v1", { exact: true })).toBeVisible();
 });
 
 test("详情头部通过修改抽屉更新交易信息", async ({ page }) => {
@@ -281,6 +314,7 @@ test("同一页面的历史演练删除也使用应用内二次确认", async ({
 
   await page.goto(`${baseUrl}/decision/trade-records`);
   await page.getByRole("button", { name: "历史演练", exact: true }).click();
+  await page.getByLabel("演练记录操作").click();
   await page.getByRole("button", { name: "删除记录", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "删除演练记录" })).toBeVisible();
 });
