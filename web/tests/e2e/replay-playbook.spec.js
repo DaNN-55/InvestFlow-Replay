@@ -25,6 +25,10 @@ const historicalVersion = {
   referenceCount: 0,
 };
 
+async function openPlaybookVersionMenu(page, versionNumber) {
+  await page.locator(`summary[aria-label="v${versionNumber} 版本操作"]`).click();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -101,6 +105,7 @@ test("历史版本可以带入正文创建新版本并经过确认后删除", as
     .getByRole("button", { name: "战法库", exact: true })
     .click();
 
+  await openPlaybookVersionMenu(page, historicalVersion.versionNumber);
   await page.getByRole("button", { name: "基于 v1 修改", exact: true }).click();
   const versionForm = page.getByRole("form", { name: "基于 v1 创建新版本" });
   await expect(
@@ -108,6 +113,7 @@ test("历史版本可以带入正文创建新版本并经过确认后删除", as
   ).toHaveValue("历史规则正文");
   await versionForm.getByRole("button", { name: "取消", exact: true }).click();
 
+  await openPlaybookVersionMenu(page, historicalVersion.versionNumber);
   await page.getByRole("button", { name: "删除 v1", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "删除战法历史版本" });
   await expect(confirm).toContainText("v1");

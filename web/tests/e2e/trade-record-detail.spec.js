@@ -49,6 +49,18 @@ const record = {
   },
 };
 
+async function openTradeRecordDetailMenu(page) {
+  await page.locator('summary[aria-label="交易追踪单操作"]').click();
+}
+
+async function openExecutionEventMenu(page) {
+  await page.locator('summary[aria-label="成交记录操作"]').click();
+}
+
+async function openReplayHistoryMenu(page) {
+  await page.locator('summary[aria-label="演练记录操作"]').click();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
@@ -155,7 +167,8 @@ test("详情头部通过修改抽屉更新交易信息", async ({ page }) => {
   const detailHeader = page.locator(".trade-record-detail .ql-ui-card__header");
   await expect(detailHeader.getByRole("heading", { name: "贵州茅台 600519" })).toBeVisible();
   await expect(detailHeader.getByRole("textbox")).toHaveCount(0);
-  await detailHeader.getByRole("button", { name: "修改", exact: true }).click();
+  await openTradeRecordDetailMenu(page);
+  await page.getByRole("button", { name: "修改", exact: true }).click();
 
   const drawer = page.getByRole("dialog", { name: "修改交易追踪" });
   await expect(drawer).toBeVisible();
@@ -210,7 +223,8 @@ test("已买入和持仓阶段不显示重复的通用保存按钮", async ({ pa
 test("已记录的成交动作可以通过弹窗修改", async ({ page }) => {
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
 
-  await page.getByRole("button", { name: "修改成交记录", exact: true }).click();
+  await openExecutionEventMenu(page);
+  await page.getByRole("button", { name: "修改", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "修改成交或动作记录" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("价格", { exact: true })).toHaveValue("43.4");
@@ -238,22 +252,25 @@ test("已记录的成交动作可以通过弹窗修改", async ({ page }) => {
 test("成交记录和交易追踪单删除前都使用应用内二次确认", async ({ page }) => {
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
 
-  await page.getByRole("button", { name: "删除成交记录", exact: true }).click();
+  await openExecutionEventMenu(page);
+  await page.getByRole("button", { name: "删除", exact: true }).click();
   const eventConfirm = page.getByRole("dialog", { name: "删除成交或动作记录" });
   await expect(eventConfirm).toBeVisible();
   await eventConfirm.getByRole("button", { name: "取消", exact: true }).click();
   await expect(eventConfirm).toBeHidden();
 
-  await page.getByRole("button", { name: "删除成交记录", exact: true }).click();
+  await openExecutionEventMenu(page);
+  await page.getByRole("button", { name: "删除", exact: true }).click();
   const deleteRequest = page.waitForRequest((request) =>
     request.method() === "DELETE"
       && new URL(request.url()).pathname === `/api/quant/decision/trade-records/${recordId}/execution-events/execution-event-1`,
   );
   await eventConfirm.getByRole("button", { name: "确认删除", exact: true }).click();
   await deleteRequest;
-  await expect(page.getByRole("button", { name: "删除成交记录", exact: true })).toHaveCount(0);
+  await expect(page.locator('summary[aria-label="成交记录操作"]')).toHaveCount(0);
 
-  await page.locator(".trade-record-detail .ql-ui-card__header").getByRole("button", { name: "删除", exact: true }).click();
+  await openTradeRecordDetailMenu(page);
+  await page.getByRole("button", { name: "删除", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "删除交易追踪单" })).toBeVisible();
 });
 
@@ -281,6 +298,7 @@ test("同一页面的历史演练删除也使用应用内二次确认", async ({
 
   await page.goto(`${baseUrl}/decision/trade-records`);
   await page.getByRole("button", { name: "历史演练", exact: true }).click();
+  await openReplayHistoryMenu(page);
   await page.getByRole("button", { name: "删除记录", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "删除演练记录" })).toBeVisible();
 });

@@ -1,5 +1,7 @@
 .venv/
 .runtime/
+.runtime-demo/
+.demo-storage/
 .playwright-cli/
 **/node_modules/
 **/dist/

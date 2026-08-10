@@ -5,6 +5,7 @@ import express from "express";
 
 import { createApp } from "./app.js";
 import { isStandalonePathAllowed } from "./standalone-access.js";
+import { resolveStandaloneStoragePaths } from "./standalone-storage.js";
 
 const projectRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const port = Number(process.env.INVESTFLOW_REPLAY_BACKEND_PORT ?? 3110);
@@ -19,11 +20,10 @@ app.use((req, res, next) => {
 });
 
 const core = createApp({
-  dbPath: resolve(projectRoot, "storage/app/replay.sqlite"),
-  rankingDbPath: resolve(projectRoot, "storage/app/ranking.sqlite"),
-  storageRoot: resolve(projectRoot, "storage/app"),
-  tradeRecordsRoot: resolve(projectRoot, "storage/trade-records"),
-  workspaceRoot: projectRoot,
+  ...resolveStandaloneStoragePaths(
+    projectRoot,
+    process.env.INVESTFLOW_REPLAY_STORAGE_ROOT,
+  ),
   engineUrl,
 });
 app.use(core);

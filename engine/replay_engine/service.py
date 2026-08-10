@@ -14,7 +14,24 @@ from .tdx_market_cache import (
 )
 
 
+def create_market_supply(provider: str | None = None) -> Any:
+    from .config import MARKET_PROVIDER
+
+    selected = str(provider or MARKET_PROVIDER).strip().lower()
+    if selected == "fixture":
+        from .fixture_market import FixtureReplayMarketSupply
+
+        return FixtureReplayMarketSupply()
+    if selected == "tdx":
+        return ReplayMarketSupply()
+    raise ValueError(
+        "INVESTFLOW_REPLAY_MARKET_PROVIDER 只支持 tdx 或 fixture"
+    )
+
+
 class ReplayMarketSupply:
+    provider_name = "tdx"
+
     def __init__(
         self,
         store: Any | None = None,
