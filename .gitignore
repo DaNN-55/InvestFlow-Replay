@@ -2,6 +2,7 @@
 .runtime/
 .runtime-demo/
 .demo-storage/
+portfolio-evidence/video/*.webm
 .playwright-cli/
 **/node_modules/
 **/dist/

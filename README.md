@@ -128,7 +128,7 @@ Backend 调用 Engine 创建演练场景的核心契约如下。示例只使用�
 
 重置脚本只处理项目内固定的 `.demo-storage`，不会读取或修改 `storage`。
 
-浏览器打开 http://127.0.0.1:5180/decision/market-replay。停止服务运行：
+浏览器打开 http://127.0.0.1:5280/decision/market-replay。停止服务运行：
 
 ~~~
 ./stop.sh
@@ -164,3 +164,7 @@ npm run test:e2e --prefix web
 npm run lint --prefix web
 npm run build --prefix web
 ~~~
+
+## Portfolio evidence
+
+阶段 3 作品证据包位于 [`portfolio-evidence/`](portfolio-evidence/README.md)，包含 3–5 分钟离线演示、四类状态契约、代表性测试报告、AI Coding 约束与验收说明，以及已知限制。

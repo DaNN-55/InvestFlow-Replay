@@ -82,6 +82,22 @@ def test_fixture_scenario_is_deterministic_for_same_input() -> None:
     assert first == second
 
 
+def test_fixture_exhaustion_has_a_business_error_code() -> None:
+    supply = FixtureReplayMarketSupply()
+
+    with pytest.raises(QuantWorkbenchError) as raised:
+        supply.create_scenario(
+            20,
+            "DEMO-INDEX.SYN",
+            excluded_ts_codes=tuple(
+                item["code"] for item in supply.manifest["instruments"]
+            ),
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.code == "REPLAY_SCENARIO_EXHAUSTED"
+
+
 @pytest.mark.parametrize("interval", ["1m", "hybrid"])
 def test_fixture_rejects_intraday_modes_with_business_error(interval: str) -> None:
     with pytest.raises(QuantWorkbenchError) as error:

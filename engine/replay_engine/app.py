@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from datetime import date
 
@@ -30,7 +31,20 @@ app = FastAPI(title="InvestFlow Replay Engine")
 
 @app.exception_handler(QuantWorkbenchError)
 async def handle_error(_request: Request, exc: QuantWorkbenchError):
-    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": exc.code, "message": str(exc)}},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(_request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    message = str(errors[0].get("msg", "请求参数无效")) if errors else "请求参数无效"
+    return JSONResponse(
+        status_code=400,
+        content={"error": {"code": "INVALID_REQUEST", "message": message}},
+    )
 
 
 @app.get("/internal/health")

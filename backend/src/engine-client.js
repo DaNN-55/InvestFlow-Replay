@@ -7,6 +7,7 @@ export class EngineClientError extends Error {
     this.name = "EngineClientError";
     this.status = status;
     this.details = details;
+    this.code = details?.error?.code;
   }
 }
 

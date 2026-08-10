@@ -50,7 +50,9 @@ class ReplayMarketSupply:
         try:
             self.market_provider.ensure_ready()
         except TdxMarketUnavailableError as exc:
-            raise QuantWorkbenchError(str(exc), 409) from exc
+            raise QuantWorkbenchError(
+                str(exc), 409, "MARKET_CACHE_INSUFFICIENT"
+            ) from exc
 
     def benchmarks(self, *, retry_failed: bool = False) -> dict[str, Any]:
         initialization = (
@@ -67,7 +69,9 @@ class ReplayMarketSupply:
                 "initialization": initialization,
             }
         except (FileNotFoundError, ValueError) as exc:
-            raise QuantWorkbenchError(str(exc), 409) from exc
+            raise QuantWorkbenchError(
+                str(exc), 409, "MARKET_CACHE_INSUFFICIENT"
+            ) from exc
 
     def cache_status(self) -> dict[str, Any]:
         market_snapshot = self.market_provider.cache_snapshot()
@@ -131,6 +135,7 @@ class ReplayMarketSupply:
             raise QuantWorkbenchError(
                 "当前缓存中的新标的已用完，通达信暂时无法补充新的日线标的",
                 409,
+                "MARKET_CACHE_INSUFFICIENT",
             )
         normalized_interval = str(interval or "1d").strip().lower()
         supported = {
@@ -184,9 +189,15 @@ class ReplayMarketSupply:
                     return self.minute_provider.create_scenario(**options)
                 except ValueError as exc:
                     last_error = exc
-            raise ValueError(str(last_error or "没有可用的分钟行情"))
+            raise QuantWorkbenchError(
+                str(last_error or "没有可用的分钟行情"),
+                409,
+                "MARKET_CACHE_INSUFFICIENT",
+            )
         except FileNotFoundError as exc:
-            raise QuantWorkbenchError(str(exc), 409) from exc
+            raise QuantWorkbenchError(
+                str(exc), 409, "MARKET_CACHE_INSUFFICIENT"
+            ) from exc
         except ValueError as exc:
             raise QuantWorkbenchError(str(exc), 404) from exc
 

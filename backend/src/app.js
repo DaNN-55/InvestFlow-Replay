@@ -7760,6 +7760,8 @@ export function createApp(options = {}) {
       "UPSTREAM_INVALID_RESPONSE",
       "RUNTIME_SYNC_FAILED",
       "CONFIG_PERSIST_FAILED",
+      "MARKET_CACHE_INSUFFICIENT",
+      "REPLAY_SCENARIO_EXHAUSTED",
       "INTERNAL_ERROR",
     ].includes(error?.code)
       ? error.code

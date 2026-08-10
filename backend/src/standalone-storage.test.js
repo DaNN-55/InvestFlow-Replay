@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 
-import { resolveStandaloneStoragePaths } from "./standalone-storage.js";
+import {
+  describeStandaloneRuntime,
+  resolveStandaloneStoragePaths,
+} from "./standalone-storage.js";
 
 const projectRoot = resolve("/tmp/investflow-replay-project");
 
@@ -30,5 +35,44 @@ test("standalone storage paths use a custom absolute root", () => {
   assert.equal(
     Object.values(paths).some((path) => path.startsWith(resolve(projectRoot, "storage"))),
     false,
+  );
+});
+
+test("standalone runtime reports demo mode only for fixture with project demo storage", () => {
+  assert.deepEqual(
+    describeStandaloneRuntime(projectRoot, resolve(projectRoot, ".demo-storage"), "fixture"),
+    {
+      demoMode: true,
+      marketProvider: "fixture",
+      storageIsolation: "project-demo-storage",
+    },
+  );
+  assert.equal(
+    describeStandaloneRuntime(projectRoot, resolve(projectRoot, "storage"), "fixture").demoMode,
+    false,
+  );
+  assert.equal(
+    describeStandaloneRuntime(projectRoot, resolve(projectRoot, ".demo-storage"), "tdx").demoMode,
+    false,
+  );
+});
+
+test("standalone runtime rejects a symlinked demo storage root", (t) => {
+  const temporaryRoot = mkdtempSync(resolve(tmpdir(), "investflow-replay-runtime-"));
+  t.after(() => rmSync(temporaryRoot, { force: true, recursive: true }));
+  mkdirSync(resolve(temporaryRoot, "storage"));
+  symlinkSync(resolve(temporaryRoot, "storage"), resolve(temporaryRoot, ".demo-storage"));
+
+  assert.deepEqual(
+    describeStandaloneRuntime(
+      temporaryRoot,
+      resolve(temporaryRoot, ".demo-storage"),
+      "fixture",
+    ),
+    {
+      demoMode: false,
+      marketProvider: "fixture",
+      storageIsolation: "default-storage",
+    },
   );
 });

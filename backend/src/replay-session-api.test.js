@@ -258,6 +258,26 @@ describe("replay session API", () => {
         req.on("end", () => {
           const payload = JSON.parse(body || "{}");
           lastScenarioPayload = payload;
+          if (payload.seed === 40901) {
+            res.statusCode = 409;
+            res.end(JSON.stringify({
+              error: {
+                code: "MARKET_CACHE_INSUFFICIENT",
+                message: "分钟行情不足：缓存数据不足",
+              },
+            }));
+            return;
+          }
+          if (payload.seed === 40001) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({
+              error: {
+                code: "INVALID_REQUEST",
+                message: "benchmarkCode 不能为空",
+              },
+            }));
+            return;
+          }
           res.end(
             JSON.stringify(
               payload.interval === "1m"
@@ -316,6 +336,32 @@ describe("replay session API", () => {
     });
     assert.equal(response.body.market.stockDailyBarCount, 9600);
     assert.equal(response.body.storage.totalBytes, 3072);
+  });
+
+  it("preserves structured replay engine error codes", async () => {
+    const insufficient = await request(app)
+      .post("/api/quant/replay/sessions")
+      .send({ gameLength: 20, seed: 40901 })
+      .expect(409);
+
+    assert.deepEqual(insufficient.body.error, {
+      code: "MARKET_CACHE_INSUFFICIENT",
+      message: "分钟行情不足：缓存数据不足",
+      details: {
+        error: {
+          code: "MARKET_CACHE_INSUFFICIENT",
+          message: "分钟行情不足：缓存数据不足",
+        },
+      },
+    });
+
+    const invalid = await request(app)
+      .post("/api/quant/replay/sessions")
+      .send({ gameLength: 20, seed: 40001 })
+      .expect(400);
+
+    assert.equal(invalid.body.error.code, "INVALID_REQUEST");
+    assert.equal(invalid.body.error.message, "benchmarkCode 不能为空");
   });
 
   it("creates and reads a persisted blind daily session without private data", async () => {

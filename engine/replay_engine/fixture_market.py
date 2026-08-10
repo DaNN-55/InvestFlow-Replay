@@ -229,7 +229,11 @@ class FixtureReplayMarketSupply:
             if str(item["code"]).upper() not in excluded
         ]
         if not instruments:
-            raise QuantWorkbenchError("离线 Demo 合成标的已全部使用，请重置 Demo 数据", 409)
+            raise QuantWorkbenchError(
+                "离线 Demo 合成标的已全部使用，请重置 Demo 数据",
+                409,
+                "REPLAY_SCENARIO_EXHAUSTED",
+            )
         instrument = instruments[_stable_offset(seed, len(instruments))]
         bar_count = OBSERVATION_BARS + int(game_length)
         bars = _generate_bars(
