@@ -9,6 +9,7 @@ import {
   getCandidateSuggestion,
   getPlaybookVersionNumber,
 } from "../../utils/replayPlaybookPresentation.js";
+import UiActionMenu from "../ui/UiActionMenu.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import { Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
@@ -195,36 +196,42 @@ watch(
               </summary>
               <pre>{{ version.content }}</pre>
             </details>
-            <details class="replay-playbook-detail__version-menu">
-              <summary :aria-label="`v${version.versionNumber} 版本操作`"><Ellipsis :size="16" /></summary>
-              <div class="replay-playbook-detail__version-actions">
+            <UiActionMenu
+              class="replay-playbook-detail__version-menu"
+              :label="`v${version.versionNumber} 版本操作`"
+              :disabled="Boolean(activeAction)"
+              :min-width="180"
+              :trigger-size="28"
+            >
+              <template #trigger><Ellipsis :size="16" /></template>
               <UiButton
+                class="ui-action-menu__item"
                 type="button"
                 size="sm"
                 variant="secondary"
                 :aria-label="`基于 v${version.versionNumber} 修改`"
                 :disabled="Boolean(activeAction)"
-                @click="startVersionEdit(version); $event.currentTarget.closest('details')?.removeAttribute('open')"
+                @click="startVersionEdit(version)"
               >
                 <template #prefix><Pencil :size="14" /></template>基于此版本修改
               </UiButton>
               <UiButton
                 v-if="version.id !== playbook.currentVersion?.id"
+                class="ui-action-menu__item ui-action-menu__item--danger"
                 type="button"
                 size="sm"
                 variant="danger"
                 :aria-label="`删除 v${version.versionNumber}`"
                 :title="versionDeleteHint(version)"
                 :disabled="!version.canDelete || Boolean(activeAction)"
-                @click="emit('deleteVersion', version); $event.currentTarget.closest('details')?.removeAttribute('open')"
+                @click="emit('deleteVersion', version)"
               >
                 <template #prefix><Trash2 :size="14" /></template>删除此版本
               </UiButton>
-              <small v-if="version.deletionBlockReason === 'referenced'">
+              <small v-if="version.deletionBlockReason === 'referenced'" class="ui-action-menu__hint">
                 已被历史记录引用，不能删除
               </small>
-              </div>
-            </details>
+            </UiActionMenu>
           </article>
         </div>
         <p v-else class="replay-playbook-detail__empty">
@@ -257,16 +264,41 @@ watch(
             <small v-if="candidate.reason">
               拒绝原因：{{ candidate.reason }}
             </small>
-            <details class="replay-playbook-detail__candidate-menu">
-              <summary aria-label="候选改进操作"><Ellipsis :size="16" /></summary>
-              <div>
-                <button v-if="getCandidateSessionId(candidate)" type="button" @click="emit('openSource', candidate); $event.currentTarget.closest('details')?.removeAttribute('open')">打开源演练</button>
-                <template v-if="candidate.state === 'pending'">
-                  <button type="button" :disabled="Boolean(activeAction)" @click="startAccept(candidate); $event.currentTarget.closest('details')?.removeAttribute('open')">采纳并生成版本</button>
-                  <button class="replay-playbook-detail__candidate-reject-action" type="button" :disabled="Boolean(activeAction)" @click="startReject(candidate); $event.currentTarget.closest('details')?.removeAttribute('open')">拒绝</button>
-                </template>
-              </div>
-            </details>
+            <UiActionMenu
+              class="replay-playbook-detail__candidate-menu"
+              label="候选改进操作"
+              :disabled="Boolean(activeAction)"
+              :min-width="150"
+              :trigger-size="28"
+            >
+              <template #trigger><Ellipsis :size="16" /></template>
+              <button
+                v-if="getCandidateSessionId(candidate)"
+                class="ui-action-menu__item"
+                type="button"
+                @click="emit('openSource', candidate)"
+              >
+                打开源演练
+              </button>
+              <template v-if="candidate.state === 'pending'">
+                <button
+                  class="ui-action-menu__item"
+                  type="button"
+                  :disabled="Boolean(activeAction)"
+                  @click="startAccept(candidate)"
+                >
+                  采纳并生成版本
+                </button>
+                <button
+                  class="ui-action-menu__item ui-action-menu__item--danger"
+                  type="button"
+                  :disabled="Boolean(activeAction)"
+                  @click="startReject(candidate)"
+                >
+                  拒绝
+                </button>
+              </template>
+            </UiActionMenu>
             <div v-if="rejectingCandidateId === candidate.id" class="replay-playbook-detail__candidate-actions">
                 <label>
                   <span>拒绝原因（可选）</span>
@@ -362,34 +394,8 @@ watch(
   white-space: pre-wrap;
 }
 
-.replay-playbook-detail__version-actions {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0;
-  padding: 0.35rem;
-  border: 1px solid var(--ql-color-border-soft);
-  border-radius: 8px;
-  background: var(--ql-color-bg-surface-strong);
-  box-shadow: var(--ql-shadow-popover);
-}
-
-.replay-playbook-detail__version-actions :deep(.ql-ui-button) {
-  border-width: 0;
-  min-height: 30px;
-  padding-inline: 0.55rem;
-}
-
 .replay-playbook-detail__version { position: relative; padding-right: 3.5rem; }
 .replay-playbook-detail__version-menu { position: absolute; top: 0.6rem; right: 0.6rem; }
-.replay-playbook-detail__version-menu > summary { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 7px; color: var(--ql-color-text-muted); cursor: pointer; list-style: none; }
-.replay-playbook-detail__version-menu[open] .replay-playbook-detail__version-actions { position: absolute; z-index: 5; top: 32px; right: 0; display: grid; min-width: 164px; }
-
-.replay-playbook-detail__version-actions small {
-  color: var(--ql-color-text-muted);
-  font-size: 0.6875rem;
-}
 
 .replay-playbook-detail__section > p {
   color: var(--ql-color-text-muted);
@@ -467,12 +473,6 @@ watch(
 
 .replay-playbook-detail__candidate { position: relative; padding-right: 3rem; }
 .replay-playbook-detail__candidate-menu { position: absolute; top: 0.55rem; right: 0.55rem; }
-.replay-playbook-detail__candidate-menu > summary { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 7px; color: var(--ql-color-text-muted); cursor: pointer; list-style: none; }
-.replay-playbook-detail__candidate-menu > summary:hover { background: var(--ql-color-bg-surface-strong); color: var(--ql-color-text-strong); }
-.replay-playbook-detail__candidate-menu > div { position: absolute; z-index: 6; right: 0; bottom: 32px; display: grid; min-width: 150px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
-.replay-playbook-detail__candidate-menu button { border: 0; border-radius: 6px; padding: 8px 9px; color: var(--ql-color-text-body); background: transparent; cursor: pointer; font: inherit; font-size: 11px; text-align: left; }
-.replay-playbook-detail__candidate-menu button:hover:not(:disabled) { background: var(--ql-color-bg-muted); }
-.replay-playbook-detail__candidate-menu .replay-playbook-detail__candidate-reject-action { color: var(--ql-color-danger); }
 
 .replay-playbook-detail__candidate header > span {
   border-radius: 999px;

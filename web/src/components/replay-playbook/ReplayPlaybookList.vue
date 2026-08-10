@@ -1,8 +1,6 @@
 <script setup>
 import {
   computed,
-  onBeforeUnmount,
-  onMounted,
   reactive,
   shallowRef,
   watch,
@@ -10,6 +8,7 @@ import {
 import { Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
 
 import { getPlaybookVersionNumber } from "../../utils/replayPlaybookPresentation.js";
+import UiActionMenu from "../ui/UiActionMenu.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 
@@ -43,7 +42,6 @@ const props = defineProps({
 const emit = defineEmits(["select", "create", "rename", "delete"]);
 
 const showCreateForm = shallowRef(false);
-const openMenuId = shallowRef("");
 const form = reactive({
   name: "",
   content: "",
@@ -74,21 +72,9 @@ function resetForm() {
   showCreateForm.value = false;
 }
 
-function toggleMenu(itemId) {
-  openMenuId.value = openMenuId.value === itemId ? "" : itemId;
-}
-
 function chooseAction(action, item) {
-  openMenuId.value = "";
   emit(action, item);
 }
-
-function closeMenu() {
-  openMenuId.value = "";
-}
-
-onMounted(() => document.addEventListener("click", closeMenu));
-onBeforeUnmount(() => document.removeEventListener("click", closeMenu));
 
 watch(
   () => props.createSuccessToken,
@@ -189,34 +175,21 @@ watch(
           <em v-if="Number(item.pendingCandidateCount ?? 0) > 0">
             {{ Number(item.pendingCandidateCount ?? 0) }} 条候选改进
           </em>
-          <div class="replay-playbook-list__menu" @click.stop>
-            <button
-              type="button"
-              aria-label="战法操作"
-              title="战法操作"
-              :disabled="Boolean(activeAction)"
-              @click="toggleMenu(item.id)"
-            >
-              <Ellipsis :size="16" />
+          <UiActionMenu
+            class="replay-playbook-list__menu"
+            label="战法操作"
+            :disabled="Boolean(activeAction)"
+            :min-width="128"
+            :trigger-size="28"
+          >
+            <template #trigger><Ellipsis :size="16" /></template>
+            <button class="ui-action-menu__item" type="button" @click="chooseAction('rename', item)">
+              <Pencil :size="14" />修改名称
             </button>
-            <div
-              v-if="openMenuId === item.id"
-              class="replay-playbook-list__menu-popover"
-            >
-              <button type="button" @click="chooseAction('rename', item)">
-                <Pencil :size="14" />
-                修改名称
-              </button>
-              <button
-                type="button"
-                class="replay-playbook-list__menu-danger"
-                @click="chooseAction('delete', item)"
-              >
-                <Trash2 :size="14" />
-                删除战法
-              </button>
-            </div>
-          </div>
+            <button class="ui-action-menu__item ui-action-menu__item--danger" type="button" @click="chooseAction('delete', item)">
+              <Trash2 :size="14" />删除战法
+            </button>
+          </UiActionMenu>
         </div>
       </div>
     </div>
@@ -364,72 +337,6 @@ watch(
   padding: 0.25rem 0.5rem;
 }
 
-.replay-playbook-list__menu {
-  position: relative;
-}
-
-.replay-playbook-list__menu > button {
-  border: 0;
-  border-radius: 6px;
-  color: var(--ql-color-text-muted);
-  background: transparent;
-  cursor: pointer;
-  display: grid;
-  height: 28px;
-  place-items: center;
-  width: 28px;
-}
-
-.replay-playbook-list__menu > button:hover {
-  color: var(--ql-color-text-strong);
-  background: rgba(15, 23, 42, 0.06);
-}
-
-.replay-playbook-list__menu > button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.replay-playbook-list__menu-popover {
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 8px;
-  background: var(--ql-color-bg-surface-strong);
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
-  display: grid;
-  min-width: 128px;
-  padding: 0.375rem;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 0.25rem);
-  z-index: 10;
-}
-
-.replay-playbook-list__menu-popover button {
-  align-items: center;
-  border: 0;
-  border-radius: 6px;
-  color: var(--ql-color-text-muted);
-  background: transparent;
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  font-size: 0.75rem;
-  gap: 0.5rem;
-  padding: 0.5rem 0.625rem;
-  text-align: left;
-}
-
-.replay-playbook-list__menu-popover button:hover {
-  background: var(--ql-color-bg-muted);
-}
-
-.replay-playbook-list__menu-popover .replay-playbook-list__menu-danger {
-  color: #be123c;
-}
-
-.replay-playbook-list__menu-popover .replay-playbook-list__menu-danger:hover {
-  background: var(--ql-color-danger-soft);
-}
 
 .replay-playbook-list__empty {
   color: var(--ql-color-text-muted);

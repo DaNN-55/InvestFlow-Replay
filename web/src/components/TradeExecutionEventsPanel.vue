@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Ellipsis, Pencil, Trash2 } from "lucide-vue-nex
 import { reactive, shallowRef } from "vue";
 
 import UiButton from "./ui/UiButton.vue";
+import UiActionMenu from "./ui/UiActionMenu.vue";
 import UiInput from "./ui/UiInput.vue";
 import UiSelect from "./ui/UiSelect.vue";
 import UiTextarea from "./ui/UiTextarea.vue";
@@ -150,13 +151,17 @@ function formatSigned(value, suffix = "") {
             <strong>{{ formatEvent(event) }}</strong>
             <small>{{ event.eventAt }} · {{ planStatusLabel(event.planStatus) }}<span v-if="event.source"> · {{ event.source }}</span></small>
           </div>
-          <details class="trade-execution-events__event-actions">
-            <summary aria-label="成交记录操作"><Ellipsis :size="15" /></summary>
-            <div>
-              <button type="button" :disabled="saving" @click="emit('edit', event); $event.currentTarget.closest('details')?.removeAttribute('open')"><Pencil :size="14" /> 修改</button>
-              <button class="trade-execution-events__delete" type="button" :disabled="saving" @click="emit('delete', event); $event.currentTarget.closest('details')?.removeAttribute('open')"><Trash2 :size="14" /> 删除</button>
-            </div>
-          </details>
+          <UiActionMenu
+            class="trade-execution-events__event-actions"
+            label="成交记录操作"
+            :disabled="saving"
+            :min-width="104"
+            :trigger-size="24"
+          >
+            <template #trigger><Ellipsis :size="15" /></template>
+            <button class="ui-action-menu__item" type="button" :disabled="saving" @click="emit('edit', event)"><Pencil :size="14" />修改</button>
+            <button class="ui-action-menu__item ui-action-menu__item--danger" type="button" :disabled="saving" @click="emit('delete', event)"><Trash2 :size="14" />删除</button>
+          </UiActionMenu>
         </div>
         <p v-if="event.note">{{ event.note }}</p>
       </article>
@@ -326,42 +331,7 @@ function formatSigned(value, suffix = "") {
 }
 
 .trade-execution-events__event-actions {
-  position: relative;
   flex: 0 0 auto;
-  gap: 4px;
-}
-
-.trade-execution-events__event-actions summary { display: grid; width: 24px; height: 24px; place-items: center; border: 0; border-radius: 6px; color: var(--ql-color-text-muted); background: transparent; cursor: pointer; list-style: none; }
-.trade-execution-events__event-actions summary:hover { color: var(--ql-color-text-strong); background: var(--ql-color-bg-muted); }
-.trade-execution-events__event-actions > div { position: absolute; z-index: 5; top: 30px; right: 0; display: grid; min-width: 104px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
-
-.trade-execution-events__event-actions button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  border-radius: 7px;
-  color: var(--ql-color-text-muted);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  line-height: 1.2;
-  padding: 8px 9px;
-  white-space: nowrap;
-}
-
-.trade-execution-events__event-actions .trade-execution-events__delete { color: var(--ql-color-danger); }
-
-.trade-execution-events__event-actions button:hover:not(:disabled) {
-  border-color: var(--ql-color-border-strong);
-  color: var(--ql-color-text-strong);
-  background: var(--ql-color-bg-muted);
-}
-
-.trade-execution-events__event-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
 }
 
 .trade-execution-events__list article p {
