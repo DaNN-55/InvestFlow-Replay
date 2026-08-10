@@ -10,6 +10,7 @@ import TradeExecutionEventDialog from "../components/TradeExecutionEventDialog.v
 import TradeExecutionEventsPanel from "../components/TradeExecutionEventsPanel.vue";
 import TradeRecordCreateDrawer from "../components/TradeRecordCreateDrawer.vue";
 import TradeRecordList from "../components/TradeRecordList.vue";
+import UiActionMenu from "../components/ui/UiActionMenu.vue";
 import UiButton from "../components/ui/UiButton.vue";
 import UiCard from "../components/ui/UiCard.vue";
 import UiInput from "../components/ui/UiInput.vue";
@@ -842,13 +843,18 @@ onMounted(() => {
                 {{ selectedRecord ? `账户：${accountTypeLabel(form.accountType)} · 阶段：${statusLabel(form.status)}` : "请选择一条交易追踪单" }}
               </p>
             </div>
-            <details v-if="selectedRecord" class="trade-record-detail__menu">
-              <summary aria-label="交易追踪单操作"><Ellipsis :size="18" /></summary>
-              <div>
-                <button type="button" :disabled="detailLoading" @click="openEditDrawer(); $event.currentTarget.closest('details')?.removeAttribute('open')"><Pencil :size="14" />修改</button>
-                <button class="trade-record-detail__delete" type="button" :disabled="detailLoading || deleting" @click="recordDeleteConfirmOpen = true; $event.currentTarget.closest('details')?.removeAttribute('open')"><Trash2 :size="14" />删除</button>
-              </div>
-            </details>
+            <UiActionMenu
+              v-if="selectedRecord"
+              class="trade-record-detail__menu"
+              label="交易追踪单操作"
+              :disabled="detailLoading"
+              :min-width="108"
+              :trigger-size="30"
+            >
+              <template #trigger><Ellipsis :size="18" /></template>
+              <button class="ui-action-menu__item" type="button" :disabled="detailLoading" @click="openEditDrawer"><Pencil :size="14" />修改</button>
+              <button class="ui-action-menu__item ui-action-menu__item--danger" type="button" :disabled="detailLoading || deleting" @click="recordDeleteConfirmOpen = true"><Trash2 :size="14" />删除</button>
+            </UiActionMenu>
           </div>
         </template>
 
@@ -1114,14 +1120,7 @@ onMounted(() => {
 
 .trade-records-list__create:hover { background: var(--ql-color-bg-muted); color: var(--ql-color-primary); }
 
-.trade-record-detail__menu { position: relative; flex: 0 0 auto; }
-.trade-record-detail__menu > summary { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 7px; color: var(--ql-color-text-muted); cursor: pointer; list-style: none; }
-.trade-record-detail__menu > summary:hover { background: var(--ql-color-bg-muted); color: var(--ql-color-text-strong); }
-.trade-record-detail__menu > div { position: absolute; z-index: 8; top: 34px; right: 0; display: grid; min-width: 108px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
-.trade-record-detail__menu button { display: flex; align-items: center; gap: 7px; padding: 8px 10px; border: 0; border-radius: 6px; color: var(--ql-color-text-body); background: transparent; cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
-.trade-record-detail__menu button:hover:not(:disabled) { background: var(--ql-color-bg-muted); }
-.trade-record-detail__menu .trade-record-detail__delete { color: var(--ql-color-danger); }
-.trade-record-detail__menu button:disabled { cursor: not-allowed; opacity: 0.45; }
+.trade-record-detail__menu { flex: 0 0 auto; }
 
 .trade-record-analytics__label { align-items: center; display: inline-flex; gap: 4px; }
 

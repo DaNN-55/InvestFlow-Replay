@@ -74,7 +74,7 @@ describe("replay playbook frontend surface", () => {
     assert.match(listSource, /新建战法/u);
     assert.match(listSource, /当前 v/u);
     assert.match(listSource, /条候选改进/u);
-    assert.match(listSource, /aria-label="战法操作"/u);
+    assert.match(listSource, /<UiActionMenu[\s\S]*label="战法操作"/u);
     assert.match(listSource, /修改名称/u);
     assert.match(listSource, /删除战法/u);
     assert.match(detailSource, /当前正文/u);

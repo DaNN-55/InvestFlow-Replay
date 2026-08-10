@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { ChevronDown, Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
 
 import { buildReplayReviewTimeline } from "../../utils/replayReviewCorrections.js";
+import UiActionMenu from "../ui/UiActionMenu.vue";
 
 const props = defineProps({
   blindReview: {
@@ -79,13 +80,17 @@ const stages = computed(() =>
             <strong>{{ entry.title }}</strong>
             <div class="replay-review-timeline__entry-meta">
               <span>{{ entry.time }}</span>
-              <details v-if="editable && entry.correction" class="replay-review-timeline__entry-menu">
-                <summary aria-label="修正记录操作"><Ellipsis :size="15" /></summary>
-                <div>
-                  <button type="button" @click="emit('editCorrection', entry.correction); $event.currentTarget.closest('details')?.removeAttribute('open')"><Pencil :size="13" />修改</button>
-                  <button class="replay-review-timeline__delete" type="button" @click="emit('deleteCorrection', entry.correction); $event.currentTarget.closest('details')?.removeAttribute('open')"><Trash2 :size="13" />删除</button>
-                </div>
-              </details>
+              <UiActionMenu
+                v-if="editable && entry.correction"
+                class="replay-review-timeline__entry-menu"
+                label="修正记录操作"
+                :min-width="96"
+                :trigger-size="24"
+              >
+                <template #trigger><Ellipsis :size="15" /></template>
+                <button class="ui-action-menu__item" type="button" @click="emit('editCorrection', entry.correction)"><Pencil :size="13" />修改</button>
+                <button class="ui-action-menu__item ui-action-menu__item--danger" type="button" @click="emit('deleteCorrection', entry.correction)"><Trash2 :size="13" />删除</button>
+              </UiActionMenu>
             </div>
           </header>
           <p v-if="entry.changeNote" class="replay-review-timeline__note">
@@ -193,13 +198,6 @@ const stages = computed(() =>
 }
 
 .replay-review-timeline__entry-meta { align-items: center; display: flex; gap: 0.35rem; }
-.replay-review-timeline__entry-menu { position: relative; }
-.replay-review-timeline__entry-menu > summary { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 6px; color: var(--ql-color-text-muted); cursor: pointer; list-style: none; }
-.replay-review-timeline__entry-menu > summary:hover { background: var(--ql-color-bg-surface-strong); color: var(--ql-color-text-strong); }
-.replay-review-timeline__entry-menu > div { position: absolute; z-index: 8; top: 28px; right: 0; display: grid; min-width: 96px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
-.replay-review-timeline__entry-menu button { align-items: center; display: flex; gap: 6px; padding: 7px 8px; border: 0; border-radius: 6px; color: var(--ql-color-text-body); background: transparent; cursor: pointer; font: inherit; font-size: 11px; }
-.replay-review-timeline__entry-menu button:hover { background: var(--ql-color-bg-muted); }
-.replay-review-timeline__entry-menu .replay-review-timeline__delete { color: var(--ql-color-danger); }
 
 .replay-review-timeline__note {
   margin: 0.6rem 0 0;

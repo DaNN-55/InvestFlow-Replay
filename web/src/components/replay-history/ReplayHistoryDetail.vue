@@ -21,6 +21,7 @@ import {
 } from "../../utils/replayReviewPresentation.js";
 import ReplayReviewTimeline from "../replay/ReplayReviewTimeline.vue";
 import ReplayOrderDecisionSnapshot from "../replay/ReplayOrderDecisionSnapshot.vue";
+import UiActionMenu from "../ui/UiActionMenu.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiTooltip from "../ui/UiTooltip.vue";
 
@@ -162,14 +163,17 @@ function isPositiveMetric(metric) {
         </span>
       </div>
       <div class="replay-history-detail__actions">
-        <details class="replay-history-detail__action-menu">
-          <summary aria-label="演练记录操作"><Ellipsis :size="17" /></summary>
-          <div>
-            <button type="button" @click="emit('open', item)"><ExternalLink :size="14" />打开演练</button>
-            <button v-if="item.revealed" type="button" :disabled="retrainState.loading" @click="emit('retrain', item)"><RefreshCw :size="14" />复练此行情</button>
-            <button type="button" class="replay-history-detail__action-menu-danger" :disabled="deleteState.loading || retrainState.loading" @click="emit('delete', item)"><Trash2 :size="14" />删除记录</button>
-          </div>
-        </details>
+        <UiActionMenu
+          class="replay-history-detail__action-menu"
+          label="演练记录操作"
+          :min-width="150"
+          :trigger-size="32"
+        >
+          <template #trigger><Ellipsis :size="17" /></template>
+          <button class="ui-action-menu__item" type="button" @click="emit('open', item)"><ExternalLink :size="14" />打开演练</button>
+          <button v-if="item.revealed" class="ui-action-menu__item" type="button" :disabled="retrainState.loading" @click="emit('retrain', item)"><RefreshCw :size="14" />复练此行情</button>
+          <button class="ui-action-menu__item ui-action-menu__item--danger" type="button" :disabled="deleteState.loading || retrainState.loading" @click="emit('delete', item)"><Trash2 :size="14" />删除记录</button>
+        </UiActionMenu>
         <small
           v-if="retrainState.error || deleteState.error"
           class="replay-history-detail__action-error"
@@ -617,13 +621,6 @@ function isPositiveMetric(metric) {
   gap: 0.5rem;
 }
 
-.replay-history-detail__action-menu { position: relative; }
-.replay-history-detail__action-menu > summary { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; color: var(--ql-color-text-muted); background: var(--ql-color-bg-surface-strong); cursor: pointer; list-style: none; }
-.replay-history-detail__action-menu > div { position: absolute; z-index: 8; top: 36px; right: 0; display: grid; min-width: 150px; padding: 4px; border: 1px solid var(--ql-color-border-soft); border-radius: 8px; background: var(--ql-color-bg-surface-strong); box-shadow: var(--ql-shadow-popover); }
-.replay-history-detail__action-menu button { display: flex; align-items: center; gap: 7px; padding: 8px 9px; border: 0; border-radius: 6px; color: var(--ql-color-text-body); background: transparent; font: inherit; font-size: 12px; cursor: pointer; }
-.replay-history-detail__action-menu button:hover:not(:disabled) { background: var(--ql-color-bg-muted); }
-.replay-history-detail__action-menu button:disabled { cursor: not-allowed; opacity: 0.5; }
-.replay-history-detail__action-menu .replay-history-detail__action-menu-danger { color: var(--ql-color-danger); }
 
 .replay-history-detail__action-error {
   flex-basis: 100%;
