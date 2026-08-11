@@ -55,7 +55,10 @@ function handleOpenUpdate(nextOpen) {
     <DialogPortal>
       <DialogOverlay
         class="ql-ui-drawer"
-        :class="overlayTone === 'clear' ? 'ql-ui-drawer--clear' : ''"
+        :class="{
+          'ql-ui-drawer--clear': overlayTone === 'clear',
+          'ql-ui-drawer--transparent': overlayTone === 'transparent',
+        }"
       >
         <DialogContent as-child>
           <aside class="ql-ui-drawer__panel" :class="panelClass">
@@ -112,6 +115,11 @@ function handleOpenUpdate(nextOpen) {
 .ql-ui-drawer--clear {
   background: var(--ql-overlay-clear);
   backdrop-filter: blur(6px);
+}
+
+.ql-ui-drawer--transparent {
+  background: transparent;
+  backdrop-filter: none;
 }
 
 .ql-ui-drawer--clear .ql-ui-drawer__panel {

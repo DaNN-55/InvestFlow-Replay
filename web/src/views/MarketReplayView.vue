@@ -19,7 +19,7 @@ import ReplaySetupPanel from "../components/replay/ReplaySetupPanel.vue";
 import ReplayTradingPanel from "../components/replay/ReplayTradingPanel.vue";
 import UiButton from "../components/ui/UiButton.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
-import UiModal from "../components/ui/UiModal.vue";
+import UiDrawer from "../components/ui/UiDrawer.vue";
 import { useReplayAttempt } from "../composables/useReplayAttempt.js";
 import { api } from "../services/api.js";
 
@@ -343,12 +343,12 @@ onBeforeUnmount(() => {
             />
           </aside>
         </div>
-        <UiModal
+        <UiDrawer
           :open="reviewDialogOpen"
-          :busy="['savingBlindReview', 'savingPostReview'].includes(attemptState.activity)"
+          overlay-tone="transparent"
           title="两阶段复盘 · 决策记录与评分"
           description="逐笔委托记录回答每次为什么操作；这里负责整局盲评、揭晓后复盘和评分。"
-          panel-class="market-replay-review-dialog"
+          panel-class="market-replay-review-drawer"
           @close="reviewDialogOpen = false"
         >
           <ReplayReviewPanel
@@ -372,7 +372,7 @@ onBeforeUnmount(() => {
             @update-correction="commands.updateCorrection"
             @delete-correction="commands.deleteCorrection"
           />
-        </UiModal>
+        </UiDrawer>
       </template>
     </template>
     <ConfirmDialog
@@ -397,11 +397,11 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 
-:global(.market-replay-review-dialog) {
-  width: min(1040px, calc(100vw - 32px));
+:global(.market-replay-review-drawer) {
+  width: min(760px, calc(100vw - 32px));
 }
 
-:global(.market-replay-review-dialog .ui-modal__body) {
+:global(.market-replay-review-drawer .ql-ui-drawer__body) {
   padding-block: 4px;
 }
 
@@ -449,7 +449,7 @@ onBeforeUnmount(() => {
 
 .market-replay__side--hybrid {
   position: sticky;
-  top: 16px;
+  top: 60px;
 }
 
 .market-replay__side--hybrid :deep(.replay-order-dialog) {

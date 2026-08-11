@@ -225,12 +225,17 @@ const latestCorrectionSnapshot = computed(() => {
 });
 
 function syncBlindForm() {
+  const localBlindDraft =
+    props.reviewDrafts?.blind?.data ?? props.reviewDrafts?.blind ?? null;
   const serverBlindDraft =
     props.session.reviewDrafts?.blind?.data ??
     props.session.reviewDrafts?.blind ??
     null;
   const sourceBlind =
-    blindReview.value ?? serverBlindDraft ?? blindDecisionPrefill.value;
+    blindReview.value ??
+    localBlindDraft ??
+    serverBlindDraft ??
+    blindDecisionPrefill.value;
   Object.assign(blindForm, {
     playbookId: sourceBlind?.playbookId ?? "",
     strategyName: sourceBlind?.strategyName ?? "",
@@ -246,11 +251,14 @@ function syncBlindForm() {
 }
 
 function syncPostForm() {
+  const localPostDraft =
+    props.reviewDrafts?.post?.data ?? props.reviewDrafts?.post ?? null;
   const serverPostDraft =
     props.session.reviewDrafts?.post?.data ??
     props.session.reviewDrafts?.post ??
     null;
-  const postReview = review.value.postReview ?? serverPostDraft;
+  const postReview =
+    review.value.postReview ?? localPostDraft ?? serverPostDraft;
   Object.assign(postForm, {
     outcome: postReview?.outcome ?? "partial",
     executionReview: postReview?.executionReview ?? "",
@@ -700,6 +708,7 @@ watch(
         @submit="submitCorrection"
       />
       <ReplayReviewTimeline
+        v-if="!modal"
         editable
         :blind-review="blindReview"
         :corrections="corrections"
@@ -1036,6 +1045,7 @@ watch(
         </div>
       </section>
       <ReplayReviewTimeline
+        v-if="!modal"
         editable
         class="replay-review__timeline"
         :blind-review="blindReview"
@@ -1073,6 +1083,15 @@ watch(
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+.replay-review--modal .replay-review__revealed {
+  grid-template-columns: 1fr;
+}
+
+.replay-review--modal .replay-review__revealed > :nth-child(2) {
+  border-top: 1px solid var(--ql-line);
+  border-left: 0;
 }
 
 .replay-review__header {
