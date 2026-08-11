@@ -236,6 +236,13 @@ test("创建场景返回 409 时显示缓存不足业务错误且不进入工作
   await expect(page.getByRole("status").filter({ hasText: cacheError })).toBeVisible();
   await expect(page.getByText(cacheError, { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "历史行情盲测" })).toHaveCount(0);
+
+  if (process.env.PORTFOLIO_FAILURE_SCREENSHOT) {
+    await page.screenshot({
+      path: process.env.PORTFOLIO_FAILURE_SCREENSHOT,
+      fullPage: true,
+    });
+  }
 });
 
 test("连接失败但缓存可用时缓存面板显示降级文案", async ({ page }) => {

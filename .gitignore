@@ -4,6 +4,9 @@
 .demo-storage/
 portfolio-evidence/video/*.webm
 .playwright-cli/
+.DS_Store
+.vscode/
+**/test-results/
 **/node_modules/
 **/dist/
 **/__pycache__/

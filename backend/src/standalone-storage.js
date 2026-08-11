@@ -1,5 +1,5 @@
 import { lstatSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 function isProjectDemoStorage(projectRoot, storageRoot) {
   const expectedStorageRoot = resolve(projectRoot, ".demo-storage");
@@ -42,10 +42,19 @@ export function describeStandaloneRuntime(projectRoot, configuredStorageRoot, ma
     : resolve(projectRoot, "storage");
   const provider = String(marketProvider ?? "tdx").trim().toLowerCase();
   const demoMode = provider === "fixture" && isProjectDemoStorage(projectRoot, storageRoot);
+  const relativeStorageRoot = relative(resolve(projectRoot), storageRoot);
+  const customStorage = Boolean(configuredStorageRoot)
+    && (
+      relativeStorageRoot === ".."
+      || relativeStorageRoot.startsWith(`..${sep}`)
+      || isAbsolute(relativeStorageRoot)
+    );
 
   return {
     demoMode,
     marketProvider: provider,
-    storageIsolation: demoMode ? "project-demo-storage" : "default-storage",
+    storageIsolation: demoMode
+      ? "project-demo-storage"
+      : customStorage ? "custom-storage" : "default-storage",
   };
 }

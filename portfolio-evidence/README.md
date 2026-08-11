@@ -28,7 +28,7 @@
 ./run-demo.sh
 ```
 
-打开 <http://127.0.0.1:5280/decision/market-replay>。完整分层验证可运行：
+打开 <http://127.0.0.1:5280/decision/market-replay>。完整分层验证会使用项目外临时存储启动真实三层服务，执行无 API mock 的浏览器闭环，并生成缓存不足的可视证据：
 
 ```bash
 ./scripts/run-portfolio-verification.sh /tmp/investflow-portfolio-evidence

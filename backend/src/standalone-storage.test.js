@@ -57,6 +57,32 @@ test("standalone runtime reports demo mode only for fixture with project demo st
   );
 });
 
+test("standalone runtime identifies an explicit storage root outside project data", () => {
+  assert.deepEqual(
+    describeStandaloneRuntime(
+      projectRoot,
+      resolve("/tmp/investflow-replay-portfolio-smoke"),
+      "fixture",
+    ),
+    {
+      demoMode: false,
+      marketProvider: "fixture",
+      storageIsolation: "custom-storage",
+    },
+  );
+});
+
+test("standalone runtime does not label another project directory as custom isolation", () => {
+  assert.equal(
+    describeStandaloneRuntime(
+      projectRoot,
+      resolve(projectRoot, ".portfolio-smoke"),
+      "fixture",
+    ).storageIsolation,
+    "default-storage",
+  );
+});
+
 test("standalone runtime rejects a symlinked demo storage root", (t) => {
   const temporaryRoot = mkdtempSync(resolve(tmpdir(), "investflow-replay-runtime-"));
   t.after(() => rmSync(temporaryRoot, { force: true, recursive: true }));

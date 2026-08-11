@@ -9,6 +9,12 @@
 | 连接失败 | `200`，继续使用完整本地缓存 | 缓存入口呈降级色，面板解释“连接失败，继续使用本地缓存” | TDX fallback 单测、浏览器状态测试 |
 | 输入非法 | `400 INVALID_REQUEST` | 显示具体字段约束，不进入工作区 | Backend 参数测试、浏览器状态测试 |
 
+## 可视证据
+
+![缓存不足时不进入演练工作区](images/market-cache-insufficient.png)
+
+截图由 `replay-cache-status.spec.js` 的稳定 `409 MARKET_CACHE_INSUFFICIENT` HTTP mock 场景生成，用于证明用户可见文案和页面状态；它不冒充现场真实断网。统一验证脚本会在项目外重新生成同类截图，并在文件缺失时失败。
+
 ## 代表性响应
 
 ### 正常

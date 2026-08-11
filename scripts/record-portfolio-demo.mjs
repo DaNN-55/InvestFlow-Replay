@@ -10,7 +10,8 @@ const projectDir = resolve(scriptDir, "..");
 const requireFromWeb = createRequire(join(projectDir, "web/package.json"));
 const { chromium } = requireFromWeb("@playwright/test");
 
-const baseUrl = "http://127.0.0.1:5280";
+const baseUrl = process.env.INVESTFLOW_DEMO_BASE_URL ?? "http://127.0.0.1:5280";
+const smokeOnly = process.env.INVESTFLOW_DEMO_SMOKE_ONLY === "1";
 const outputPath = resolve(
   process.env.INVESTFLOW_DEMO_VIDEO ??
     join(projectDir, "portfolio-evidence/video/InvestFlow-Replay-offline-demo.mp4"),
@@ -79,12 +80,19 @@ async function clearCaption(page) {
 
 async function main() {
   const runtime = await requestJson("/api/quant/replay/runtime");
+  const expectedStorageIsolation = smokeOnly
+    ? "custom-storage"
+    : "project-demo-storage";
   if (
-    runtime.demoMode !== true ||
     runtime.marketProvider !== "fixture" ||
-    runtime.storageIsolation !== "project-demo-storage"
+    runtime.storageIsolation !== expectedStorageIsolation ||
+    (!smokeOnly && runtime.demoMode !== true)
   ) {
-    throw new Error("拒绝录制：服务未同时启用 fixture 与项目内 .demo-storage 隔离。");
+    throw new Error(
+      smokeOnly
+        ? "拒绝 smoke：服务未同时启用 fixture 与外部临时存储。"
+        : "拒绝录制：服务未同时启用 fixture 与项目内 .demo-storage 隔离。",
+    );
   }
   const health = await requestJson("/api/quant/replay/benchmarks");
   if (health.provider !== "fixture") {
@@ -100,13 +108,16 @@ async function main() {
   }
 
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
+  const contextOptions = {
     viewport: { width: 1440, height: 900 },
     colorScheme: "light",
-    recordVideo: { dir: tempDir, size: { width: 1280, height: 800 } },
-  });
+  };
+  if (!smokeOnly) {
+    contextOptions.recordVideo = { dir: tempDir, size: { width: 1280, height: 800 } };
+  }
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
-  const video = page.video();
+  const video = smokeOnly ? null : page.video();
 
   try {
     await requestJson("/api/quant/replay/playbooks", {
@@ -296,6 +307,12 @@ async function main() {
   } finally {
     await context.close();
     await browser.close();
+  }
+
+  if (smokeOnly) {
+    rmSync(tempDir, { recursive: true, force: true });
+    console.log("Offline fixture smoke passed");
+    return;
   }
 
   const webmPath = await video.path();

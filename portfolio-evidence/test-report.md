@@ -1,6 +1,6 @@
 # 代表性测试报告
 
-验证日期：2026-08-10。运行环境：macOS arm64、Python 3.11.15、Node 25.5.0、npm 11.8.0。本文件只记录可公开复核的摘要；原始 JUnit、构建日志和机器环境快照由 `scripts/run-portfolio-verification.sh` 写入调用者指定目录。
+验证日期：2026-08-11。运行环境：macOS arm64、Python 3.11.15、Node 25.5.0、npm 11.8.0。本文件只记录可公开复核的摘要；原始 JUnit、构建日志、失败截图和机器环境快照由 `scripts/run-portfolio-verification.sh` 写入调用者指定目录。
 
 ## 验证范围
 
@@ -16,13 +16,13 @@
 
 | 门禁 | 结果 | 耗时 / 说明 |
 | --- | ---: | --- |
-| Python Engine | 71 passed | 22.48s |
-| Node Backend | 94 passed | 3.00s |
-| Web unit | 157 passed | 0.64s |
-| Playwright E2E | 20 passed | 5.3s |
+| Python Engine | 71 passed | 21.90s |
+| Node Backend | 96 passed | 2.87s |
+| Web unit | 157 passed | 0.58s |
+| Playwright E2E | 20 passed | 5.4s |
 | ESLint | passed | 无错误 |
-| Vite build | passed | 2457 modules，1.91s |
-| Offline fixture smoke | passed | 实际完成创建、委托、成交、交卷、盲评、揭晓、复盘、候选与 v2 |
+| Vite build | passed | 2457 modules，1.83s |
+| Offline fixture smoke | passed | 统一验证脚本启动真实 Web、Backend、Engine 与临时 SQLite，实际完成创建、委托、成交、交卷、盲评、揭晓、复盘、候选与 v2 |
 | Demo video | passed | H.264，1280×800，25fps，182.68s |
 
 验证命令：
@@ -41,6 +41,6 @@ node scripts/record-portfolio-demo.mjs
 
 ## 重要限制
 
-- E2E 的 API mock 用于稳定验证浏览器展示和交互契约；真实 Fixture smoke 另行走完整本地链路。
+- E2E 的 API mock 用于稳定验证浏览器展示和交互契约；统一验证脚本另行运行无 API mock 的真实 Fixture 浏览器闭环。
 - 本报告不是 Python/Node 版本矩阵，也没有声称覆盖率阈值。
 - Vite 可能输出第三方 `@vueuse/core` PURE 注释位置警告；若构建退出码为 0，会在报告中作为已知非阻断警告记录。
