@@ -123,6 +123,26 @@ const postReview = computed(() => review.value.postReview ?? null);
 const corrections = computed(() =>
   Array.isArray(props.session.corrections) ? props.session.corrections : [],
 );
+const currentBlindReview = computed(() =>
+  getLatestReplayReviewSnapshot({
+    stage: "blind",
+    originalReview: blindReview.value,
+    corrections: corrections.value,
+  }),
+);
+const currentPostReview = computed(() =>
+  getLatestReplayReviewSnapshot({
+    stage: "post",
+    originalReview: postReview.value,
+    corrections: corrections.value,
+  }),
+);
+const hasBlindCorrection = computed(
+  () => currentBlindReview.value !== blindReview.value,
+);
+const hasPostCorrection = computed(
+  () => currentPostReview.value !== postReview.value,
+);
 const playbookFitApplicable = computed(
   () =>
     Boolean(blindReview.value?.playbookId) &&
@@ -694,45 +714,48 @@ watch(
         <div class="replay-review__stage-heading">
           <div>
             <span>阶段一</span>
-            <h3>揭晓前盲评</h3>
+            <h3>{{ hasBlindCorrection ? "当前盲评修正版" : "揭晓前盲评" }}</h3>
           </div>
           <span class="replay-review__locked">
             <LockKeyhole :size="13" />
-            盲评已冻结
+            {{ hasBlindCorrection ? "当前修正版" : "盲评已冻结" }}
           </span>
         </div>
-        <dl v-if="blindReview" class="replay-review__frozen-grid">
+        <p v-if="hasBlindCorrection" class="replay-review__intro">
+          原始盲评和首次评分均已冻结，当前展示最新修正版；完整记录见修正时间线。
+        </p>
+        <dl v-if="currentBlindReview" class="replay-review__frozen-grid">
           <div>
             <dt>战法名称</dt>
-            <dd>{{ blindReview.strategyName || "未指定" }}</dd>
+            <dd>{{ currentBlindReview.strategyName || "未指定" }}</dd>
             <small
               v-if="
-                blindReview.playbookId &&
-                blindReview.playbookVersionNumber
+                currentBlindReview.playbookId &&
+                currentBlindReview.playbookVersionNumber
               "
             >
-              参考战法 · v{{ blindReview.playbookVersionNumber }}，已冻结
+              参考战法 · v{{ currentBlindReview.playbookVersionNumber }}，已冻结
             </small>
           </div>
           <div>
             <dt>判断信心</dt>
-            <dd>{{ blindReview.confidence }} / 5</dd>
+            <dd>{{ currentBlindReview.confidence }} / 5</dd>
           </div>
           <div>
             <dt>判断理由</dt>
-            <dd>{{ formatReplayReasonTags(blindReview.reasonTags) }}</dd>
+            <dd>{{ formatReplayReasonTags(currentBlindReview.reasonTags) }}</dd>
           </div>
           <div>
             <dt>核心判断</dt>
-            <dd>{{ blindReview.thesis }}</dd>
+            <dd>{{ currentBlindReview.thesis }}</dd>
           </div>
           <div>
             <dt>交易计划</dt>
-            <dd>{{ blindReview.tradePlan }}</dd>
+            <dd>{{ currentBlindReview.tradePlan }}</dd>
           </div>
           <div>
             <dt>风险计划</dt>
-            <dd>{{ blindReview.riskPlan }}</dd>
+            <dd>{{ currentBlindReview.riskPlan }}</dd>
           </div>
         </dl>
         <div v-else class="replay-review__legacy">
@@ -886,17 +909,21 @@ watch(
         <div class="replay-review__stage-heading">
           <div>
             <span>阶段二</span>
-            <h3>原始事后复盘已锁定</h3>
+            <h3>{{ hasPostCorrection ? "当前事后复盘修正版" : "原始事后复盘已锁定" }}</h3>
           </div>
           <span class="replay-review__locked">
             <LockKeyhole :size="13" />
-            不可覆盖
+            {{ hasPostCorrection ? "当前修正版" : "不可覆盖" }}
           </span>
         </div>
         <p class="replay-review__intro">
-          原始评分不会改变。后续反思请追加修正，不会重算或覆盖首次评分。
+          {{
+            hasPostCorrection
+              ? "原始事后复盘和首次评分均已冻结，当前展示最新修正版；完整记录见修正时间线。"
+              : "原始评分不会改变。后续反思请追加修正，不会重算或覆盖首次评分。"
+          }}
         </p>
-        <dl v-if="postReview" class="replay-review__frozen-grid">
+        <dl v-if="currentPostReview" class="replay-review__frozen-grid">
           <div>
             <dt>判断结果</dt>
             <dd>
@@ -905,28 +932,28 @@ watch(
                   correct: "正确",
                   partial: "部分正确",
                   wrong: "错误",
-                }[postReview.outcome] || postReview.outcome
+                }[currentPostReview.outcome] || currentPostReview.outcome
               }}
             </dd>
           </div>
           <div>
             <dt>执行纪律 / 风险控制</dt>
             <dd>
-              {{ postReview.disciplineScore }} / 5 ·
-              {{ postReview.riskControlScore ?? "旧记录未保存" }} / 5
+              {{ currentPostReview.disciplineScore }} / 5 ·
+              {{ currentPostReview.riskControlScore ?? "旧记录未保存" }} / 5
             </dd>
           </div>
           <div>
             <dt>执行复盘</dt>
-            <dd>{{ postReview.executionReview }}</dd>
+            <dd>{{ currentPostReview.executionReview }}</dd>
           </div>
           <div>
             <dt>错误与不足</dt>
-            <dd>{{ postReview.mistakes }}</dd>
+            <dd>{{ currentPostReview.mistakes }}</dd>
           </div>
           <div>
             <dt>经验总结</dt>
-            <dd>{{ postReview.lessons }}</dd>
+            <dd>{{ currentPostReview.lessons }}</dd>
           </div>
         </dl>
         <UiButton
