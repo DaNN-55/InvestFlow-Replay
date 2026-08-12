@@ -18,7 +18,7 @@ describe("replay review drawer surface", () => {
     assert.match(viewSource, /overlay-tone="transparent"/u);
     assert.match(
       viewSource,
-      /\.market-replay-review-drawer[\s\S]*?width: min\(480px, calc\(100vw - 32px\)\)/u,
+      /\.market-replay-review-drawer[\s\S]*?width: min\(430px, calc\(100vw - 32px\)\)/u,
     );
     assert.doesNotMatch(viewSource, /import UiModal/u);
   });
