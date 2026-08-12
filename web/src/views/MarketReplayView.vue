@@ -398,7 +398,7 @@ onBeforeUnmount(() => {
 }
 
 :global(.market-replay-review-drawer) {
-  width: min(760px, calc(100vw - 32px));
+  width: min(480px, calc(100vw - 32px));
 }
 
 :global(.market-replay-review-drawer .ql-ui-drawer__body) {
