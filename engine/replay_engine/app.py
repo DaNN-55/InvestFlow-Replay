@@ -67,6 +67,11 @@ def cache_status():
     return market_supply.cache_status()
 
 
+@app.get("/internal/instruments/search")
+def search_instruments(q: str = "", limit: int = 8):
+    return market_supply.search_instruments(q, limit=limit)
+
+
 @app.post("/internal/replay/scenarios")
 def create_scenario(request: ReplayScenarioRequest):
     return market_supply.create_scenario(

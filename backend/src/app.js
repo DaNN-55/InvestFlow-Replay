@@ -6947,8 +6947,26 @@ export function createApp(options = {}) {
     }
   });
 
-  app.get("/api/quant/decision/stocks/search", (req, res, next) => {
-    forwardStockDecisionRequest(req, res, next, "/api/stocks/search");
+  app.get("/api/quant/decision/stocks/search", async (req, res, next) => {
+    try {
+      const query = String(req.query.query ?? "").trim();
+      if (!query) {
+        res.json({ items: [] });
+        return;
+      }
+      const result = await engine.searchInstruments({ q: query, limit: 8 });
+      const items = Array.isArray(result?.items)
+        ? result.items.flatMap((item) => {
+          const parsed = parseOrderBookId(item?.orderBookId);
+          return parsed
+            ? [{ code: parsed.symbol, name: String(item?.name ?? "").trim() || parsed.symbol }]
+            : [];
+        })
+        : [];
+      res.json({ items });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get("/api/quant/decision/stocks/:code/evaluation", (req, res, next) => {
