@@ -117,7 +117,12 @@ const stages = computed(() =>
 }
 
 .replay-review-timeline__header { cursor: pointer; }
-.replay-review-timeline__body { display: grid; gap: 1rem; padding-top: 1rem; }
+.replay-review-timeline__body {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 1rem;
+}
 
 .replay-review-timeline__header {
   display: flex;
@@ -160,6 +165,12 @@ const stages = computed(() =>
 .replay-review-timeline__stage {
   display: grid;
   gap: 0.6rem;
+  align-content: start;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--ql-color-border-soft);
+  border-radius: 10px;
+  background: var(--ql-color-bg-muted);
 }
 
 .replay-review-timeline__stage h4 {
@@ -236,6 +247,10 @@ const stages = computed(() =>
 }
 
 @media (max-width: 640px) {
+  .replay-review-timeline__body {
+    grid-template-columns: 1fr;
+  }
+
   .replay-review-timeline__header,
   .replay-review-timeline__entry > header {
     flex-direction: column;

@@ -26,7 +26,7 @@ const historicalVersion = {
 };
 
 async function openPlaybookVersionMenu(page, versionNumber) {
-  await page.locator(`summary[aria-label="v${versionNumber} 版本操作"]`).click();
+  await page.getByRole("button", { name: `v${versionNumber} 版本操作` }).click();
 }
 
 test.beforeEach(async ({ page }) => {

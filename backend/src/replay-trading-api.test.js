@@ -176,7 +176,7 @@ describe("replay virtual account and next-open execution", () => {
       minCommission: 5,
       stampTaxRate: 0.0005,
       transferFeeRate: 0.00001,
-      slippageBps: 0,
+      slippageBps: 5,
     });
     assert.deepEqual(defaults.body.session.account, {
       initialCapital: 100000,
@@ -255,11 +255,11 @@ describe("replay virtual account and next-open execution", () => {
     assert.equal(buyFill.side, "buy");
     assert.equal(buyFill.sequence, 251);
     assert.equal(buyFill.quantity, 100);
-    assert.equal(buyFill.price, 260);
-    assertClose(buyFill.commission, 7.8);
+    assert.equal(buyFill.price, 260 * (1 + 5 / 10_000));
+    assertClose(buyFill.commission, 7.8039);
     assertClose(buyFill.stampTax, 0);
-    assertClose(buyFill.transferFee, 0.26);
-    assertClose(bought.body.session.account.cash, 73991.94);
+    assertClose(buyFill.transferFee, 0.26013);
+    assertClose(bought.body.session.account.cash, 73978.93597);
     assert.equal(bought.body.session.account.positionQuantity, 100);
     assert.equal(bought.body.session.account.availableQuantity, 0);
     assert.equal(bought.body.session.account.lockedQuantity, 100);
@@ -284,17 +284,17 @@ describe("replay virtual account and next-open execution", () => {
     assert.equal(sellFill.status, "filled");
     assert.equal(sellFill.side, "sell");
     assert.equal(sellFill.quantity, 100);
-    assert.equal(sellFill.price, 261);
-    assertClose(sellFill.commission, 7.83);
-    assertClose(sellFill.stampTax, 13.05);
-    assertClose(sellFill.transferFee, 0.261);
-    assertClose(sold.body.session.account.cash, 100070.799);
+    assert.equal(sellFill.price, 260.86);
+    assertClose(sellFill.commission, 7.8258);
+    assertClose(sellFill.stampTax, 13.043);
+    assertClose(sellFill.transferFee, 0.26086);
+    assertClose(sold.body.session.account.cash, 100043.80631);
     assert.equal(sold.body.session.account.positionQuantity, 0);
     assert.equal(sold.body.session.account.availableQuantity, 0);
     assert.equal(sold.body.session.account.lockedQuantity, 0);
-    assertClose(sold.body.session.valuation.realizedPnl, 70.799);
+    assertClose(sold.body.session.valuation.realizedPnl, 43.80631);
     assertClose(sold.body.session.valuation.unrealizedPnl, 0);
-    assertClose(sold.body.session.account.totalFees, 29.201);
+    assertClose(sold.body.session.account.totalFees, 29.19369);
     assertBlind(sold.body);
 
     const restored = await request(app)

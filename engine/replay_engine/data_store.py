@@ -213,7 +213,7 @@ class DuckDbBarStore:
 
     def _connect(self, read_only: bool = False) -> duckdb.DuckDBPyConnection:
         if self.db_path is None:
-            raise FileNotFoundError("当前实例未启用 Quantflow 本地主市场库")
+            raise FileNotFoundError("当前实例未启用本地主市场库")
         return duckdb.connect(str(self.db_path), read_only=read_only)
 
     def _source_enabled(self) -> bool:

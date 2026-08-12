@@ -36,7 +36,11 @@ const corrections = [
     id: "blind-correction-1",
     stage: "blind",
     revisionNumber: 1,
-    fullReviewSnapshot: { ...blindReview, confidence: 4 },
+    fullReviewSnapshot: {
+      ...blindReview,
+      strategyName: "修正后关联的战法",
+      confidence: 4,
+    },
     changeNote: "补充当时遗漏的量能判断",
     createdAt: "2026-07-30T08:00:00.000Z",
   },
@@ -125,14 +129,13 @@ describe("replay review corrections presentation", () => {
   });
 
   it("prefills from the latest same-stage correction with original fallback", () => {
-    assert.equal(
-      getLatestReplayReviewSnapshot({
-        stage: "blind",
-        originalReview: blindReview,
-        corrections,
-      }).confidence,
-      4,
-    );
+    const effectiveBlindReview = getLatestReplayReviewSnapshot({
+      stage: "blind",
+      originalReview: blindReview,
+      corrections,
+    });
+    assert.equal(effectiveBlindReview.strategyName, "修正后关联的战法");
+    assert.equal(effectiveBlindReview.confidence, 4);
     assert.equal(
       getLatestReplayReviewSnapshot({
         stage: "post",

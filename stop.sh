@@ -8,13 +8,32 @@ found=0
 stopped=0
 failed=0
 
+collect_descendants() {
+  local parent_pid="$1"
+  local child_pid
+
+  if ! command -v pgrep >/dev/null 2>&1; then
+    return
+  fi
+  for child_pid in $(pgrep -P "${parent_pid}" 2>/dev/null || true); do
+    collect_descendants "${child_pid}"
+    printf '%s\n' "${child_pid}"
+  done
+}
+
 for service in web backend engine; do
   pid_file="${RUNTIME_DIR}/${service}.pid"
   if [[ -f "${pid_file}" ]]; then
     found=1
     pid="$(tr -cd '0-9' < "${pid_file}")"
     if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
-      kill "${pid}"
+      descendants="$(collect_descendants "${pid}")"
+      if [[ -n "${descendants}" ]]; then
+        while IFS= read -r child_pid; do
+          kill "${child_pid}" 2>/dev/null || true
+        done <<<"${descendants}"
+      fi
+      kill "${pid}" 2>/dev/null || true
       for _ in {1..50}; do
         if ! kill -0 "${pid}" 2>/dev/null; then
           break

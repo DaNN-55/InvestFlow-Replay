@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import duckdb
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -210,6 +211,34 @@ class MinuteReplayScenarioTest(unittest.TestCase):
             self.assertEqual(stats["oneMinuteBarCount"], 1)
             self.assertEqual(stats["fiveMinuteInstrumentCount"], 2)
             self.assertEqual(stats["fiveMinuteBarCount"], 2)
+
+    def test_reports_statistics_while_a_write_connection_is_open(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "minute.duckdb"
+            store = MinuteReplayStore(path)
+            connection = duckdb.connect(str(path))
+            try:
+                connection.execute(
+                    """
+                    CREATE TABLE minute_bars (
+                        instrument_code VARCHAR,
+                        instrument_type VARCHAR,
+                        bar_time TIMESTAMP,
+                        open DOUBLE,
+                        high DOUBLE,
+                        low DOUBLE,
+                        close DOUBLE,
+                        volume DOUBLE,
+                        amount DOUBLE
+                    )
+                    """
+                )
+
+                stats = store.statistics()
+
+                self.assertEqual(stats["fiveMinuteBarCount"], 0)
+            finally:
+                connection.close()
 
     def test_replaces_an_existing_cached_instrument_partition(self):
         with TemporaryDirectory() as directory:

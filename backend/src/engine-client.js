@@ -1,5 +1,5 @@
 const DEFAULT_ENGINE_URL =
-  process.env.QUANT_WORKBENCH_ENGINE_URL ?? "http://127.0.0.1:8765";
+  process.env.INVESTFLOW_REPLAY_ENGINE_URL ?? "http://127.0.0.1:8775";
 
 export class EngineClientError extends Error {
   constructor(message, status = 502, details = null) {
@@ -33,7 +33,7 @@ function formatEngineErrorMessage(payload) {
   if (detail && typeof detail === "object") {
     return JSON.stringify(detail);
   }
-  return "Python engine request failed";
+  return "Replay 行情引擎请求失败";
 }
 
 async function requestJson(url, options = {}) {
@@ -44,12 +44,8 @@ async function requestJson(url, options = {}) {
     },
     ...options,
   });
-
-  const isJson = response.headers
-    .get("content-type")
-    ?.includes("application/json");
+  const isJson = response.headers.get("content-type")?.includes("application/json");
   const payload = isJson ? await response.json() : await response.text();
-
   if (!response.ok) {
     throw new EngineClientError(
       formatEngineErrorMessage(payload),
@@ -57,63 +53,11 @@ async function requestJson(url, options = {}) {
       payload,
     );
   }
-
   return payload;
 }
 
 export function createEngineClient(baseUrl = DEFAULT_ENGINE_URL) {
   return {
-    async getStrategies() {
-      return requestJson(`${baseUrl}/internal/strategies`);
-    },
-
-    async getDataCoverage() {
-      return requestJson(`${baseUrl}/internal/data/coverage`);
-    },
-
-    async getDataVersion() {
-      return requestJson(`${baseUrl}/internal/data/version`);
-    },
-
-    async getDataOverview() {
-      return requestJson(`${baseUrl}/internal/data/overview`);
-    },
-
-    async getDataCatalog({
-      keyword = "",
-      type = "",
-      exchange = "",
-      interval = "1d",
-      adjust = "",
-      page = 1,
-      pageSize = 20,
-    } = {}) {
-      const query = new URLSearchParams({
-        interval,
-        page: String(page),
-        pageSize: String(pageSize),
-      });
-      if (keyword) {
-        query.set("keyword", keyword);
-      }
-      if (type) {
-        query.set("type", type);
-      }
-      if (exchange) {
-        query.set("exchange", exchange);
-      }
-      if (adjust) {
-        query.set("adjust", adjust);
-      }
-      return requestJson(`${baseUrl}/internal/data/catalog?${query.toString()}`);
-    },
-
-    async getDataCatalogItem(orderBookId) {
-      return requestJson(
-        `${baseUrl}/internal/data/catalog/${encodeURIComponent(orderBookId)}`,
-      );
-    },
-
     async getReplayBenchmarks({ retry = false } = {}) {
       const query = retry ? "?retry=true" : "";
       return requestJson(`${baseUrl}/internal/replay/benchmarks${query}`);
@@ -151,98 +95,9 @@ export function createEngineClient(baseUrl = DEFAULT_ENGINE_URL) {
       });
     },
 
-    async getRawDatasets() {
-      return requestJson(`${baseUrl}/internal/data/raw-datasets`);
-    },
-
-    async updateRuntimeEnvironment(payload) {
-      return requestJson(`${baseUrl}/internal/runtime/environment`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-    },
-
     async searchInstruments({ q = "", limit = 8 } = {}) {
-      const query = new URLSearchParams({
-        q,
-        limit: String(limit),
-      });
-      return requestJson(
-        `${baseUrl}/internal/instruments/search?${query.toString()}`,
-      );
-    },
-
-    async getBars({
-      symbol,
-      exchange,
-      interval,
-      startDate,
-      endDate,
-      adjust = "qfq",
-    }) {
-      const query = new URLSearchParams({
-        symbol,
-        exchange,
-        interval,
-        startDate,
-        endDate,
-        adjust,
-      });
-      return requestJson(`${baseUrl}/internal/data/bars?${query.toString()}`);
-    },
-
-    async getRawTable({
-      dataset,
-      page = 1,
-      pageSize = 50,
-      keyword = "",
-      startDate = "",
-      endDate = "",
-      fieldFilters = null,
-    }) {
-      const query = new URLSearchParams({
-        dataset,
-        page: String(page),
-        pageSize: String(pageSize),
-      });
-      if (keyword) {
-        query.set("keyword", keyword);
-      }
-      if (startDate) {
-        query.set("startDate", startDate);
-      }
-      if (endDate) {
-        query.set("endDate", endDate);
-      }
-      if (fieldFilters && typeof fieldFilters === "object") {
-        query.set("fieldFilters", JSON.stringify(fieldFilters));
-      }
-      return requestJson(`${baseUrl}/internal/data/raw-table?${query.toString()}`);
-    },
-
-    async syncData(payload) {
-      return requestJson(`${baseUrl}/internal/data/sync`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-    },
-
-    async runBacktest(payload) {
-      return requestJson(`${baseUrl}/internal/backtests/run`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-    },
-
-    async runWorkspaceStrategy(payload) {
-      return requestJson(`${baseUrl}/internal/workspace/run`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-    },
-
-    async getRun(runId) {
-      return requestJson(`${baseUrl}/internal/backtests/${runId}`);
+      const query = new URLSearchParams({ q, limit: String(limit) });
+      return requestJson(`${baseUrl}/internal/instruments/search?${query.toString()}`);
     },
   };
 }

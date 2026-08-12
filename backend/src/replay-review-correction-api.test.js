@@ -234,7 +234,11 @@ describe("replay review corrections API", () => {
           actionId: "blind-correction-2a",
           expectedRevision: correctionOne.body.session.revision,
           changeNote: "进一步收紧风险条件",
-          ...blindReview({ confidence: 2 }),
+          ...blindReview({
+            confidence: 2,
+            playbookId: "replay-playbook-shaofu",
+            playbookVersionId: "replay-playbook-shaofu-v1",
+          }),
         }),
       request(app)
         .post(`/api/quant/replay/sessions/${sessionId}/reviews/blind/corrections`)
@@ -242,7 +246,11 @@ describe("replay review corrections API", () => {
           actionId: "blind-correction-2b",
           expectedRevision: correctionOne.body.session.revision,
           changeNote: "并发补充另一条风险条件",
-          ...blindReview({ confidence: 1 }),
+          ...blindReview({
+            confidence: 1,
+            playbookId: "replay-playbook-shaofu",
+            playbookVersionId: "replay-playbook-shaofu-v1",
+          }),
         }),
     ]);
     assert.deepEqual(
@@ -327,7 +335,10 @@ describe("replay review corrections API", () => {
         actionId: "post-correction-before-original",
         expectedRevision: revealed.body.session.revision,
         changeNote: "尚无首条事后复盘",
-        ...postReview(),
+        ...postReview({
+          playbookFitScore: 4,
+          strategyAdjustment: "首次复盘按修正后关联的战法进行复核。",
+        }),
       })
       .expect(409);
     const savedPost = await request(app)
@@ -335,7 +346,10 @@ describe("replay review corrections API", () => {
       .send({
         actionId: "first-post",
         expectedRevision: revealed.body.session.revision,
-        ...postReview(),
+        ...postReview({
+          playbookFitScore: 4,
+          strategyAdjustment: "首次复盘按修正后关联的战法进行复核。",
+        }),
       })
       .expect(200);
     const frozenScore = savedPost.body.session.scoreCard;
@@ -353,7 +367,11 @@ describe("replay review corrections API", () => {
       .send({
         actionId: "overwrite-original-post",
         expectedRevision: savedPost.body.session.revision,
-        ...postReview({ disciplineScore: 5 }),
+        ...postReview({
+          disciplineScore: 5,
+          playbookFitScore: 4,
+          strategyAdjustment: "首次复盘按修正后关联的战法进行复核。",
+        }),
       })
       .expect(409);
     const postCorrection = await request(app)
@@ -362,14 +380,25 @@ describe("replay review corrections API", () => {
         actionId: "post-correction-1",
         expectedRevision: savedPost.body.session.revision,
         changeNote: "补充执行复盘",
-        ...postReview({ disciplineScore: 5 }),
+        ...postReview({
+          disciplineScore: 5,
+          playbookFitScore: 3,
+          strategyAdjustment: "补充阶段一修正所关联战法的入场确认条件。",
+        }),
       })
       .expect(200);
     assert.equal(postCorrection.body.correction.revisionNumber, 1);
+    assert.equal(
+      postCorrection.body.correction.fullReviewSnapshot.strategyAdjustment,
+      "补充阶段一修正所关联战法的入场确认条件。",
+    );
     assert.deepEqual(postCorrection.body.session.scoreCard, frozenScore);
     assert.deepEqual(
       postCorrection.body.session.review.postReview,
-      postReview(),
+      postReview({
+        playbookFitScore: 4,
+        strategyAdjustment: "首次复盘按修正后关联的战法进行复核。",
+      }),
     );
     assert.equal(postCorrection.body.session.corrections.length, 2);
     const scoreAfterCorrectionDb = new DatabaseSync(dbPath, {

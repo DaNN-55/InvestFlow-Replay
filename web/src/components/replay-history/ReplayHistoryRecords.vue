@@ -5,8 +5,11 @@ import { useRouter } from "vue-router";
 import { useReplayHistory } from "../../composables/useReplayHistory.js";
 import { api } from "../../services/api.js";
 import ConfirmDialog from "../ConfirmDialog.vue";
+import ReplayReviewCorrectionForm from "../replay/ReplayReviewCorrectionForm.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiCard from "../ui/UiCard.vue";
+import UiModal from "../ui/UiModal.vue";
+import { getLatestReplayReviewSnapshot } from "../../utils/replayReviewCorrections.js";
 import ReplayHistoryDetail from "./ReplayHistoryDetail.vue";
 import ReplayHistoryFilters from "./ReplayHistoryFilters.vue";
 import ReplayHistoryList from "./ReplayHistoryList.vue";
@@ -38,11 +41,106 @@ const candidateStates = reactive({});
 const retrainStates = reactive({});
 const deleteStates = reactive({});
 const pendingDeleteItem = shallowRef(null);
+const editingCorrection = shallowRef(null);
+const deletingCorrection = shallowRef(null);
+const correctionBusy = shallowRef(false);
+const correctionError = shallowRef("");
+const playbooks = shallowRef([]);
+const playbooksLoading = shallowRef(false);
+const playbooksError = shallowRef("");
 const pendingDeleteIdentity = computed(() => {
   const item = pendingDeleteItem.value;
   if (!item) return "这条演练记录";
   return item.reveal?.name || item.reveal?.tsCode || `演练 ${item.id.slice(0, 8)}`;
 });
+const effectiveBlindReview = computed(() =>
+  getLatestReplayReviewSnapshot({
+    stage: "blind",
+    originalReview: selectedDetailItem.value?.blindReview,
+    corrections: selectedDetailItem.value?.corrections,
+  }),
+);
+const playbookFitApplicable = computed(
+  () =>
+    Boolean(effectiveBlindReview.value?.playbookId) &&
+    Boolean(effectiveBlindReview.value?.playbookVersionId),
+);
+
+function createActionId() {
+  return globalThis.crypto?.randomUUID?.() ??
+    `replay-review-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function loadPlaybooks() {
+  if (playbooks.value.length || playbooksLoading.value) return;
+  playbooksLoading.value = true;
+  playbooksError.value = "";
+  try {
+    const result = await api.listReplayPlaybooks();
+    playbooks.value = Array.isArray(result.items) ? result.items : [];
+  } catch (error) {
+    playbooksError.value = error?.message ?? "战法选项加载失败";
+  } finally {
+    playbooksLoading.value = false;
+  }
+}
+
+function editCorrection(correction) {
+  editingCorrection.value = correction;
+  correctionError.value = "";
+  if (correction.stage === "blind") void loadPlaybooks();
+}
+
+async function updateCorrection(payload) {
+  const correction = editingCorrection.value;
+  const session = selectedDetailItem.value;
+  if (!correction || !session || correctionBusy.value) return;
+  correctionBusy.value = true;
+  correctionError.value = "";
+  try {
+    await api.updateReplayReviewCorrection(
+      session.id,
+      correction.stage,
+      correction.id,
+      {
+        actionId: createActionId(),
+        expectedRevision: session.revision,
+        ...payload,
+      },
+    );
+    editingCorrection.value = null;
+    await refresh();
+  } catch (error) {
+    correctionError.value = error?.message ?? "复盘修正记录更新失败";
+  } finally {
+    correctionBusy.value = false;
+  }
+}
+
+async function deleteCorrection() {
+  const correction = deletingCorrection.value;
+  const session = selectedDetailItem.value;
+  if (!correction || !session || correctionBusy.value) return;
+  correctionBusy.value = true;
+  correctionError.value = "";
+  try {
+    await api.deleteReplayReviewCorrection(
+      session.id,
+      correction.stage,
+      correction.id,
+      {
+        actionId: createActionId(),
+        expectedRevision: session.revision,
+      },
+    );
+    deletingCorrection.value = null;
+    await refresh();
+  } catch (error) {
+    correctionError.value = error?.message ?? "复盘修正记录删除失败";
+  } finally {
+    correctionBusy.value = false;
+  }
+}
 
 function openReplay(item) {
   window.localStorage.setItem(
@@ -199,6 +297,8 @@ async function addCandidate(item) {
         @add-candidate="addCandidate"
         @retrain="retrainReplay"
         @delete="requestDeleteReplay"
+        @edit-correction="editCorrection"
+        @delete-correction="deletingCorrection = $event"
       />
       <div
         v-else-if="detailError"
@@ -241,6 +341,42 @@ async function addCandidate(item) {
       :busy="pendingDeleteItem ? Boolean(deleteStateFor(pendingDeleteItem.id).loading) : false"
       @cancel="pendingDeleteItem = null"
       @confirm="deleteReplay"
+    />
+    <UiModal
+      :open="Boolean(editingCorrection)"
+      :busy="correctionBusy"
+      title="修改复盘修正"
+      description="修改当前修正快照，不会覆盖原始复盘或重新计算原始评分。"
+      variant="drawer"
+      @close="editingCorrection = null"
+    >
+      <p v-if="correctionError" class="replay-history-records__message replay-history-records__message--error">
+        {{ correctionError }}
+      </p>
+      <ReplayReviewCorrectionForm
+        v-if="editingCorrection"
+        :stage="editingCorrection.stage"
+        :snapshot="editingCorrection.fullReviewSnapshot"
+        :playbook-fit-applicable="playbookFitApplicable"
+        :playbooks="playbooks"
+        :playbooks-loading="playbooksLoading"
+        :playbooks-error="playbooksError"
+        :loading="correctionBusy"
+        :initial-change-note="editingCorrection.changeNote"
+        editing
+        @cancel="editingCorrection = null"
+        @submit="updateCorrection"
+      />
+    </UiModal>
+    <ConfirmDialog
+      :open="Boolean(deletingCorrection)"
+      title="删除复盘修正"
+      message="确认删除这条复盘修正？删除后，当前有效内容会回退到上一条同阶段修正或原始复盘。"
+      confirm-text="确认删除"
+      variant="danger"
+      :busy="correctionBusy"
+      @cancel="deletingCorrection = null"
+      @confirm="deleteCorrection"
     />
   </div>
 </template>

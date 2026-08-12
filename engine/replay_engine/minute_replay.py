@@ -427,7 +427,7 @@ class MinuteReplayStore:
     def load(self, instrument_code: str, instrument_type: str) -> list[dict[str, Any]]:
         if not self.path.exists():
             return []
-        connection = duckdb.connect(str(self.path), read_only=True)
+        connection = duckdb.connect(str(self.path))
         try:
             table_exists = connection.execute(
                 """
@@ -490,7 +490,7 @@ class MinuteReplayStore:
     def has_full_history(self, instrument_code: str, instrument_type: str) -> bool:
         if not self.path.exists():
             return False
-        connection = duckdb.connect(str(self.path), read_only=True)
+        connection = duckdb.connect(str(self.path))
         try:
             table_exists = connection.execute(
                 """
@@ -523,7 +523,7 @@ class MinuteReplayStore:
         }
         if not self.path.exists():
             return empty
-        connection = duckdb.connect(str(self.path), read_only=True)
+        connection = duckdb.connect(str(self.path))
         try:
             table_exists = connection.execute(
                 """

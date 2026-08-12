@@ -172,7 +172,11 @@ watch(
         <select v-model="form.playbookId" :disabled="playbooksLoading" @change="changePlaybook">
           <option value="">不关联战法</option>
           <option v-for="playbook in playbooks" :key="playbook.id" :value="playbook.id">
-            {{ playbook.name }} · v{{ playbook.currentVersion?.versionNumber ?? "—" }}
+            {{ playbook.name }} · v{{
+              playbook.id === form.playbookId && snapshot.playbookVersionNumber
+                ? snapshot.playbookVersionNumber
+                : playbook.currentVersion?.versionNumber ?? "—"
+            }}
           </option>
         </select>
         <small v-if="playbooksError">{{ playbooksError }}</small>
@@ -284,7 +288,7 @@ watch(
         取消
       </UiButton>
       <UiButton type="submit" :loading="loading" :disabled="!ready">
-        保存为新修正
+        {{ editing ? "保存修改" : "保存为新修正" }}
       </UiButton>
     </footer>
   </form>

@@ -119,6 +119,13 @@ describe("replay history tracking surface", () => {
     assert.match(detailSource, /props\.item\.pendingOrders/u);
     assert.match(detailSource, /待卖出/u);
     assert.match(detailSource, /:show-original="false"/u);
+    assert.match(detailSource, /editable/u);
+    assert.match(detailSource, /@edit-correction/u);
+    assert.match(detailSource, /@delete-correction/u);
+    assert.match(recordsSource, /api\.updateReplayReviewCorrection/u);
+    assert.match(recordsSource, /api\.deleteReplayReviewCorrection/u);
+    assert.match(recordsSource, /修改复盘修正/u);
+    assert.match(recordsSource, /删除复盘修正/u);
     assert.match(recordsSource, /detailLoading/u);
     assert.match(recordsSource, /detailError/u);
     assert.match(recordsSource, /重试详情/u);
@@ -177,6 +184,7 @@ describe("replay history tracking surface", () => {
     assert.match(detailSource, /删除记录/u);
     assert.match(detailSource, /演练记录操作/u);
     assert.match(detailSource, /replay-history-detail__reviews/u);
+    assert.match(detailSource, /replay-history-detail__reviews-grid/u);
     assert.match(detailSource, /replay-history-detail__order-columns/u);
     assert.match(detailSource, /replay-history-detail__order-column--buy/u);
     assert.match(detailSource, /replay-history-detail__order-column--sell/u);

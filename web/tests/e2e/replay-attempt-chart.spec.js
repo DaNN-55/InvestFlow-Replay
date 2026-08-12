@@ -159,3 +159,39 @@ test("light 与 dark 使用同一组红涨绿跌图表颜色", async ({ page }) 
   expect(darkColors).toEqual({ rise: "#df7180", fall: "#38ae86" });
   expect(lightColors).toEqual(darkColors);
 });
+
+test("复盘抽屉保留未提交草稿并让行情保持可见", async ({ page }) => {
+  await page.route("**/api/quant/replay/sessions", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    const session = replaySession(20);
+    session.status = "completed";
+    session.completionReason = "natural";
+    await route.fulfill({ json: { session } });
+  });
+  await page.route("**/api/quant/replay/sessions/e2e-replay-session/reviews/blind/draft", (route) =>
+    route.fulfill({
+      json: {
+        draft: { stage: "blind", revision: 1, data: route.request().postDataJSON().draft },
+      },
+    }));
+
+  await page.getByRole("button", { name: "开始日线盲测" }).click();
+  await page.getByRole("button", { name: "填写揭晓前盲评" }).click();
+
+  const drawer = page.locator(".market-replay-review-drawer");
+  const drawerBox = await drawer.boundingBox();
+  expect(drawerBox.x).toBeGreaterThan(page.viewportSize().width / 2);
+  await expect(page.locator("canvas").first()).toBeVisible();
+  await expect(drawer.getByText("两阶段复盘 · 决策记录与评分", { exact: true })).toBeVisible();
+  await expect(page.getByText("复盘记录时间线")).toHaveCount(0);
+
+  const thesis = page.getByPlaceholder("你看到了什么，为什么做出这个判断？");
+  await thesis.fill("这是一段尚未提交的临时复盘判断");
+  await drawer.locator(".ql-ui-drawer__close").click();
+  await page.getByRole("button", { name: "填写揭晓前盲评" }).click();
+
+  await expect(thesis).toHaveValue("这是一段尚未提交的临时复盘判断");
+});
