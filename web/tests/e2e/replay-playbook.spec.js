@@ -105,6 +105,9 @@ test("历史版本可以带入正文创建新版本并经过确认后删除", as
     .getByRole("button", { name: "战法库", exact: true })
     .click();
 
+  await expect(page.getByText("首个版本", { exact: true })).toBeHidden();
+  await page.getByRole("button", { name: "查看 1 个历史版本", exact: true }).click();
+  await expect(page.getByText("首个版本", { exact: true })).toBeVisible();
   await openPlaybookVersionMenu(page, historicalVersion.versionNumber);
   await page.getByRole("button", { name: "基于 v1 修改", exact: true }).click();
   const versionForm = page.getByRole("form", { name: "基于 v1 创建新版本" });
@@ -124,4 +127,20 @@ test("历史版本可以带入正文创建新版本并经过确认后删除", as
   );
   await confirm.getByRole("button", { name: "删除版本", exact: true }).click();
   await deleteRequest;
+});
+
+test("版本历史默认只显示当前版本并可折叠历史版本", async ({ page }) => {
+  await page.goto(`${baseUrl}/decision/trade-records`);
+  await page.getByRole("navigation", { name: "交易追踪分类" })
+    .getByRole("button", { name: "战法库", exact: true })
+    .click();
+
+  const toggle = page.getByRole("button", { name: "查看 1 个历史版本", exact: true });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByText("当前版本", { exact: true })).toBeVisible();
+  await expect(page.getByText("首个版本", { exact: true })).toBeHidden();
+
+  await toggle.click();
+  await expect(page.getByRole("button", { name: "收起历史版本", exact: true })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("首个版本", { exact: true })).toBeVisible();
 });
