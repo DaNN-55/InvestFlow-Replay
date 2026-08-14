@@ -260,6 +260,8 @@ test("已记录的成交动作可以通过弹窗修改", async ({ page }) => {
   await page.getByRole("button", { name: "修改", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "修改成交或动作记录" });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("时间", { exact: true })).toHaveAttribute("type", "date");
+  await expect(dialog.getByLabel("时间", { exact: true })).toHaveValue("2026-08-06");
   await expect(dialog.getByLabel("价格", { exact: true })).toHaveValue("43.4");
   await dialog.getByLabel("价格", { exact: true }).fill("44.2");
   await dialog.getByLabel("备注", { exact: true }).fill("修正后的记录");
@@ -280,6 +282,28 @@ test("已记录的成交动作可以通过弹窗修改", async ({ page }) => {
     return Boolean(events && (node.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING));
   });
   expect(feedbackAppearsBeforeEvents).toBe(true);
+});
+
+test("添加动作通过日期选择器仅提交年月日", async ({ page }) => {
+  await page.route(`**/api/quant/decision/trade-records/${recordId}/execution-events`, async (route) => {
+    const event = route.request().postDataJSON();
+    await route.fulfill({ json: { ...record, executionEvents: [...record.executionEvents, event] } });
+  });
+  await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
+
+  const eventForm = page.locator("form.trade-execution-events__form");
+  const eventAt = eventForm.getByLabel("时间", { exact: true });
+  await expect(eventAt).toHaveAttribute("type", "date");
+  await eventAt.fill("2026-08-07");
+  await eventForm.getByLabel("价格", { exact: true }).fill("44.2");
+  await eventForm.getByLabel("数量", { exact: true }).fill("100");
+
+  const addRequest = page.waitForRequest((request) =>
+    request.method() === "POST"
+      && new URL(request.url()).pathname === `/api/quant/decision/trade-records/${recordId}/execution-events`,
+  );
+  await eventForm.getByRole("button", { name: "添加动作", exact: true }).click();
+  expect((await addRequest).postDataJSON()).toMatchObject({ eventAt: "2026-08-07" });
 });
 
 test("成交记录和交易追踪单删除前都使用应用内二次确认", async ({ page }) => {

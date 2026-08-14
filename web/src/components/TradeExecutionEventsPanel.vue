@@ -2,6 +2,7 @@
 import { ChevronDown, ChevronUp, Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
 import { reactive, shallowRef } from "vue";
 
+import { toExecutionEventDate } from "../utils/tradeExecutionDateTime.js";
 import UiButton from "./ui/UiButton.vue";
 import UiActionMenu from "./ui/UiActionMenu.vue";
 import UiInput from "./ui/UiInput.vue";
@@ -66,7 +67,7 @@ function submit() {
     return;
   }
   emit("add", {
-    eventAt: form.eventAt,
+    eventAt: toExecutionEventDate(form.eventAt),
     action: form.action,
     price: form.price === "" ? null : Number(form.price),
     quantity: form.quantity === "" ? null : Number(form.quantity),
@@ -171,7 +172,7 @@ function formatSigned(value, suffix = "") {
     <form class="trade-execution-events__form" @submit.prevent="submit">
       <label>
         <span>时间</span>
-        <UiInput v-model="form.eventAt" size="sm" type="text" placeholder="如 2026-08-03 09:45" :disabled="disabled" />
+        <UiInput v-model="form.eventAt" size="sm" type="date" :disabled="disabled" />
       </label>
       <label>
         <span>动作</span>
