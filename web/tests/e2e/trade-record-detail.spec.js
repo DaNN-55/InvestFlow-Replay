@@ -37,7 +37,7 @@ const record = {
     note: "等待确认",
   }],
   ledger: {
-    state: "empty",
+    state: "open",
     positionQuantity: 0,
     averageCost: 0,
     realizedPnl: 0,
@@ -144,6 +144,7 @@ test("交易详情默认聚焦成交记录并按需展开交易计划", async ({
   await expect(page.locator(".trade-record-table")).toHaveCount(0);
   await expect(recordList.getByText("贵州茅台 600519", { exact: true })).toBeVisible();
   await expect(recordList.getByText("模拟 · 系统交易 · 突破战法", { exact: true })).toBeVisible();
+  await expect(recordList.getByText("0.00%", { exact: true })).toHaveClass(/trade-record-list__profit--neutral/u);
 
   const plan = page.locator("details.trade-plan-details");
   await expect(plan).not.toHaveAttribute("open", "");
@@ -282,6 +283,23 @@ test("已记录的成交动作可以通过弹窗修改", async ({ page }) => {
     return Boolean(events && (node.compareDocumentPosition(events) & Node.DOCUMENT_POSITION_FOLLOWING));
   });
   expect(feedbackAppearsBeforeEvents).toBe(true);
+});
+
+test("斜杠日期的成交动作可以在弹窗中保存", async ({ page }) => {
+  const slashDateRecord = {
+    ...record,
+    executionEvents: [{ ...record.executionEvents[0], eventAt: "2026/08/13" }],
+  };
+  await page.route(`**/api/quant/decision/trade-records/${recordId}`, async (route) => {
+    await route.fulfill({ json: slashDateRecord });
+  });
+  await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
+
+  await openExecutionEventMenu(page);
+  await page.getByRole("button", { name: "修改", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "修改成交或动作记录" });
+  await expect(dialog.getByLabel("时间", { exact: true })).toHaveValue("2026-08-13");
+  await expect(dialog.getByRole("button", { name: "保存修改", exact: true })).toBeEnabled();
 });
 
 test("添加动作通过日期选择器仅提交年月日", async ({ page }) => {

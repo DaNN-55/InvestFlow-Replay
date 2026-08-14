@@ -19,6 +19,7 @@ import UiTextarea from "../components/ui/UiTextarea.vue";
 import UiTooltip from "../components/ui/UiTooltip.vue";
 import { api } from "../services/api";
 import { buildTradeRecordAnalytics } from "../utils/tradeRecordAnalytics.js";
+import { formatDisplayDate } from "../utils/datePresentation.js";
 import {
   buildTradeRecordDraftSavePayload,
   calculateTradeLicense,
@@ -172,7 +173,7 @@ const tradeRecordListItems = computed(() => records.value.map((record) => {
     status: statusLabel(record?.status),
     meta: `${accountTypeLabel(record?.accountType)} · ${tradeTypeLabel(record?.tradeType)} · ${record?.strategyProfile?.name || "未指定"}`,
     profit: profit === "--" ? "" : profit,
-    profitTone: profit.startsWith("-") ? "negative" : "positive",
+    profitTone: getProfitTone(profit),
     updatedAt: formatCompactDate(record?.updatedAt || record?.createdAt),
   };
 }));
@@ -290,10 +291,7 @@ function formatStock(record) {
 }
 
 function formatDate(value) {
-  if (!value) {
-    return "--";
-  }
-  return String(value).replace("T", " ").slice(0, 16);
+  return formatDisplayDate(value);
 }
 
 function formatCompactDate(value) {
@@ -379,6 +377,12 @@ function formatRecordProfitPct(record) {
     return "--";
   }
   return formatTradePercent(((exitPrice - entryPrice) / entryPrice) * 100);
+}
+
+function getProfitTone(value) {
+  const profit = parseTradeNumber(value);
+  if (profit == null || profit === 0) return "neutral";
+  return profit > 0 ? "positive" : "negative";
 }
 
 async function createStandaloneTradeRecord(payload) {

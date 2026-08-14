@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { formatCacheBytes, replayCacheProgress } from "../../src/utils/replayCacheStatus.js";
+import { formatCacheBytes, formatCacheTime, replayCacheProgress } from "../../src/utils/replayCacheStatus.js";
 
 test("formats cache storage and active progress", () => {
   assert.equal(formatCacheBytes(1536), "1.5 KB");
@@ -11,6 +11,7 @@ test("formats cache storage and active progress", () => {
     { completed: 3, total: 12, percent: 25 },
   );
   assert.equal(replayCacheProgress({ activeTask: { state: "ready", completed: 12, total: 12 } }), null);
+  assert.equal(formatCacheTime("2026-08-10T09:00:00Z"), "2026/08/10");
 });
 
 test("renders an accessible dismissible cache status surface in the app shell", async () => {

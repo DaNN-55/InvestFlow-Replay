@@ -7,6 +7,8 @@ describe("trade execution date time", () => {
   it("converts stored timestamps for the native date picker", () => {
     assert.equal(toDateInput("2026-08-06 09:45"), "2026-08-06");
     assert.equal(toDateInput("2026-08-06T09:45:30"), "2026-08-06");
+    assert.equal(toDateInput("2026/08/13"), "2026-08-13");
+    assert.equal(toDateInput("2026/8/7"), "2026-08-07");
   });
 
   it("submits only the selected date", () => {
@@ -15,7 +17,7 @@ describe("trade execution date time", () => {
   });
 
   it("clears values that cannot be represented by the picker", () => {
-    assert.equal(toDateInput("2026/08/06 09:45"), "");
+    assert.equal(toDateInput("2026/08-06 09:45"), "");
     assert.equal(toExecutionEventDate("not-a-date"), "");
   });
 });

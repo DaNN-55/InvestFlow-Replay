@@ -2,6 +2,7 @@
 import { ChevronDown, ChevronUp, Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
 import { reactive, shallowRef } from "vue";
 
+import { formatDisplayDate } from "../utils/datePresentation.js";
 import { toExecutionEventDate } from "../utils/tradeExecutionDateTime.js";
 import UiButton from "./ui/UiButton.vue";
 import UiActionMenu from "./ui/UiActionMenu.vue";
@@ -150,7 +151,7 @@ function formatSigned(value, suffix = "") {
         <div class="trade-execution-events__event-row">
           <div class="trade-execution-events__event-main">
             <strong>{{ formatEvent(event) }}</strong>
-            <small>{{ event.eventAt }} · {{ planStatusLabel(event.planStatus) }}<span v-if="event.source"> · {{ event.source }}</span></small>
+            <small>{{ formatDisplayDate(event.eventAt) }} · {{ planStatusLabel(event.planStatus) }}<span v-if="event.source"> · {{ event.source }}</span></small>
           </div>
           <UiActionMenu
             class="trade-execution-events__event-actions"

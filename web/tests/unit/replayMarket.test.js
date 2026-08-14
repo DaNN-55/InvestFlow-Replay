@@ -55,7 +55,7 @@ describe("replay market aggregation", () => {
         startDate: "2005-04-08",
         endDate: "2026-05-18",
       }),
-      "沪深300 · 000300.SH · 2005-04-08 至 2026-05-18",
+      "沪深300 · 000300.SH · 2005/04/08 至 2026/05/18",
     );
   });
 
@@ -190,7 +190,7 @@ describe("replay market aggregation", () => {
       ],
       "day",
     );
-    assert.equal(days[0].datetime, "2024-01-02");
+    assert.equal(days[0].datetime, "2024/01/02");
     assert.equal(
       aggregateReplayBars([revealedBars[0]], "day")[0].datetime,
       "第249日",

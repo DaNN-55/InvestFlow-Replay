@@ -1,9 +1,6 @@
-const DATE_PATTERN = /^(\d{4}-\d{2}-\d{2})(?:[ T].*)?$/;
+import { toDateInput } from "./datePresentation.js";
 
-export function toDateInput(value) {
-  const match = String(value ?? "").trim().match(DATE_PATTERN);
-  return match ? match[1] : "";
-}
+export { toDateInput };
 
 export function toExecutionEventDate(value) {
   return toDateInput(value);

@@ -4,6 +4,7 @@ import {
   getReplayAttemptPresentation,
   getReplayHistoryStatePresentation,
 } from "../../utils/replayHistoryPresentation.js";
+import { formatDisplayDate } from "../../utils/datePresentation.js";
 import UiButton from "../ui/UiButton.vue";
 
 defineProps({
@@ -39,17 +40,7 @@ function formatUpdatedAt(value) {
   if (!value) {
     return "更新时间未知";
   }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? String(value)
-    : new Intl.DateTimeFormat("zh-CN", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }).format(date);
+  return formatDisplayDate(value);
 }
 
 function formatScore(value) {
