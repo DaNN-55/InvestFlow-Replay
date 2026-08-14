@@ -12,7 +12,7 @@ import {
 import UiActionMenu from "../ui/UiActionMenu.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
-import { Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
+import { ChevronDown, ChevronUp, Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
 import ReplayPlaybookVersionForm from "./ReplayPlaybookVersionForm.vue";
 
 const props = defineProps({
@@ -42,10 +42,24 @@ const mode = shallowRef("");
 const baseVersion = shallowRef(null);
 const activeCandidate = shallowRef(null);
 const rejectingCandidateId = shallowRef("");
+const historicalVersionsExpanded = shallowRef(false);
 const rejectReasons = reactive({});
 
 const playbook = computed(() => props.detail?.playbook ?? null);
 const versions = computed(() => props.detail?.versions ?? []);
+const latestVersion = computed(
+  () =>
+    versions.value.find((version) => version.id === playbook.value?.currentVersion?.id) ??
+    versions.value[0] ??
+    null,
+);
+const historicalVersions = computed(() =>
+  versions.value.filter((version) => version.id !== latestVersion.value?.id),
+);
+const visibleVersions = computed(() => [
+  ...(latestVersion.value ? [latestVersion.value] : []),
+  ...(historicalVersionsExpanded.value ? historicalVersions.value : []),
+]);
 const candidates = computed(() => props.detail?.candidates ?? []);
 const manualDraft = computed(() => ({
   expectedVersionNumber: getPlaybookVersionNumber(playbook.value),
@@ -126,6 +140,7 @@ watch(
   () => {
     cancelVersionForm();
     cancelReject();
+    historicalVersionsExpanded.value = false;
     Object.keys(rejectReasons).forEach((key) => delete rejectReasons[key]);
   },
 );
@@ -184,7 +199,7 @@ watch(
         </header>
         <div v-if="versions.length" class="replay-playbook-detail__versions">
           <article
-            v-for="version in versions"
+            v-for="version in visibleVersions"
             :key="version.id"
             class="replay-playbook-detail__version"
           >
@@ -233,6 +248,21 @@ watch(
               </small>
             </UiActionMenu>
           </article>
+          <UiButton
+            v-if="historicalVersions.length"
+            type="button"
+            size="sm"
+            variant="secondary"
+            :aria-expanded="historicalVersionsExpanded"
+            class="replay-playbook-detail__history-toggle"
+            @click="historicalVersionsExpanded = !historicalVersionsExpanded"
+          >
+            <template #prefix>
+              <ChevronUp v-if="historicalVersionsExpanded" :size="14" />
+              <ChevronDown v-else :size="14" />
+            </template>
+            {{ historicalVersionsExpanded ? "收起历史版本" : `查看 ${historicalVersions.length} 个历史版本` }}
+          </UiButton>
         </div>
         <p v-else class="replay-playbook-detail__empty">
           暂无版本历史。
@@ -420,6 +450,10 @@ watch(
 .replay-playbook-detail__candidates {
   display: grid;
   gap: 0.75rem;
+}
+
+.replay-playbook-detail__history-toggle {
+  justify-self: start;
 }
 
 .replay-playbook-detail__version,
