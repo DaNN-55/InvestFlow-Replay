@@ -79,6 +79,9 @@ describe("replay playbook frontend surface", () => {
     assert.match(listSource, /删除战法/u);
     assert.match(detailSource, /当前正文/u);
     assert.match(detailSource, /版本历史/u);
+    assert.match(detailSource, /查看 \$\{historicalVersions\.length\} 个历史版本/u);
+    assert.match(detailSource, /收起历史版本/u);
+    assert.match(detailSource, /v-for="version in visibleVersions"/u);
     assert.match(detailSource, /基于此版本修改/u);
     assert.match(detailSource, /删除此版本/u);
     assert.match(detailSource, /候选改进/u);
