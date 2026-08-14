@@ -3,6 +3,7 @@ import { ChartCandlestick } from "lucide-vue-next";
 import { toRef } from "vue";
 
 import { useReplayChartPresentation } from "../../composables/useReplayChartPresentation.js";
+import { formatDisplayDate } from "../../utils/datePresentation.js";
 import CandlestickChart from "../CandlestickChart.vue";
 import ReplayIndicatorWorkspace from "./ReplayIndicatorWorkspace.vue";
 
@@ -61,7 +62,7 @@ const {
             {{ reveal.name || reveal.tsCode }} · {{ reveal.tsCode }}
           </h2>
           <p class="replay-chart-panel__subtitle">
-            {{ reveal.startDate }} 至 {{ reveal.endDate }} · 完整行情
+            {{ formatDisplayDate(reveal.startDate) }} 至 {{ formatDisplayDate(reveal.endDate) }} · 完整行情
           </p>
         </div>
         <div v-else>

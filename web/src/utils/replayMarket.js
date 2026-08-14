@@ -1,3 +1,5 @@
+import { formatDisplayDate } from "./datePresentation.js";
+
 const PERIOD_META = {
   minute: {
     sourceKey: "sequence",
@@ -26,8 +28,8 @@ export function formatReplayBenchmarkLabel(benchmark = {}) {
   const name = String(benchmark.name ?? "").trim();
   const code = String(benchmark.code ?? "").trim();
   const identity = [name, code].filter(Boolean).join(" · ");
-  const startDate = String(benchmark.startDate ?? "").trim();
-  const endDate = String(benchmark.endDate ?? "").trim();
+  const startDate = formatDisplayDate(benchmark.startDate, "");
+  const endDate = formatDisplayDate(benchmark.endDate, "");
   return `${identity} · ${startDate} 至 ${endDate}`;
 }
 
@@ -66,7 +68,7 @@ function createAggregateBar(bar, period, periodIndex) {
   return {
     datetime:
       period === "day" && bar.tradeDate
-        ? String(bar.tradeDate)
+        ? formatDisplayDate(bar.tradeDate)
         : `第${["minute", "day"].includes(period) ? sequence : periodIndex}${PERIOD_META[period].label}`,
     period,
     periodIndex,

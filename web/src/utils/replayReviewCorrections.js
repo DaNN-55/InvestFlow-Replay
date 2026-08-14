@@ -1,3 +1,6 @@
+import { formatDisplayDate } from "./datePresentation.js";
+import { formatReplayReasonTags } from "./replayReviewPresentation.js";
+
 const OUTCOME_LABELS = {
   correct: "正确",
   partial: "部分正确",
@@ -8,18 +11,7 @@ function formatTime(value) {
   if (!value) {
     return "时间未记录";
   }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
-  }
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
+  return formatDisplayDate(value);
 }
 
 function blindFields(snapshot) {
@@ -180,4 +172,3 @@ export function buildReplayReviewTimeline({
       : null,
   ].filter(Boolean);
 }
-import { formatReplayReasonTags } from "./replayReviewPresentation.js";

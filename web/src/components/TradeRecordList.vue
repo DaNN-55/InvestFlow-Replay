@@ -138,10 +138,14 @@ const emit = defineEmits(["select"]);
 }
 
 .trade-record-list__profit--positive {
-  color: #047857;
+  color: var(--ql-rise);
 }
 
 .trade-record-list__profit--negative {
-  color: #be123c;
+  color: var(--ql-fall);
+}
+
+.trade-record-list__profit--neutral {
+  color: var(--ql-color-text-muted);
 }
 </style>

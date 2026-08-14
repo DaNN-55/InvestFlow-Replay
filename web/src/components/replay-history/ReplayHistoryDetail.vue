@@ -20,6 +20,7 @@ import {
   formatReplayReasonTags,
 } from "../../utils/replayReviewPresentation.js";
 import { getLatestReplayReviewSnapshot } from "../../utils/replayReviewCorrections.js";
+import { formatDisplayDate } from "../../utils/datePresentation.js";
 import ReplayReviewTimeline from "../replay/ReplayReviewTimeline.vue";
 import ReplayOrderDecisionSnapshot from "../replay/ReplayOrderDecisionSnapshot.vue";
 import UiActionMenu from "../ui/UiActionMenu.vue";
@@ -248,7 +249,7 @@ function isPositiveMetric(metric) {
       </div>
       <div v-if="item.revealed">
         <dt>行情区间</dt>
-        <dd>{{ item.reveal?.startDate || "—" }} 至 {{ item.reveal?.endDate || "—" }}</dd>
+        <dd>{{ formatDisplayDate(item.reveal?.startDate, "—") }} 至 {{ formatDisplayDate(item.reveal?.endDate, "—") }}</dd>
       </div>
     </dl>
 

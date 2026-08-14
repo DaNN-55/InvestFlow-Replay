@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, watch } from "vue";
 
+import { toDateInput, toExecutionEventDate } from "../utils/tradeExecutionDateTime.js";
 import UiButton from "./ui/UiButton.vue";
 import UiInput from "./ui/UiInput.vue";
 import UiModal from "./ui/UiModal.vue";
@@ -37,7 +38,7 @@ const form = reactive({
 });
 
 function applyEvent(event = {}) {
-  form.eventAt = event.eventAt ?? "";
+  form.eventAt = toDateInput(event.eventAt);
   form.action = event.action ?? "buy";
   form.price = event.price ?? "";
   form.quantity = event.quantity ?? "";
@@ -54,7 +55,7 @@ function optionalNumber(value) {
 function submit() {
   if (!form.eventAt || !form.action) return;
   emit("save", {
-    eventAt: form.eventAt,
+    eventAt: toExecutionEventDate(form.eventAt),
     action: form.action,
     price: optionalNumber(form.price),
     quantity: optionalNumber(form.quantity),
@@ -87,7 +88,7 @@ watch(
       <div class="trade-execution-event-dialog__grid">
         <label>
           <span>时间</span>
-          <UiInput v-model="form.eventAt" type="text" :disabled="saving" />
+          <UiInput v-model="form.eventAt" type="date" :disabled="saving" />
         </label>
         <label>
           <span>动作</span>

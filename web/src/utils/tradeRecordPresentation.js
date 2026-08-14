@@ -1,3 +1,5 @@
+import { formatDisplayDate } from "./datePresentation.js";
+
 const SECTOR_TYPE_LABELS = {
   ths_concept: "同花顺概念",
   ths_industry: "同花顺行业",
@@ -130,7 +132,7 @@ export function buildDiagnosisSnapshotSections(snapshot = {}, record = {}) {
 
   const sourceItems = [];
   addItem(sourceItems, "来源", candidate?.source === "market_scan" ? "市场扫描" : "独立诊断");
-  addItem(sourceItems, "扫描日期", candidate?.scanTradeDate);
+  addItem(sourceItems, "扫描日期", formatDisplayDate(candidate?.scanTradeDate));
   addItem(sourceItems, "板块类型", SECTOR_TYPE_LABELS[candidate?.sectorType] ?? candidate?.sectorType);
   addItem(sourceItems, "板块", candidate?.sectorName);
   addItem(sourceItems, "候选角色", candidate?.candidateRole ?? candidate?.role);
@@ -208,7 +210,7 @@ function formatSignedPercent(value) {
 }
 
 function formatDate(value) {
-  return value ? String(value).replace("T", " ").slice(0, 16) : "--";
+  return formatDisplayDate(value);
 }
 
 function formatRange(low, high) {
@@ -368,7 +370,7 @@ export function buildTradeReviewOverview({ stage = "", form = {}, record = {}, v
           rows: [
             { label: "许可证", value: licenseState },
             { label: "签发时间", value: formatDate(record?.licenseSnapshot?.issuedAt ?? record?.licenseIssuedAt) },
-            { label: "有效交易日", value: displayValue(form?.validForTradeDate) },
+            { label: "有效交易日", value: formatDate(form?.validForTradeDate) },
           ],
         },
       ],

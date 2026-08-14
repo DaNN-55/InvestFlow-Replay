@@ -83,6 +83,7 @@ describe("replay review corrections presentation", () => {
       stages[1].entries[1].changeNote,
       "重新核对止损执行记录",
     );
+    assert.equal(stages[1].entries[1].time, "2026/07/30");
   });
 
   it("never exposes post-review originals or corrections before reveal", () => {
