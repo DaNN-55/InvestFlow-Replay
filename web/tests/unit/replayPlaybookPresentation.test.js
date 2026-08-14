@@ -7,6 +7,7 @@ import {
   getCandidateStatusPresentation,
   getCandidateSuggestion,
   getPlaybookVersionNumber,
+  formatPlaybookTime,
 } from "../../src/utils/replayPlaybookPresentation.js";
 
 describe("replay playbook presentation", () => {
@@ -40,5 +41,6 @@ describe("replay playbook presentation", () => {
     });
     assert.equal(getCandidateSuggestion({ suggestion: "补充风控" }), "补充风控");
     assert.equal(getCandidateSessionId({ sessionId: "session-1" }), "session-1");
+    assert.equal(formatPlaybookTime("2026-08-05T09:06:38.442Z"), "2026/08/05");
   });
 });

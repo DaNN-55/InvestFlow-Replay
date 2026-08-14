@@ -1,3 +1,5 @@
+import { formatDisplayDate } from "./datePresentation.js";
+
 export function formatCacheBytes(value) {
   const bytes = Math.max(0, Number(value) || 0);
   if (bytes < 1024) return `${Math.round(bytes)} B`;
@@ -17,15 +19,7 @@ export function formatCacheCount(value) {
 
 export function formatCacheTime(value) {
   if (!value) return "暂无";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
+  return formatDisplayDate(value);
 }
 
 export function replayCacheProgress(payload) {
