@@ -11,7 +11,7 @@ const journeyUrl = new URL(
   import.meta.url,
 );
 
-test("replay setup presents the five-step portfolio journey with one primary CTA", async () => {
+test("replay setup presents the A-style hero, real choices, and one primary CTA", async () => {
   const [setup, journey] = await Promise.all([
     readFile(setupUrl, "utf8"),
     readFile(journeyUrl, "utf8"),
@@ -32,8 +32,14 @@ test("replay setup presents the five-step portfolio journey with one primary CTA
   assert.match(journey, /离线 Demo · 合成数据/u);
   assert.match(journey, /不对应真实证券或真实市场/u);
   assert.match(journey, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/u);
-  assert.match(setup, /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\)/u);
-  assert.match(setup, /replay-setup__form-wide/u);
+  assert.match(setup, /replay-setup__hero/u);
+  assert.match(setup, /grid-template-columns: minmax\(0, 1fr\) minmax\(360px, 430px\)/u);
+  assert.match(setup, /这次怎么练？/u);
+  assert.match(setup, /调整资金与成本/u);
+  assert.match(setup, /:aria-pressed="form\.barInterval === '1d'"/u);
+  assert.match(setup, /:aria-pressed="form\.barInterval === 'hybrid'"/u);
+  assert.match(setup, /:aria-pressed="form\.gameLength === length"/u);
+  assert.match(setup, /\.replay-setup__submit \{[\s\S]*?background: var\(--ql-color-primary\)/u);
 });
 
 test("the narrative change preserves replay modes and submitted configuration", async () => {
