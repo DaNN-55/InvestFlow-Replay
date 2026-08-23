@@ -5,13 +5,13 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-vue-next";
-import { computed, reactive, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 import UiButton from "../ui/UiButton.vue";
 import UiCard from "../ui/UiCard.vue";
+import UiDrawer from "../ui/UiDrawer.vue";
 import UiInput from "../ui/UiInput.vue";
 import { formatReplayBenchmarkLabel } from "../../utils/replayMarket.js";
-import ReplayPortfolioJourney from "./ReplayPortfolioJourney.vue";
 
 const props = defineProps({
   loading: {
@@ -44,6 +44,7 @@ const emit = defineEmits([
   "create",
   "retryBenchmarks",
 ]);
+const configurationOpen = ref(false);
 
 const form = reactive({
   barInterval: "1d",
@@ -64,7 +65,6 @@ const lengthOptions = computed(() =>
     : [20, 60, 120],
 );
 const isFixtureMarket = computed(() => props.marketProvider === "fixture");
-
 const compatibleBenchmarks = computed(() =>
   props.benchmarks.filter((benchmark) =>
     form.barInterval === "hybrid" ||
@@ -152,230 +152,220 @@ function submit() {
 
 <template>
   <div class="replay-setup">
-    <div class="replay-setup__intro">
-      <span class="replay-setup__eyebrow">
-        <ShieldCheck :size="15" />
-        严格盲测
-      </span>
-      <h1 class="replay-setup__title">用未知行情验证一条交易规则</h1>
-      <p class="replay-setup__description">
-        {{ isFixtureMarket
-          ? "从研究假设出发，在确定性的离线合成 K 线上完成演练、模拟执行与复盘。"
-          : "从研究假设出发，在随机匿名历史行情中完成演练、模拟执行与复盘。" }}
-      </p>
-      <p v-if="isFixtureMarket" class="replay-setup__fixture-note" role="status">
-        离线合成数据 · 不对应真实证券，也不代表真实市场
-      </p>
+    <div class="replay-setup__hero">
+      <div class="replay-setup__intro">
+        <span class="replay-setup__eyebrow">
+          <ShieldCheck :size="15" />
+          严格盲测
+        </span>
+        <h1 class="replay-setup__title">用未知行情验证一条交易规则</h1>
+        <p class="replay-setup__description">
+          {{ isFixtureMarket
+            ? "从研究假设出发，在确定性的离线合成 K 线上完成演练、模拟执行与复盘。"
+            : "从研究假设出发，在随机匿名历史行情中完成演练、模拟执行与复盘。" }}
+        </p>
+        <p v-if="isFixtureMarket" class="replay-setup__fixture-note" role="status">
+          离线合成数据 · 不对应真实证券，也不代表真实市场
+        </p>
+      </div>
+
+      <UiCard class="replay-setup__card" overflow-visible>
+        <form class="replay-setup__form" @submit.prevent="submit">
+          <div class="replay-setup__choice-heading">
+            <h2>这次怎么练？</h2>
+          </div>
+
+          <fieldset class="replay-setup__choice-card">
+            <legend class="replay-setup__choice-label">01 · 行情精度</legend>
+            <div class="replay-setup__intervals">
+              <button
+                type="button"
+                class="replay-setup__interval"
+                :class="{ 'replay-setup__interval--active': form.barInterval === '1d' }"
+                :aria-pressed="form.barInterval === '1d'"
+                @click="form.barInterval = '1d'"
+              >
+                <strong>日线演练</strong>
+              </button>
+              <button
+                v-if="!isFixtureMarket"
+                type="button"
+                class="replay-setup__interval"
+                :class="{ 'replay-setup__interval--active': form.barInterval === 'hybrid' }"
+                :aria-pressed="form.barInterval === 'hybrid'"
+                @click="form.barInterval = 'hybrid'"
+              >
+                <strong>日内模拟</strong>
+              </button>
+            </div>
+          </fieldset>
+
+          <fieldset class="replay-setup__choice-card">
+            <legend class="replay-setup__choice-label">02 · 演练长度</legend>
+            <div class="replay-setup__lengths">
+              <button
+                v-for="length in lengthOptions"
+                :key="length"
+                type="button"
+                class="replay-setup__length"
+                :class="{ 'replay-setup__length--active': form.gameLength === length }"
+                :aria-pressed="form.gameLength === length"
+                @click="form.gameLength = length"
+              >
+                <strong>{{ length }}</strong>
+                <span>交易日</span>
+              </button>
+            </div>
+          </fieldset>
+
+          <section class="replay-setup__choice-card replay-setup__benchmark" aria-label="指数基准设置">
+            <label class="replay-setup__field">
+              <span class="replay-setup__choice-label">03 · 指数基准</span>
+              <select
+                v-model="form.benchmarkCode"
+                class="replay-setup__select"
+                :disabled="compatibleBenchmarks.length === 0"
+              >
+                <option value="">
+                  {{ isFixtureMarket ? "请选择 Demo 合成基准" : "请选择真实指数基准" }}
+                </option>
+                <option
+                  v-for="benchmark in compatibleBenchmarks"
+                  :key="benchmark.code"
+                  :value="benchmark.code"
+                >
+                  {{ formatReplayBenchmarkLabel(benchmark) }}
+                </option>
+              </select>
+            </label>
+            <div
+              v-if="benchmarksLoading || benchmarkInitialization?.state === 'running'"
+              class="replay-setup__playbook-state"
+            >
+              <RefreshCw :size="14" class="replay-setup__spinner" />
+              {{ benchmarkProgressText }}
+            </div>
+            <div
+              v-else-if="benchmarksError"
+              class="replay-setup__playbook-state replay-setup__playbook-state--error"
+            >
+              <span>{{ benchmarksError }}</span>
+              <button type="button" @click="emit('retryBenchmarks')">重新加载</button>
+            </div>
+            <div v-else-if="compatibleBenchmarks.length === 0" class="replay-setup__playbook-state">
+              当前没有支持该演练模式的{{ isFixtureMarket ? "合成" : "真实" }}指数基准。
+            </div>
+          </section>
+
+          <UiButton
+            type="submit"
+            block
+            class="replay-setup__submit"
+            :loading="loading"
+            :disabled="!canSubmit"
+          >
+            <template #prefix>
+              <Play :size="16" />
+            </template>
+            开始{{ form.barInterval === "hybrid" ? "日内模拟" : "日线盲测" }}
+          </UiButton>
+          <button
+            type="button"
+            class="replay-setup__configuration-trigger"
+            @click="configurationOpen = true"
+          >
+            <span>调整资金与成本</span>
+            <ChevronDown :size="16" />
+          </button>
+        </form>
+      </UiCard>
     </div>
 
-    <ReplayPortfolioJourney :market-provider="marketProvider" />
+    <UiDrawer
+      :open="configurationOpen"
+      title="资金与成本"
+      description="修改会应用到本轮演练。"
+      panel-class="replay-setup__configuration-drawer"
+      @close="configurationOpen = false"
+    >
+      <div class="replay-setup__configuration-body">
+              <label class="replay-setup__field">
+                <span class="replay-setup__label">初始资金</span>
+                <span class="replay-setup__input-wrap">
+                  <span class="replay-setup__currency">¥</span>
+                  <UiInput
+                    v-model="form.initialCapital"
+                    type="number"
+                    min="10000"
+                    step="10000"
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
 
-    <UiCard class="replay-setup__card" overflow-visible>
-      <form class="replay-setup__form" @submit.prevent="submit">
-        <fieldset class="replay-setup__section replay-setup__section--interval">
-          <legend class="replay-setup__label">行情精度</legend>
-          <div class="replay-setup__intervals">
-            <button
-              type="button"
-              class="replay-setup__interval"
-              :class="{ 'replay-setup__interval--active': form.barInterval === '1d' }"
-              @click="form.barInterval = '1d'"
-            >
-              <strong>日线演练</strong>
-              <small>适合按收盘决策、次日开盘执行</small>
-            </button>
-            <button
-              v-if="!isFixtureMarket"
-              type="button"
-              class="replay-setup__interval"
-              :class="{ 'replay-setup__interval--active': form.barInterval === 'hybrid' }"
-              @click="form.barInterval = 'hybrid'"
-            >
-              <strong>日内模拟</strong>
-              <small>主图保留日 K，同时逐5分钟观察当天走势和成交</small>
-            </button>
-          </div>
-        </fieldset>
-
-        <section
-          class="replay-setup__benchmark replay-setup__benchmark--primary"
-          aria-label="指数基准设置"
-        >
-          <label class="replay-setup__field">
-            <span class="replay-setup__label">指数基准</span>
-            <select
-              v-model="form.benchmarkCode"
-              class="replay-setup__select"
-              :disabled="compatibleBenchmarks.length === 0"
-            >
-              <option value="">
-                {{ isFixtureMarket ? "请选择 Demo 合成基准" : "请选择真实指数基准" }}
-              </option>
-              <option
-                v-for="benchmark in compatibleBenchmarks"
-                :key="benchmark.code"
-                :value="benchmark.code"
-              >
-                {{ formatReplayBenchmarkLabel(benchmark) }}
-              </option>
-            </select>
-          </label>
-          <div
-            v-if="benchmarksLoading || benchmarkInitialization?.state === 'running'"
-            class="replay-setup__playbook-state"
-          >
-            <RefreshCw :size="14" class="replay-setup__spinner" />
-            {{ benchmarkProgressText }}
-          </div>
-          <div
-            v-else-if="benchmarksError"
-            class="replay-setup__playbook-state replay-setup__playbook-state--error"
-          >
-            <span>{{ benchmarksError }}</span>
-            <button type="button" @click="emit('retryBenchmarks')">
-              重新加载
-            </button>
-          </div>
-          <div
-            v-else-if="compatibleBenchmarks.length === 0"
-            class="replay-setup__playbook-state"
-          >
-            当前没有支持该演练模式的{{ isFixtureMarket ? "合成" : "真实" }}指数基准。
-          </div>
-          <small v-else class="replay-setup__benchmark-note">
-            {{ isFixtureMarket
-              ? "合成指数与合成标的按同一固定日历对齐，仅用于演示结算流程。"
-              : "指数与抽中的股票会按同一时间对齐，用于结算真实超额收益。" }}
-          </small>
-        </section>
-
-        <fieldset class="replay-setup__section replay-setup__section--length">
-          <legend class="replay-setup__label">演练长度</legend>
-          <div class="replay-setup__lengths">
-            <button
-              v-for="length in lengthOptions"
-              :key="length"
-              type="button"
-              class="replay-setup__length"
-              :class="{ 'replay-setup__length--active': form.gameLength === length }"
-              @click="form.gameLength = length"
-            >
-              <strong>{{ length }}</strong>
-              <span>交易日</span>
-            </button>
-          </div>
-        </fieldset>
-
-        <label class="replay-setup__field replay-setup__field--capital">
-          <span class="replay-setup__label">初始资金</span>
-          <span class="replay-setup__input-wrap">
-            <span class="replay-setup__currency">¥</span>
-            <UiInput
-              v-model="form.initialCapital"
-              type="number"
-              min="10000"
-              step="10000"
-              inputmode="decimal"
-            />
-          </span>
-        </label>
-
-        <details class="replay-setup__advanced replay-setup__form-wide">
-          <summary class="replay-setup__advanced-trigger">
-            <span>高级成本设置</span>
-            <ChevronDown :size="16" />
-          </summary>
-          <div class="replay-setup__cost-grid">
-            <label class="replay-setup__field">
-              <span class="replay-setup__label">佣金率</span>
-              <UiInput
-                v-model="form.costConfig.commissionRate"
-                type="number"
-                min="0"
-                max="0.999999"
-                step="0.0001"
-              />
-            </label>
-            <label class="replay-setup__field">
-              <span class="replay-setup__label">最低佣金</span>
-              <UiInput
-                v-model="form.costConfig.minCommission"
-                type="number"
-                min="0"
-                step="1"
-              />
-            </label>
-            <label class="replay-setup__field">
-              <span class="replay-setup__label">卖出印花税率</span>
-              <UiInput
-                v-model="form.costConfig.stampTaxRate"
-                type="number"
-                min="0"
-                max="0.999999"
-                step="0.0001"
-              />
-            </label>
-            <label class="replay-setup__field">
-              <span class="replay-setup__label">双向过户费率</span>
-              <UiInput
-                v-model="form.costConfig.transferFeeRate"
-                type="number"
-                min="0"
-                max="0.999999"
-                step="0.00001"
-              />
-            </label>
-            <label class="replay-setup__field">
-              <span class="replay-setup__label">滑点（bps）</span>
-              <UiInput
-                v-model="form.costConfig.slippageBps"
-                type="number"
-                min="0"
-                max="9999"
-                step="1"
-              />
-            </label>
-          </div>
-        </details>
-
-        <div class="replay-setup__notice replay-setup__form-footer">
-          开局会固定账户与成本配置，上一局持仓不会带入。
-        </div>
-
-        <UiButton
-          type="submit"
-          class="replay-setup__submit"
-          block
-          :loading="loading"
-          :disabled="!canSubmit"
-        >
-          <template #prefix>
-            <Play :size="16" />
-          </template>
-          开始{{ form.barInterval === "hybrid" ? "日内模拟" : "日线盲测" }}
-        </UiButton>
-      </form>
-    </UiCard>
+              <details class="replay-setup__advanced">
+                <summary class="replay-setup__advanced-trigger">
+                  <span>高级成本设置</span>
+                  <ChevronDown :size="16" />
+                </summary>
+                <div class="replay-setup__cost-grid">
+                  <label class="replay-setup__field">
+                    <span class="replay-setup__label">佣金率</span>
+                    <UiInput v-model="form.costConfig.commissionRate" type="number" min="0" max="0.999999" step="0.0001" />
+                  </label>
+                  <label class="replay-setup__field">
+                    <span class="replay-setup__label">最低佣金</span>
+                    <UiInput v-model="form.costConfig.minCommission" type="number" min="0" step="1" />
+                  </label>
+                  <label class="replay-setup__field">
+                    <span class="replay-setup__label">卖出印花税率</span>
+                    <UiInput v-model="form.costConfig.stampTaxRate" type="number" min="0" max="0.999999" step="0.0001" />
+                  </label>
+                  <label class="replay-setup__field">
+                    <span class="replay-setup__label">双向过户费率</span>
+                    <UiInput v-model="form.costConfig.transferFeeRate" type="number" min="0" max="0.999999" step="0.00001" />
+                  </label>
+                  <label class="replay-setup__field">
+                    <span class="replay-setup__label">滑点（bps）</span>
+                    <UiInput v-model="form.costConfig.slippageBps" type="number" min="0" max="9999" step="1" />
+                  </label>
+                </div>
+              </details>
+      </div>
+    </UiDrawer>
   </div>
 </template>
 
 <style scoped>
 .replay-setup {
-  width: min(960px, 100%);
+  width: min(1040px, 100%);
   margin: 0 auto;
 }
 
+.replay-setup__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+  align-items: center;
+  gap: clamp(32px, 6vw, 76px);
+  margin-top: 100px;
+  min-height: min(620px, calc(100dvh - 92px));
+  background:
+    linear-gradient(to right, color-mix(in srgb, var(--ql-line) 72%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--ql-line) 72%, transparent) 1px, transparent 1px),
+    radial-gradient(ellipse 76% 96% at 88% 42%, var(--ql-color-primary-soft), transparent 76%),
+    linear-gradient(118deg, color-mix(in srgb, var(--ql-color-primary-soft) 58%, transparent), transparent 62%);
+  background-size: 40px 40px, 40px 40px, auto;
+}
+
 .replay-setup__intro {
-  max-width: 760px;
-  margin-top: clamp(12px, 2vw, 20px);
-  margin-bottom: 16px;
+  max-width: 540px;
 }
 
 .replay-setup__eyebrow {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin-bottom: 8px;
+  margin-bottom: 9px;
   color: var(--ql-accent);
   font-size: 12px;
   font-weight: 700;
@@ -384,21 +374,22 @@ function submit() {
 
 .replay-setup__title {
   margin: 0;
-  font-size: clamp(28px, 3.5vw, 38px);
-  line-height: 1.08;
-  letter-spacing: -0.045em;
+  font-size: clamp(34px, 4.4vw, 52px);
+  line-height: 1.04;
+  letter-spacing: -0.055em;
 }
 
 .replay-setup__description {
-  margin: 10px 0 0;
+  max-width: 480px;
+  margin: 16px 0 0;
   color: var(--ql-color-text-muted);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.8;
 }
 
 .replay-setup__fixture-note {
   display: inline-flex;
-  margin: 9px 0 0;
+  margin: 12px 0 0;
   padding: 5px 9px;
   border: 1px solid var(--ql-color-warning);
   border-radius: 7px;
@@ -409,86 +400,97 @@ function submit() {
 
 .replay-setup__card {
   border-color: var(--ql-color-border-soft);
-  box-shadow: none;
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--ql-ink) 9%, transparent);
 }
 
 .replay-setup__form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px 18px;
+  gap: 10px;
 }
 
-.replay-setup__section--interval,
-.replay-setup__benchmark--primary,
-.replay-setup__section--length,
-.replay-setup__field--capital {
-  align-self: stretch;
+.replay-setup__choice-heading h2 {
+  margin: 0;
+  color: var(--ql-ink);
+  font-size: 24px;
+  letter-spacing: -0.035em;
 }
 
-.replay-setup__form-wide {
-  grid-column: 1 / -1;
-}
-
-.replay-setup__form-footer {
-  align-self: stretch;
-}
-
-.replay-setup__submit {
-  align-self: stretch;
-  min-height: 46px;
-}
-
-.replay-setup__section {
+.replay-setup__choice-card {
   min-width: 0;
   margin: 0;
-  padding: 0;
-  border: 0;
+  padding: 10px;
+  border: 1px solid var(--ql-line);
+  border-radius: 11px;
+  background: var(--ql-paper-soft);
 }
 
+.replay-setup__choice-label,
 .replay-setup__label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
   color: var(--ql-color-text-muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
+.replay-setup__intervals,
 .replay-setup__lengths {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 9px;
 }
 
 .replay-setup__intervals {
-  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+}
+
+.replay-setup__lengths {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.replay-setup__interval,
+.replay-setup__length {
+  min-width: 0;
+  border: 1px solid var(--ql-line-strong);
+  border-radius: 8px;
+  color: var(--ql-color-text-muted);
+  background: var(--ql-color-bg-surface-strong);
+  cursor: pointer;
 }
 
 .replay-setup__interval {
   display: grid;
-  min-width: 0;
-  gap: 4px;
-  padding: 13px;
-  border: 1px solid var(--ql-line-strong);
-  border-radius: 10px;
-  color: var(--ql-color-text-muted);
-  background: var(--ql-color-bg-surface-strong);
-  text-align: left;
-  cursor: pointer;
+  min-height: 50px;
+  place-items: center;
+  padding: 8px 10px;
+  text-align: center;
 }
 
 .replay-setup__interval strong {
   color: var(--ql-ink);
-  font-size: 13px;
+  font-size: 15px;
 }
 
-.replay-setup__interval small {
-  font-size: 11px;
-  line-height: 1.5;
+.replay-setup__length {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
-.replay-setup__interval--active {
+.replay-setup__length strong {
+  color: var(--ql-ink);
+  font-family: var(--ql-font-mono, monospace);
+  font-size: 20px;
+}
+
+.replay-setup__length span {
+  font-size: 10px;
+}
+
+.replay-setup__interval--active,
+.replay-setup__length--active {
   border-color: var(--ql-accent);
   color: var(--ql-accent);
   background: var(--ql-color-primary-soft);
@@ -497,18 +499,7 @@ function submit() {
 
 .replay-setup__benchmark {
   display: grid;
-  min-width: 0;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--ql-line);
-  border-radius: 10px;
-  background: var(--ql-paper-soft);
-}
-
-.replay-setup__benchmark-note {
-  color: var(--ql-color-text-muted);
-  font-size: 11px;
-  line-height: 1.6;
+  gap: 9px;
 }
 
 .replay-setup__select {
@@ -524,13 +515,16 @@ function submit() {
 }
 
 .replay-setup__playbook-state {
+  color: var(--ql-color-text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.replay-setup__playbook-state {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: var(--ql-color-text-muted);
-  font-size: 11px;
-  line-height: 1.6;
 }
 
 .replay-setup__playbook-state--error {
@@ -552,30 +546,48 @@ function submit() {
   animation: replay-setup-spin 0.9s linear infinite;
 }
 
-.replay-setup__length {
+.replay-setup__submit {
+  min-height: 48px;
+  border-color: var(--ql-color-primary);
+  color: #fff;
+  background: var(--ql-color-primary);
+}
+
+.replay-setup__submit:hover,
+.replay-setup__submit:focus-visible {
+  border-color: var(--ql-color-primary-strong);
+  background: var(--ql-color-primary-strong);
+}
+
+.replay-setup__configuration-trigger,
+.replay-setup__advanced-trigger {
   display: flex;
-  min-height: 58px;
+  width: 100%;
+  min-height: 44px;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border: 1px solid var(--ql-line-strong);
-  border-radius: 10px;
-  color: var(--ql-color-text-muted);
-  background: var(--ql-color-bg-surface-strong);
+  justify-content: space-between;
+  padding: 0 12px;
+  border: 1px solid var(--ql-line);
+  border-radius: 8px;
+  color: var(--ql-color-text-body);
+  background: var(--ql-paper-soft);
+  font-size: 13px;
+  font-weight: 650;
   cursor: pointer;
+  list-style: none;
 }
 
-.replay-setup__length strong {
-  color: var(--ql-ink);
-  font-family: var(--ql-font-mono, monospace);
-  font-size: 22px;
+.replay-setup__advanced[open] .replay-setup__advanced-trigger svg {
+  transform: rotate(180deg);
 }
 
-.replay-setup__length--active {
-  border-color: var(--ql-accent);
-  color: var(--ql-accent);
-  background: var(--ql-color-primary-soft);
-  box-shadow: 0 0 0 3px var(--ql-color-primary-ring);
+.replay-setup__configuration-body {
+  display: grid;
+  gap: 12px;
+}
+
+:global(.replay-setup__configuration-drawer) {
+  width: min(420px, calc(100vw - 24px));
 }
 
 .replay-setup__input-wrap {
@@ -605,55 +617,46 @@ function submit() {
 }
 
 .replay-setup__advanced-trigger {
-  display: flex;
-  min-height: 42px;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--ql-color-text-body);
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-  list-style: none;
-}
-
-.replay-setup__advanced[open] .replay-setup__advanced-trigger svg {
-  transform: rotate(180deg);
+  min-height: 40px;
+  padding: 0;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
 }
 
 .replay-setup__cost-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  padding: 4px 0 18px;
+  gap: 12px;
+  padding: 2px 0 15px;
 }
 
-.replay-setup__notice {
-  padding: 11px 13px;
-  border-left: 3px solid var(--ql-accent);
-  color: var(--ql-color-text-muted);
-  background: var(--ql-color-primary-soft);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-@media (max-width: 640px) {
-  .replay-setup {
-    margin-top: 0;
+@media (max-width: 780px) {
+  .replay-setup__hero {
+    grid-template-columns: 1fr;
+    gap: 26px;
+    margin-top: 32px;
+    min-height: auto;
+    padding: 20px 0 34px;
   }
 
+  .replay-setup__intro {
+    max-width: 620px;
+  }
+
+  .replay-setup__card {
+    width: min(100%, 500px);
+    justify-self: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .replay-setup__title {
+    font-size: 34px;
+  }
+
+  .replay-setup__intervals,
   .replay-setup__cost-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .replay-setup__form {
-    grid-template-columns: 1fr;
-  }
-
-  .replay-setup__form-wide {
-    grid-column: auto;
-  }
-
-  .replay-setup__intervals {
     grid-template-columns: 1fr;
   }
 }
