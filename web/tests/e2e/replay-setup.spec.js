@@ -14,9 +14,9 @@ test("起始页提供可配置的盲测开局，而不再提供战法专项入�
   await page.getByRole("button", { name: /日内模拟/ }).click();
   await expect(page.getByRole("button", { name: "开始日内模拟" })).toBeVisible();
   await expect(page.getByText("调整资金与成本", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "一轮训练，完成一次规则验证" }),
-  ).toBeVisible();
+  await page.getByText("调整资金与成本", { exact: true }).click();
+  await expect(page.getByText("资金与成本", { exact: true })).toBeVisible();
+  await expect(page.getByText("交付闭环", { exact: true })).toHaveCount(0);
   await expect(page.getByText("战法专项", { exact: true })).toHaveCount(0);
   await expect(page.getByText("专项战法", { exact: true })).toHaveCount(0);
 });
