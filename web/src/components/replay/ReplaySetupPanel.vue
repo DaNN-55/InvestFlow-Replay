@@ -5,13 +5,13 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-vue-next";
-import { computed, reactive, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 import UiButton from "../ui/UiButton.vue";
 import UiCard from "../ui/UiCard.vue";
+import UiDrawer from "../ui/UiDrawer.vue";
 import UiInput from "../ui/UiInput.vue";
 import { formatReplayBenchmarkLabel } from "../../utils/replayMarket.js";
-import ReplayPortfolioJourney from "./ReplayPortfolioJourney.vue";
 
 const props = defineProps({
   loading: {
@@ -44,6 +44,7 @@ const emit = defineEmits([
   "create",
   "retryBenchmarks",
 ]);
+const configurationOpen = ref(false);
 
 const form = reactive({
   barInterval: "1d",
@@ -171,9 +172,7 @@ function submit() {
       <UiCard class="replay-setup__card" overflow-visible>
         <form class="replay-setup__form" @submit.prevent="submit">
           <div class="replay-setup__choice-heading">
-            <span class="replay-setup__eyebrow">推荐开局</span>
             <h2>这次怎么练？</h2>
-            <p>先选好演练边界，再进入未知行情。</p>
           </div>
 
           <fieldset class="replay-setup__choice-card">
@@ -187,7 +186,6 @@ function submit() {
                 @click="form.barInterval = '1d'"
               >
                 <strong>日线演练</strong>
-                <small>按收盘决策、次日开盘执行</small>
               </button>
               <button
                 v-if="!isFixtureMarket"
@@ -198,7 +196,6 @@ function submit() {
                 @click="form.barInterval = 'hybrid'"
               >
                 <strong>日内模拟</strong>
-                <small>逐 5 分钟观察当天走势与成交</small>
               </button>
             </div>
           </fieldset>
@@ -258,11 +255,6 @@ function submit() {
             <div v-else-if="compatibleBenchmarks.length === 0" class="replay-setup__playbook-state">
               当前没有支持该演练模式的{{ isFixtureMarket ? "合成" : "真实" }}指数基准。
             </div>
-            <small v-else class="replay-setup__benchmark-note">
-              {{ isFixtureMarket
-                ? "合成指数与合成标的按同一固定日历对齐，仅用于演示结算流程。"
-                : "指数与抽中的股票会按同一时间对齐，用于结算真实超额收益。" }}
-            </small>
           </section>
 
           <UiButton
@@ -277,16 +269,26 @@ function submit() {
             </template>
             开始{{ form.barInterval === "hybrid" ? "日内模拟" : "日线盲测" }}
           </UiButton>
-          <p class="replay-setup__submit-note">
-            开局会固定账户与成本配置，上一局持仓不会带入。
-          </p>
+          <button
+            type="button"
+            class="replay-setup__configuration-trigger"
+            @click="configurationOpen = true"
+          >
+            <span>调整资金与成本</span>
+            <ChevronDown :size="16" />
+          </button>
+        </form>
+      </UiCard>
+    </div>
 
-          <details class="replay-setup__configuration" :open="Boolean(benchmarksError)">
-            <summary class="replay-setup__configuration-trigger">
-              <span>调整资金与成本</span>
-              <ChevronDown :size="16" />
-            </summary>
-            <div class="replay-setup__configuration-body">
+    <UiDrawer
+      :open="configurationOpen"
+      title="资金与成本"
+      description="修改会应用到本轮演练。"
+      panel-class="replay-setup__configuration-drawer"
+      @close="configurationOpen = false"
+    >
+      <div class="replay-setup__configuration-body">
               <label class="replay-setup__field">
                 <span class="replay-setup__label">初始资金</span>
                 <span class="replay-setup__input-wrap">
@@ -329,13 +331,8 @@ function submit() {
                   </label>
                 </div>
               </details>
-            </div>
-          </details>
-        </form>
-      </UiCard>
-    </div>
-
-    <ReplayPortfolioJourney :market-provider="marketProvider" />
+      </div>
+    </UiDrawer>
   </div>
 </template>
 
@@ -350,7 +347,14 @@ function submit() {
   grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
   align-items: center;
   gap: clamp(32px, 6vw, 76px);
+  margin-top: 100px;
   min-height: min(620px, calc(100dvh - 92px));
+  background:
+    linear-gradient(to right, color-mix(in srgb, var(--ql-line) 72%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--ql-line) 72%, transparent) 1px, transparent 1px),
+    radial-gradient(ellipse 76% 96% at 88% 42%, var(--ql-color-primary-soft), transparent 76%),
+    linear-gradient(118deg, color-mix(in srgb, var(--ql-color-primary-soft) 58%, transparent), transparent 62%);
+  background-size: 40px 40px, 40px 40px, auto;
 }
 
 .replay-setup__intro {
@@ -401,7 +405,7 @@ function submit() {
 
 .replay-setup__form {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .replay-setup__choice-heading h2 {
@@ -411,18 +415,10 @@ function submit() {
   letter-spacing: -0.035em;
 }
 
-.replay-setup__choice-heading p,
-.replay-setup__submit-note {
-  margin: 5px 0 0;
-  color: var(--ql-color-text-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
 .replay-setup__choice-card {
   min-width: 0;
   margin: 0;
-  padding: 13px;
+  padding: 10px;
   border: 1px solid var(--ql-line);
   border-radius: 11px;
   background: var(--ql-paper-soft);
@@ -431,7 +427,7 @@ function submit() {
 .replay-setup__choice-label,
 .replay-setup__label {
   display: block;
-  margin-bottom: 9px;
+  margin-bottom: 7px;
   color: var(--ql-color-text-muted);
   font-size: 11px;
   font-weight: 700;
@@ -464,25 +460,20 @@ function submit() {
 
 .replay-setup__interval {
   display: grid;
-  gap: 4px;
-  min-height: 72px;
-  padding: 10px;
-  text-align: left;
+  min-height: 50px;
+  place-items: center;
+  padding: 8px 10px;
+  text-align: center;
 }
 
 .replay-setup__interval strong {
   color: var(--ql-ink);
-  font-size: 13px;
-}
-
-.replay-setup__interval small {
-  font-size: 10px;
-  line-height: 1.45;
+  font-size: 15px;
 }
 
 .replay-setup__length {
   display: flex;
-  min-height: 54px;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   gap: 4px;
@@ -523,7 +514,6 @@ function submit() {
   font-size: 12px;
 }
 
-.replay-setup__benchmark-note,
 .replay-setup__playbook-state {
   color: var(--ql-color-text-muted);
   font-size: 11px;
@@ -569,29 +559,24 @@ function submit() {
   background: var(--ql-color-primary-strong);
 }
 
-.replay-setup__submit-note {
-  margin-top: -6px;
-  text-align: center;
-}
-
-.replay-setup__configuration {
-  border-top: 1px solid var(--ql-line);
-}
-
 .replay-setup__configuration-trigger,
 .replay-setup__advanced-trigger {
   display: flex;
+  width: 100%;
   min-height: 44px;
   align-items: center;
   justify-content: space-between;
+  padding: 0 12px;
+  border: 1px solid var(--ql-line);
+  border-radius: 8px;
   color: var(--ql-color-text-body);
+  background: var(--ql-paper-soft);
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
   list-style: none;
 }
 
-.replay-setup__configuration[open] .replay-setup__configuration-trigger svg,
 .replay-setup__advanced[open] .replay-setup__advanced-trigger svg {
   transform: rotate(180deg);
 }
@@ -599,7 +584,10 @@ function submit() {
 .replay-setup__configuration-body {
   display: grid;
   gap: 12px;
-  padding: 1px 0 16px;
+}
+
+:global(.replay-setup__configuration-drawer) {
+  width: min(420px, calc(100vw - 24px));
 }
 
 .replay-setup__input-wrap {
@@ -630,6 +618,10 @@ function submit() {
 
 .replay-setup__advanced-trigger {
   min-height: 40px;
+  padding: 0;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
 }
 
 .replay-setup__cost-grid {
@@ -643,6 +635,7 @@ function submit() {
   .replay-setup__hero {
     grid-template-columns: 1fr;
     gap: 26px;
+    margin-top: 32px;
     min-height: auto;
     padding: 20px 0 34px;
   }

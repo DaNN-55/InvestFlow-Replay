@@ -6,36 +6,20 @@ const setupUrl = new URL(
   "../../src/components/replay/ReplaySetupPanel.vue",
   import.meta.url,
 );
-const journeyUrl = new URL(
-  "../../src/components/replay/ReplayPortfolioJourney.vue",
-  import.meta.url,
-);
+test("replay setup presents the compact hero choices with one primary CTA", async () => {
+  const setup = await readFile(setupUrl, "utf8");
 
-test("replay setup presents the A-style hero, real choices, and one primary CTA", async () => {
-  const [setup, journey] = await Promise.all([
-    readFile(setupUrl, "utf8"),
-    readFile(journeyUrl, "utf8"),
-  ]);
-
-  assert.match(setup, /<ReplayPortfolioJourney :market-provider="marketProvider" \/>/u);
+  assert.doesNotMatch(setup, /ReplayPortfolioJourney/u);
+  assert.doesNotMatch(setup, /交付闭环/u);
   assert.match(
     setup,
     /开始\{\{ form\.barInterval === "hybrid" \? "日内模拟" : "日线盲测" \}\}/u,
   );
-
-  for (const step of ["研究假设", "行情演练", "模拟执行", "复盘", "规则迭代"]) {
-    assert.match(journey, new RegExp(step, "u"));
-  }
-
-  assert.match(journey, /通达信模式 · 真实历史数据/u);
-  assert.match(journey, /优先使用本地缓存，按需连接通达信补齐/u);
-  assert.match(journey, /离线 Demo · 合成数据/u);
-  assert.match(journey, /不对应真实证券或真实市场/u);
-  assert.match(journey, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/u);
   assert.match(setup, /replay-setup__hero/u);
   assert.match(setup, /grid-template-columns: minmax\(0, 1fr\) minmax\(360px, 430px\)/u);
   assert.match(setup, /这次怎么练？/u);
   assert.match(setup, /调整资金与成本/u);
+  assert.match(setup, /<UiDrawer/u);
   assert.match(setup, /:aria-pressed="form\.barInterval === '1d'"/u);
   assert.match(setup, /:aria-pressed="form\.barInterval === 'hybrid'"/u);
   assert.match(setup, /:aria-pressed="form\.gameLength === length"/u);
