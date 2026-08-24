@@ -1,170 +1,105 @@
+<div align="center">
+
 # InvestFlow Replay
 
-InvestFlow Replay 是从 [InvestFlow](https://github.com/DaNN-55/InvestFlow) 独立拆出的行情演练与交易追踪工具。
+**先把交易规则放进可回放的训练场，再谈真实交易。**
 
-它把“研究假设—行情演练—模拟执行—交易记录—复盘修正”连接成一个可重复的本地工作流。项目由我独立定义和持续迭代，使用 AI Coding 工具协作完成部分实现，我负责产品规则、数据流程、任务拆解、测试验收和迭代。
+一个本地优先的行情演练与模拟交易工作流：从研究假设出发，完成匿名行情演练、模拟执行、复盘修正，并将每一次决策沉淀为可追溯的策略版本。
 
-## What it demonstrates
+<img src="./assets/readme/banner.png" width="100%" alt="黑金风格的研究、行情演练、模拟执行、复盘与账本闭环视觉封面">
 
-- 把研究和策略规则转成可执行的演练流程
-- 将外部行情、缓存、演练状态和复盘账本分层管理
-- 在外部服务不稳定时明确区分缓存可用、缓存不足和连接失败
-- 用单元测试、接口测试和端到端测试验证关键路径
-- 将交易事件、复盘结论和策略版本保存为可追溯记录
+[快速开始](#快速开始) · [离线 Demo](#离线-demo-可验证的完整路径) · [证据包](./portfolio-evidence/) · [边界与限制](#边界与限制)
 
-## Product workflow
+</div>
 
-~~~
-选择基准与演练窗口
-  ↓
-准备本地行情缓存
-  ↓
-创建行情演练场景
-  ↓
-执行模拟交易
-  ↓
-记录交易事件与决策
-  ↓
-盲评 / 复盘 / 修正
-  ↓
-沉淀策略版本
-~~~
+---
 
-## Features
+## 这是什么
 
-- 日线演练、1 分钟演练和日线背景 + 5 分钟执行的混合模式
-- 通达信证券列表、股票 / 指数日线、XDXR 除权除息解析与本地前复权
-- DuckDB 日线和分钟行情缓存，支持按需下载与增量更新
-- 演练会话、交易执行、交易事件和历史记录
-- 战法版本、买入许可证、盲评和复盘账本
-- 独立交易追踪和本地数据存储
+InvestFlow Replay 面向个人研究与模拟交易。它把“我认为这条规则应该有效”变成一轮可重复执行、记录和复盘的本地演练：行情来自本地缓存或确定性的 synthetic fixture；订单、成交事件、盲评、复盘结论和策略版本进入同一条账本。
 
-## Architecture
+它不是市场扫描器，也不做收益承诺。它解决的是规则进入真实交易前，如何先经过一次可观察、可回放、可修正的工程闭环。
 
-- **Web**：Vue 3 + Vite
-- **Backend**：Node.js API 与演练生命周期管理
-- **Engine**：Python + FastAPI，负责行情准备和演练场景创建
-- **Market data**：在线通达信 / easy-tdx，或离线 synthetic fixture
-- **Storage**：DuckDB 行情缓存 + SQLite 应用账本
-- **Validation**：Python 测试、Node 测试、Web 单元测试和 Playwright E2E
+## 你实际能验证什么
 
-```mermaid
-flowchart LR
-  Web -->|HTTP JSON| Backend
-  Backend -->|创建场景| Engine
-  Engine <-->|读取行情| MarketSupply["Market Supply<br/>TDX Cache / Synthetic Fixture"]
-  Backend <-->|会话、订单、复盘| AppLedger["App Ledger"]
-```
+- **从规则到复盘**：支持日线、1 分钟，以及“日线背景 + 5 分钟执行”的演练；模拟委托、成交事件、历史记录与交易追踪保持关联。
+- **行情供给可替换**：正常模式使用通达信与 DuckDB 本地缓存；离线模式改用确定性的 synthetic fixture，不需要网络或个人运行数据。
+- **决策可追溯**：会话上下文、行情供给版本、决策依据、订单、盲评、复盘和人工采纳的策略版本保留在本地账本中。
 
-Backend 调用 Engine 创建演练场景的核心契约如下。示例只使用确定性的 Demo 合成代码；响应为核心字段摘录，省略其他字段、基准 bars 和其余行情 bars。
+## 离线 Demo：可验证的完整路径
 
-`POST /internal/replay/scenarios`
+离线演示只替换外部行情供给，Web、Node.js Backend、Python Engine、订单事件、SQLite 账本与复盘流程仍走真实实现；Demo 数据被隔离在项目内的 `.demo-storage/`，不会读取个人交易数据。
 
-请求：
+<p align="center">
+  <a href="./portfolio-evidence/video/InvestFlow-Replay-offline-demo.mp4">
+    <img src="./portfolio-evidence/images/market-cache-insufficient.png" width="100%" alt="InvestFlow Replay 离线演示中的缓存不足状态与行情演练配置界面">
+  </a>
+</p>
 
-```json
-{
-  "gameLength": 20,
-  "benchmarkCode": "DEMO-INDEX.SYN",
-  "seed": 42,
-  "interval": "1d",
-  "excludedTsCodes": [],
-  "recentWindowEndDates": []
-}
-```
+<p align="center"><sub>点击图片观看离线 Demo。失败状态也被保留为证据：缓存不足或外部连接失败会被明确说明，而不会伪装成空数据。</sub></p>
 
-响应核心字段：
+完整演示讲稿、失败状态、代表性测试报告、AI Coding 约束与已知限制均在 [`portfolio-evidence/`](./portfolio-evidence/) 中。
 
-```json
-{
-  "sourceDataVersion": "fixture-demo-market-v1",
-  "tsCode": "DEMO004.SYN",
-  "symbol": "DEMO004",
-  "exchange": "DEMO",
-  "name": "Demo 合成标的四",
-  "interval": "1d",
-  "observationBars": 250,
-  "gameLength": 20,
-  "benchmark": {
-    "code": "DEMO-INDEX.SYN"
-  },
-  "bars": [
-    {
-      "sequence": 1,
-      "tradeDate": "2020-01-02",
-      "open": 76.2084,
-      "high": 77.0373,
-      "low": 75.7273,
-      "close": 76.5006,
-      "volume": 1176060
-    }
-  ]
-}
-```
+## 快速开始
 
-## Install and run
+需要 Python 3.10–3.13 与 Node.js 22+。
 
-需要 Python 3.10–3.13 和 Node.js 22+。正常模式还需要可访问通达信行情服务器的网络。
-
-~~~
+```bash
 ./install.sh
-./run.sh
-~~~
-
-需要与个人数据完全隔离地演示时，使用离线 synthetic fixture 和独立的 `.demo-storage`：
-
-~~~
 ./run-demo.sh
-~~~
+```
 
-`run-demo.sh` 强制使用项目内的 `.demo-storage`，无需网络，也不会连接通达信。Demo 仍经过真实 Backend 会话、订单、事件、SQLite 持久化与复盘流程；只有 Engine 的外部行情供给替换为确定性的合成数据。合成标的与合成指数不对应任何真实证券，不能用于判断真实市场或收益。
+打开 <http://127.0.0.1:5280/decision/market-replay> 即可体验隔离的离线完整流程。离线 Demo 支持日线 20 / 60 / 120 日演练；1 分钟和日内混合模式需要正常行情供给。
 
-重置 Demo 会话与账本时，先停止服务，再运行：
+正常模式使用本地行情缓存与通达信服务：
 
-~~~
-./stop.sh
+```bash
+./run.sh
+```
+
+停止或重置 Demo：
+
+```bash
+./stop-demo.sh
 ./reset-demo.sh
-~~~
+```
 
-重置脚本只处理项目内固定的 `.demo-storage`，不会读取或修改 `storage`。
+## 本地系统边界
 
-浏览器打开 http://127.0.0.1:5280/decision/market-replay。停止服务运行：
+| 层 | 实现 | 责任 |
+| --- | --- | --- |
+| Web | Vue 3 + Vite | 演练配置、K 线、下单、复盘与交易追踪 |
+| Backend | Node.js | API、演练生命周期、订单事件和账本边界 |
+| Engine | Python + FastAPI | 行情准备、解析、缓存和演练场景创建 |
+| Market data | 通达信 / easy-tdx 或 synthetic fixture | 在线或离线的可替换行情供给 |
+| Storage | DuckDB + SQLite | 行情缓存与应用账本分离 |
 
-~~~
-./stop.sh
-~~~
+运行时数据不提交到仓库：`storage/market/` 保存行情缓存，`storage/app/` 保存演练、订单、复盘和策略账本，`.demo-storage/` 专用于隔离演示。作品集演示应始终使用脱敏的 Demo 存储。
 
-通过 `./run.sh` 启动时仍使用默认 `tdx` provider：首次进入会后台初始化最小可用的日线缓存，分钟线在首次选中具体标的后按需下载。断网时，如果本地缓存足够，系统可以继续使用；缓存不足时会明确返回通达信连接失败及缓存不足原因。`./run-demo.sh` 当前只提供日线 20 / 60 / 120 日演练，不提供 1 分钟或日内混合模式。
+## 验证
 
-## Local data
-
-- storage/market/market.duckdb：日线、复权因子、证券名称、指数和交易日历
-- storage/market/minute_replay.duckdb：1 分钟与 5 分钟缓存
-- storage/app/replay.sqlite：演练快照、订单、复盘和战法账本
-- storage/trade-records/*.json：个人交易追踪记录
-
-运行时数据均被 .gitignore 排除。storage 下的运行数据可能包含个人交易和复盘内容；用于作品集演示时，必须使用独立、脱敏的 Demo 存储边界，不要直接使用个人运行数据。仓库只分享下载 / 解析代码和空库初始化结构，不包含个人交易数据。
-
-## Scope and limitations
-
-- 这是个人研究和模拟演练工具，不构成投资建议。
-- Demo synthetic fixture 是程序生成的演示数据，不代表真实市场行情或任何证券。
-- 项目不包含市场扫描、股票诊断或量化实验室，这些能力位于主项目的其他模块。
-- 不把历史回测或模拟结果直接等同于真实收益。
-- 外部行情依赖通达信服务，退市股票覆盖也受当前证券列表能力限制。
-- 部分交互和数据覆盖范围仍在持续开发。
-
-## Tests
-
-~~~
+```bash
 PYTHONPATH=engine .venv/bin/python -m pytest engine/tests
 npm test --prefix backend
 npm run test:unit --prefix web
 npm run test:e2e --prefix web
 npm run lint --prefix web
 npm run build --prefix web
-~~~
+```
 
-## Portfolio evidence
+也可以运行完整的作品证据验证；它会在项目外目录启动真实三层离线流程并产出报告：
 
-阶段 3 作品证据包位于 [`portfolio-evidence/`](portfolio-evidence/README.md)，包含 3–5 分钟离线演示、四类状态契约、代表性测试报告、AI Coding 约束与验收说明，以及已知限制。
+```bash
+./scripts/run-portfolio-verification.sh /tmp/investflow-portfolio-evidence
+```
+
+## 边界与限制
+
+- 这是个人研究和模拟演练工具，不构成投资建议；模拟结果不能等同于真实收益。
+- synthetic fixture 是程序生成的演示数据，不代表真实行情或任何证券。
+- 在线模式依赖通达信服务与本地缓存覆盖；退市证券和分钟行情的可用性不由本项目控制。
+- 浏览器 E2E 中有部分 API mock，用于固定前端交互契约；它们不冒充完整三层集成验证。详见 [已知限制](./portfolio-evidence/limitations-and-roadmap.md)。
+
+## 来源
+
+InvestFlow Replay 从 [InvestFlow](https://github.com/DaNN-55/InvestFlow) 独立拆出。AI Coding 工具参与部分实现；产品规则、数据流程、任务拆解、测试验收和迭代由项目作者负责。

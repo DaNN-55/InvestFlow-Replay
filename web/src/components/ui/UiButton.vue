@@ -62,7 +62,7 @@ const loadingIconSize = computed(() => (props.size === "sm" ? 14 : 16));
       :size="loadingIconSize"
       aria-hidden="true"
     />
-    <slot name="prefix" />
+    <slot v-if="!loading" name="prefix" />
     <slot />
     <slot name="suffix" />
   </button>

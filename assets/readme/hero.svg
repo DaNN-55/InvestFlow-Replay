@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="title desc">
+  <title id="title">InvestFlow Replay：把交易规则变成可重复验证的本地演练</title>
+  <desc id="desc">深色交易复盘控制台风格的项目首屏，展示研究假设、行情演练、模拟执行、复盘和策略版本的闭环。</desc>
+
+  <rect width="1200" height="430" rx="28" fill="#09111f"/>
+  <path d="M48 126H1152M48 336H1152" stroke="#22324a" stroke-width="1"/>
+  <path d="M722 40V336" stroke="#22324a" stroke-width="1"/>
+
+  <g id="title-block" transform="translate(64 56)">
+    <text x="0" y="0" fill="#7dd3fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700" letter-spacing="2">LOCAL MARKET REPLAY / TRACEABLE TRAINING</text>
+    <text x="0" y="66" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="58" font-weight="800" letter-spacing="-2">InvestFlow Replay</text>
+    <text x="0" y="112" fill="#d8e2f0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="28" font-weight="600">把交易规则变成可重复验证的本地演练</text>
+    <text x="0" y="154" fill="#9aabc0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="20">从研究假设出发，在匿名行情中完成演练、模拟执行与复盘。</text>
+
+    <g transform="translate(0 192)">
+      <rect width="194" height="42" rx="21" fill="#12345c" stroke="#3b82f6" stroke-width="1"/>
+      <circle cx="23" cy="21" r="6" fill="#60a5fa"/>
+      <text x="40" y="28" fill="#dbeafe" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">OFFLINE FIXTURE</text>
+      <rect x="208" width="192" height="42" rx="21" fill="#1d251e" stroke="#5b8c65" stroke-width="1"/>
+      <circle cx="231" cy="21" r="6" fill="#34d399"/>
+      <text x="248" y="28" fill="#d1fae5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700">AUDITABLE LEDGER</text>
+    </g>
+  </g>
+
+  <g id="ledger-proof" transform="translate(766 58)">
+    <text x="0" y="0" fill="#fbbf24" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700" letter-spacing="1.5">REPLAY / 001</text>
+    <text x="0" y="42" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="30" font-weight="700">一轮训练，完成一次规则验证</text>
+
+    <rect y="70" width="370" height="192" rx="16" fill="#101c2f" stroke="#304563" stroke-width="1"/>
+    <text x="24" y="104" fill="#7dd3fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="700">TRACEABLE SESSION</text>
+    <text x="24" y="137" fill="#9aabc0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18">sourceDataVersion</text>
+    <text x="24" y="160" fill="#f8fafc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16">fixture-demo-market-v1</text>
+    <path d="M24 176H346" stroke="#304563" stroke-width="1"/>
+    <text x="24" y="208" fill="#9aabc0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18">gameLength</text>
+    <text x="346" y="208" fill="#fbbf24" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700" text-anchor="end">20 days</text>
+    <text x="24" y="242" fill="#9aabc0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18">status</text>
+    <text x="346" y="242" fill="#34d399" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="700" text-anchor="end">REVIEWABLE</text>
+  </g>
+
+  <g id="replay-timeline" transform="translate(64 356)">
+    <path d="M12 0H1070" stroke="#3b82f6" stroke-width="3" stroke-linecap="round"/>
+    <path d="M1070 0L1058 -7M1070 0L1058 7" stroke="#3b82f6" stroke-width="3" stroke-linecap="round"/>
+    <g transform="translate(0 -16)">
+      <circle cx="12" cy="16" r="12" fill="#09111f" stroke="#60a5fa" stroke-width="3"/>
+      <text x="12" y="22" fill="#60a5fa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" text-anchor="middle">1</text>
+      <text x="12" y="52" fill="#d8e2f0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18" font-weight="600" text-anchor="middle">研究假设</text>
+      <circle cx="276" cy="16" r="12" fill="#09111f" stroke="#60a5fa" stroke-width="3"/>
+      <text x="276" y="22" fill="#60a5fa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" text-anchor="middle">2</text>
+      <text x="276" y="52" fill="#d8e2f0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18" font-weight="600" text-anchor="middle">行情演练</text>
+      <circle cx="540" cy="16" r="12" fill="#09111f" stroke="#60a5fa" stroke-width="3"/>
+      <text x="540" y="22" fill="#60a5fa" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" text-anchor="middle">3</text>
+      <text x="540" y="52" fill="#d8e2f0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18" font-weight="600" text-anchor="middle">模拟执行</text>
+      <circle cx="804" cy="16" r="12" fill="#09111f" stroke="#fbbf24" stroke-width="3"/>
+      <text x="804" y="22" fill="#fbbf24" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" text-anchor="middle">4</text>
+      <text x="804" y="52" fill="#d8e2f0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18" font-weight="600" text-anchor="middle">复盘修正</text>
+      <circle cx="1068" cy="16" r="12" fill="#09111f" stroke="#34d399" stroke-width="3"/>
+      <text x="1068" y="22" fill="#34d399" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" text-anchor="middle">5</text>
+      <text x="1068" y="52" fill="#d8e2f0" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18" font-weight="600" text-anchor="middle">策略版本</text>
+    </g>
+  </g>
+</svg>

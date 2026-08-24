@@ -183,7 +183,7 @@ function formatSigned(value, suffix = "") {
       </label>
       <label>
         <span>价格</span>
-        <UiInput v-model="form.price" size="sm" type="number" min="0" step="0.01" :disabled="disabled" />
+        <UiInput v-model="form.price" size="sm" type="number" min="0" step="0.001" :disabled="disabled" />
       </label>
       <label>
         <span>数量</span>
