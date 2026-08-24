@@ -77,6 +77,7 @@ def _apply_daily_adjustment(
         multiplier = factor / anchor_factor
         for field in ("open", "high", "low", "close"):
             row[field] *= multiplier
+        row["adjusted_amount"] = row["amount"] * multiplier
 
 
 def _public_bar(row: dict[str, Any], sequence: int, previous_close: float | None) -> dict[str, Any]:
@@ -95,6 +96,11 @@ def _public_bar(row: dict[str, Any], sequence: int, previous_close: float | None
         "pctChange": pct_change,
         "volume": row["volume"],
         "amount": row["amount"],
+        **(
+            {"adjustedAmount": row["adjusted_amount"]}
+            if "adjusted_amount" in row
+            else {}
+        ),
         "weekIndex": timestamp.isocalendar().week,
         "monthIndex": timestamp.month,
     }

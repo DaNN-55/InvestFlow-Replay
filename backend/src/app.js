@@ -2508,6 +2508,7 @@ export function createApp(options = {}) {
               close: Number(bar.close),
               volume: Number(bar.volume ?? 0),
               amount: Number(bar.amount ?? 0),
+              adjustedAmount: Number(bar.adjustedAmount ?? bar.amount ?? 0),
               weekIndex: Number(bar.weekIndex),
               monthIndex: Number(bar.monthIndex),
             })),
