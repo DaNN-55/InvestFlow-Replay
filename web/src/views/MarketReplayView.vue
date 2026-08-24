@@ -40,7 +40,6 @@ const benchmarks = shallowRef([]);
 const benchmarksLoading = shallowRef(false);
 const benchmarksError = shallowRef("");
 const benchmarkInitialization = shallowRef(null);
-const marketProvider = shallowRef("tdx");
 const orderPanelOpen = shallowRef(false);
 const orderPanelSide = shallowRef("buy");
 const orderDraftResetToken = shallowRef(0);
@@ -97,8 +96,6 @@ async function loadReplayBenchmarks({ retry = false } = {}) {
     }
     benchmarks.value = Array.isArray(result.items) ? result.items : [];
     benchmarkInitialization.value = result.initialization ?? null;
-    marketProvider.value =
-      result.provider ?? result.initialization?.provider ?? "tdx";
     if (result.initialization?.state === "failed") {
       benchmarksError.value =
         result.initialization.error || "通达信行情缓存初始化失败";
@@ -258,7 +255,6 @@ onBeforeUnmount(() => {
         :benchmarks-loading="benchmarksLoading"
         :benchmarks-error="benchmarksError"
         :benchmark-initialization="benchmarkInitialization"
-        :market-provider="marketProvider"
         @create="commands.create"
         @retry-benchmarks="retryReplayBenchmarks"
       />
