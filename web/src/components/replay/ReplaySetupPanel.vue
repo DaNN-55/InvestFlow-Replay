@@ -333,6 +333,8 @@ function submit() {
 
 .replay-setup__hero {
   position: relative;
+  width: 100vw;
+  margin-inline: calc(50% - 50vw);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
   align-items: center;

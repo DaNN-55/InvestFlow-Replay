@@ -19,6 +19,18 @@ describe("buildReplayIntradaySeries", () => {
     assert.equal(result.xRatios[1], 1 / 47);
   });
 
+  it("uses adjusted amount when the price series is adjusted", () => {
+    const result = buildReplayIntradaySeries(
+      [
+        { close: 20, volume: 100, amount: 1000, adjustedAmount: 2000 },
+        { close: 24, volume: 200, amount: 2400, adjustedAmount: 4800 },
+      ],
+      { previousClose: 20, totalMinutes: 48 },
+    );
+
+    assert.deepEqual(result.averageValues, [20, 22.666666666666668]);
+  });
+
   it("keeps the price scale symmetric around the previous close", () => {
     const result = buildReplayIntradaySeries(
       [

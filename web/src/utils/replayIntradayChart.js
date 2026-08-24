@@ -8,7 +8,7 @@ export function buildReplayIntradaySeries(
   let cumulativeAmount = 0;
   let cumulativeVolume = 0;
   for (const bar of normalizedBars) {
-    cumulativeAmount += Number(bar.amount ?? 0);
+    cumulativeAmount += Number(bar.adjustedAmount ?? bar.amount ?? 0);
     cumulativeVolume += Number(bar.volume ?? 0);
     averageValues.push(
       cumulativeVolume > 0

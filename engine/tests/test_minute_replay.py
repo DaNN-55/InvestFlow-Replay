@@ -394,6 +394,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
         self.assertEqual(scenario["bars"][250]["tradeTime"], "2026-07-30 09:35")
         self.assertEqual(scenario["bars"][298]["tradeDate"], "2026-07-31")
         self.assertEqual(scenario["bars"][298]["open"], 42)
+        self.assertEqual(scenario["bars"][298]["adjustedAmount"], 40000)
         self.assertEqual(
             scenario["priceAdjustment"]["factorSource"],
             "stock_adj_factors.adj_factor",
