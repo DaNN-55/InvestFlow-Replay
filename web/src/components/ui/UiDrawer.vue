@@ -71,6 +71,7 @@ function handleOpenUpdate(nextOpen) {
                   <DialogClose as-child>
                     <button
                       type="button"
+                      aria-label="关闭"
                       class="ql-ui-button ql-ui-button--ghost ql-ui-button--sm ql-ui-button--icon ql-ui-drawer__close"
                     >
                       <X :size="16" />
