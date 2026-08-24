@@ -264,7 +264,8 @@ test("已记录的成交动作可以通过弹窗修改", async ({ page }) => {
   await expect(dialog.getByLabel("时间", { exact: true })).toHaveAttribute("type", "date");
   await expect(dialog.getByLabel("时间", { exact: true })).toHaveValue("2026-08-06");
   await expect(dialog.getByLabel("价格", { exact: true })).toHaveValue("43.4");
-  await dialog.getByLabel("价格", { exact: true }).fill("44.2");
+  await expect(dialog.getByLabel("价格", { exact: true })).toHaveAttribute("step", "0.001");
+  await dialog.getByLabel("价格", { exact: true }).fill("44.234");
   await dialog.getByLabel("备注", { exact: true }).fill("修正后的记录");
 
   const updateRequest = page.waitForRequest((request) =>
@@ -273,9 +274,9 @@ test("已记录的成交动作可以通过弹窗修改", async ({ page }) => {
   );
   await dialog.getByRole("button", { name: "保存修改", exact: true }).click();
   const request = await updateRequest;
-  expect(request.postDataJSON()).toMatchObject({ price: 44.2, note: "修正后的记录" });
+  expect(request.postDataJSON()).toMatchObject({ price: 44.234, note: "修正后的记录" });
   await expect(dialog).toBeHidden();
-  await expect(page.getByText(/价 44.2/)).toBeVisible();
+  await expect(page.getByText(/价 44.234/)).toBeVisible();
   const feedback = page.getByText("成交或动作记录已修改", { exact: true });
   await expect(feedback).toBeVisible();
   const feedbackAppearsBeforeEvents = await feedback.evaluate((node) => {
@@ -313,7 +314,8 @@ test("添加动作通过日期选择器仅提交年月日", async ({ page }) => 
   const eventAt = eventForm.getByLabel("时间", { exact: true });
   await expect(eventAt).toHaveAttribute("type", "date");
   await eventAt.fill("2026-08-07");
-  await eventForm.getByLabel("价格", { exact: true }).fill("44.2");
+  await expect(eventForm.getByLabel("价格", { exact: true })).toHaveAttribute("step", "0.001");
+  await eventForm.getByLabel("价格", { exact: true }).fill("44.234");
   await eventForm.getByLabel("数量", { exact: true }).fill("100");
 
   const addRequest = page.waitForRequest((request) =>

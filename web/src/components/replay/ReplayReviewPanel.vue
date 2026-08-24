@@ -815,14 +815,6 @@ watch(
             {{ draftStatusLabels[draftStatuses.post] || "未保存" }}
           </span>
         </div>
-        <label class="replay-review__field replay-review__field--compact">
-          <span>判断结果</span>
-          <select v-model="postForm.outcome">
-            <option value="correct">正确</option>
-            <option value="partial">部分正确</option>
-            <option value="wrong">错误</option>
-          </select>
-        </label>
         <label class="replay-review__field">
           <span>执行复盘</span>
           <textarea
@@ -856,6 +848,14 @@ watch(
           <small>{{ postForm.lessons.trim().length }} / 2000，至少 10 字</small>
         </label>
         <div class="replay-review__score-row">
+          <label class="replay-review__field replay-review__field--compact">
+            <span>判断结果</span>
+            <select v-model="postForm.outcome">
+              <option value="correct">正确</option>
+              <option value="partial">部分正确</option>
+              <option value="wrong">错误</option>
+            </select>
+          </label>
           <label class="replay-review__field replay-review__field--compact">
             <span>执行纪律</span>
             <select v-model.number="postForm.disciplineScore">
@@ -1360,7 +1360,7 @@ watch(
 
 .replay-review__score-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
