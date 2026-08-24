@@ -196,7 +196,7 @@ test("复盘抽屉保留未提交草稿并让行情保持可见", async ({ page 
   await expect(thesis).toHaveValue("这是一段尚未提交的临时复盘判断");
 });
 
-test("揭晓后复盘将判断结果与两项评分排在同一行", async ({ page }) => {
+test("揭晓后复盘先填写判断结果与两项评分", async ({ page }) => {
   await page.route("**/api/quant/replay/sessions", async (route) => {
     if (route.request().method() !== "POST") {
       await route.fallback();
@@ -224,4 +224,20 @@ test("揭晓后复盘将判断结果与两项评分排在同一行", async ({ pa
   );
   expect(positions).toHaveLength(3);
   expect(new Set(positions).size).toBe(1);
+
+  const firstFieldLabel = await page
+    .locator(".replay-review__form > .replay-review__field")
+    .first()
+    .locator("> span")
+    .textContent();
+  expect(firstFieldLabel).toBe("执行复盘");
+
+  const scoreRowTop = await scoreRow.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  const firstFieldTop = await page
+    .locator(".replay-review__form > .replay-review__field")
+    .first()
+    .evaluate((element) => element.getBoundingClientRect().top);
+  expect(scoreRowTop).toBeLessThan(firstFieldTop);
 });
