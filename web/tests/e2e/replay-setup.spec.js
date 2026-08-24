@@ -16,6 +16,12 @@ test("起始页提供可配置的盲测开局，而不再提供战法专项入�
   await expect(page.getByText("调整资金与成本", { exact: true })).toBeVisible();
   await page.getByText("调整资金与成本", { exact: true }).click();
   await expect(page.getByText("资金与成本", { exact: true })).toBeVisible();
+  const drawer = page.getByRole("dialog", { name: "资金与成本" });
+  const closeButton = drawer.getByRole("button", { name: "关闭" });
+  await expect(closeButton).toBeVisible();
+  await expect(drawer.getByLabel("滑点（bps）")).toHaveCSS("border-radius", "16px");
+  await closeButton.click();
+  await expect(drawer).toBeHidden();
   await expect(page.getByText("交付闭环", { exact: true })).toHaveCount(0);
   await expect(page.getByText("战法专项", { exact: true })).toHaveCount(0);
   await expect(page.getByText("专项战法", { exact: true })).toHaveCount(0);
@@ -24,7 +30,7 @@ test("起始页提供可配置的盲测开局，而不再提供战法专项入�
 test("新演练默认使用非零滑点", async ({ page }) => {
   await page.goto(`${replayUrl}/decision/market-replay`);
   await page.getByText("调整资金与成本", { exact: true }).click();
-  await page.getByText("高级成本设置", { exact: true }).click();
 
+  await expect(page.getByLabel("滑点（bps）")).toBeVisible();
   await expect(page.getByLabel("滑点（bps）")).toHaveValue("5");
 });

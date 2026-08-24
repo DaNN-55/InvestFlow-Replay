@@ -153,6 +153,16 @@ function submit() {
 <template>
   <div class="replay-setup">
     <div class="replay-setup__hero">
+      <svg
+        class="replay-setup__flow"
+        viewBox="0 0 1040 620"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path d="M-28 514C152 338 248 554 410 370S710 122 1068 294" />
+        <path d="M-24 282C132 92 298 290 458 166S744 422 1066 94" />
+        <path d="M-36 604C166 396 350 622 550 424S782 246 1072 394" />
+      </svg>
       <div class="replay-setup__intro">
         <span class="replay-setup__eyebrow">
           <ShieldCheck :size="15" />
@@ -303,7 +313,7 @@ function submit() {
                 </span>
               </label>
 
-              <details class="replay-setup__advanced">
+              <details open class="replay-setup__advanced">
                 <summary class="replay-setup__advanced-trigger">
                   <span>高级成本设置</span>
                   <ChevronDown :size="16" />
@@ -338,23 +348,53 @@ function submit() {
 
 <style scoped>
 .replay-setup {
-  width: min(1040px, 100%);
+  width: 100%;
   margin: 0 auto;
 }
 
 .replay-setup__hero {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
   align-items: center;
   gap: clamp(32px, 6vw, 76px);
-  margin-top: 100px;
-  min-height: min(620px, calc(100dvh - 92px));
+  min-height: calc(100dvh - 44px);
+  padding-inline: max(0px, calc((100% - 1040px) / 2));
+  isolation: isolate;
+  overflow: hidden;
   background:
-    linear-gradient(to right, color-mix(in srgb, var(--ql-line) 72%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--ql-line) 72%, transparent) 1px, transparent 1px),
     radial-gradient(ellipse 76% 96% at 88% 42%, var(--ql-color-primary-soft), transparent 76%),
     linear-gradient(118deg, color-mix(in srgb, var(--ql-color-primary-soft) 58%, transparent), transparent 62%);
-  background-size: 40px 40px, 40px 40px, auto;
+}
+
+.replay-setup__flow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.65;
+  pointer-events: none;
+  filter: blur(1.4px);
+}
+
+.replay-setup__flow path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--ql-color-primary) 38%, transparent);
+  stroke-width: 1.2;
+}
+
+.replay-setup__flow path:nth-child(2) {
+  opacity: 0.65;
+}
+
+.replay-setup__flow path:nth-child(3) {
+  opacity: 0.38;
+}
+
+.replay-setup__hero > :not(.replay-setup__flow) {
+  position: relative;
+  z-index: 1;
 }
 
 .replay-setup__intro {
@@ -635,8 +675,6 @@ function submit() {
   .replay-setup__hero {
     grid-template-columns: 1fr;
     gap: 26px;
-    margin-top: 32px;
-    min-height: auto;
     padding: 20px 0 34px;
   }
 

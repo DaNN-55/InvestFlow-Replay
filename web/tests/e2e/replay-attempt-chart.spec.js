@@ -195,3 +195,33 @@ test("复盘抽屉保留未提交草稿并让行情保持可见", async ({ page 
 
   await expect(thesis).toHaveValue("这是一段尚未提交的临时复盘判断");
 });
+
+test("揭晓后复盘将判断结果与两项评分排在同一行", async ({ page }) => {
+  await page.route("**/api/quant/replay/sessions", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    const session = replaySession(20);
+    session.status = "completed";
+    session.revealed = true;
+    session.review.blindSaved = true;
+    session.review.blindLocked = true;
+    session.review.blindReview = { strategyName: "测试策略" };
+    await route.fulfill({ json: { session } });
+  });
+
+  await page.getByRole("button", { name: "开始日线盲测" }).click();
+  await page.getByRole("button", { name: "查看复盘" }).click();
+
+  const scoreRow = page.locator(".replay-review__score-row");
+  await expect(scoreRow.getByLabel("判断结果")).toBeVisible();
+  await expect(scoreRow.getByLabel("执行纪律")).toBeVisible();
+  await expect(scoreRow.getByLabel("风险控制")).toBeVisible();
+
+  const positions = await scoreRow.locator("label").evaluateAll((labels) =>
+    labels.map((label) => label.getBoundingClientRect().top),
+  );
+  expect(positions).toHaveLength(3);
+  expect(new Set(positions).size).toBe(1);
+});

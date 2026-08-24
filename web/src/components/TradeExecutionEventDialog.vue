@@ -98,7 +98,7 @@ watch(
         </label>
         <label>
           <span>价格</span>
-          <UiInput v-model="form.price" type="number" min="0" step="0.01" :disabled="saving" />
+          <UiInput v-model="form.price" type="number" min="0" step="0.001" :disabled="saving" />
         </label>
         <label>
           <span>数量</span>
