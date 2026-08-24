@@ -815,6 +815,32 @@ watch(
             {{ draftStatusLabels[draftStatuses.post] || "未保存" }}
           </span>
         </div>
+        <div class="replay-review__score-row">
+          <label class="replay-review__field replay-review__field--compact">
+            <span>判断结果</span>
+            <select v-model="postForm.outcome">
+              <option value="correct">正确</option>
+              <option value="partial">部分正确</option>
+              <option value="wrong">错误</option>
+            </select>
+          </label>
+          <label class="replay-review__field replay-review__field--compact">
+            <span>执行纪律</span>
+            <select v-model.number="postForm.disciplineScore">
+              <option v-for="value in 5" :key="value" :value="value">
+                {{ value }} / 5
+              </option>
+            </select>
+          </label>
+          <label class="replay-review__field replay-review__field--compact">
+            <span>风险控制</span>
+            <select v-model.number="postForm.riskControlScore">
+              <option v-for="value in 5" :key="value" :value="value">
+                {{ value }} / 5
+              </option>
+            </select>
+          </label>
+        </div>
         <label class="replay-review__field">
           <span>执行复盘</span>
           <textarea
@@ -847,32 +873,6 @@ watch(
           />
           <small>{{ postForm.lessons.trim().length }} / 2000，至少 10 字</small>
         </label>
-        <div class="replay-review__score-row">
-          <label class="replay-review__field replay-review__field--compact">
-            <span>判断结果</span>
-            <select v-model="postForm.outcome">
-              <option value="correct">正确</option>
-              <option value="partial">部分正确</option>
-              <option value="wrong">错误</option>
-            </select>
-          </label>
-          <label class="replay-review__field replay-review__field--compact">
-            <span>执行纪律</span>
-            <select v-model.number="postForm.disciplineScore">
-              <option v-for="value in 5" :key="value" :value="value">
-                {{ value }} / 5
-              </option>
-            </select>
-          </label>
-          <label class="replay-review__field replay-review__field--compact">
-            <span>风险控制</span>
-            <select v-model.number="postForm.riskControlScore">
-              <option v-for="value in 5" :key="value" :value="value">
-                {{ value }} / 5
-              </option>
-            </select>
-          </label>
-        </div>
         <label
           v-if="playbookFitApplicable"
           class="replay-review__field replay-review__field--compact"
@@ -1018,7 +1018,10 @@ watch(
             </template>
           </span>
         </div>
-        <div class="replay-review__dimensions">
+        <div
+          class="replay-review__dimensions"
+          :class="{ 'replay-review__dimensions--five': scoreDimensions.length === 5 }"
+        >
           <div
             v-for="dimension in scoreDimensions"
             :key="dimension.key"
@@ -1506,6 +1509,10 @@ watch(
 }
 
 .replay-review__dimensions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.replay-review__dimensions--five {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
@@ -1555,7 +1562,8 @@ watch(
     border-left: 0;
   }
 
-  .replay-review__dimensions {
+  .replay-review__dimensions,
+  .replay-review__metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
