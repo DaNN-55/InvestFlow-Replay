@@ -35,5 +35,6 @@ test("the narrative change preserves replay modes and submitted configuration", 
   assert.match(setup, /costConfig: Object\.fromEntries/u);
   assert.match(setup, /trainingMode: "free"/u);
   assert.match(setup, /高级成本设置/u);
-  assert.match(setup, /离线合成数据 · 不对应真实证券，也不代表真实市场/u);
+  assert.match(setup, /随机匿名历史行情/u);
+assert.doesNotMatch(setup, /离线合成/u);
 });

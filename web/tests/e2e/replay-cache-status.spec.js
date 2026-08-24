@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 const replayUrl = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5180";
 const benchmark = {
-  code: "FIXTURE.IDX",
-  name: "合成指数",
+  code: "000001.SH",
+  name: "上证指数",
   supportedGameLengths: [20, 60, 120],
 };
 
@@ -26,7 +26,7 @@ function replaySession() {
   const bars = replayBars(250);
   return {
     id: "e2e-evidence-session",
-    sourceDataVersion: "fixture-v1",
+    sourceDataVersion: "tdx-cache-v1",
     interval: "1d",
     gameLength: 60,
     observationBars: 250,
@@ -85,10 +85,10 @@ function replaySession() {
   };
 }
 
-function readyInitialization(message = "离线合成行情已就绪") {
+function readyInitialization(message = "通达信行情缓存已就绪") {
   return {
-    provider: "fixture",
-    mode: "fixture",
+    provider: "tdx",
+    mode: "tdx",
     state: "ready",
     ready: true,
     completed: 1,
@@ -161,18 +161,17 @@ async function openReplay(page) {
   await page.goto(`${replayUrl}/decision/market-replay`);
 }
 
-test("正常 fixture 行情可以创建演练并进入工作区", async ({ page }) => {
+test("正常行情可以创建演练并进入工作区", async ({ page }) => {
   await mockReplayApi(page, {
     benchmarks: {
-      provider: "fixture",
-      sourceDataVersion: "fixture-v1",
+      provider: "tdx",
+      sourceDataVersion: "tdx-cache-v1",
       items: [benchmark],
       initialization: readyInitialization(),
     },
   });
   await openReplay(page);
 
-  await expect(page.getByRole("status")).toContainText("离线合成数据");
   await page.getByRole("button", { name: "开始日线盲测" }).click();
 
   await expect(page.getByRole("heading", { name: "历史行情盲测" })).toBeVisible();
@@ -276,8 +275,8 @@ test("创建 API 返回 400 时显示后端 INVALID_REQUEST 文案", async ({ pa
   const invalidRequestMessage = "初始资金必须大于 0";
   await mockReplayApi(page, {
     benchmarks: {
-      provider: "fixture",
-      sourceDataVersion: "fixture-v1",
+      provider: "tdx",
+      sourceDataVersion: "tdx-cache-v1",
       items: [benchmark],
       initialization: readyInitialization(),
     },
@@ -303,8 +302,8 @@ test("创建 API 返回 400 时显示后端 INVALID_REQUEST 文案", async ({ pa
 test("刷新缓存状态后再次点击入口可以收起面板", async ({ page }) => {
   await mockReplayApi(page, {
     benchmarks: {
-      provider: "fixture",
-      sourceDataVersion: "fixture-v1",
+      provider: "tdx",
+      sourceDataVersion: "tdx-cache-v1",
       items: [benchmark],
       initialization: readyInitialization(),
     },
@@ -324,8 +323,8 @@ test("刷新缓存状态后再次点击入口可以收起面板", async ({ page 
 test("点击面板外或按 Esc 可以收起面板", async ({ page }) => {
   await mockReplayApi(page, {
     benchmarks: {
-      provider: "fixture",
-      sourceDataVersion: "fixture-v1",
+      provider: "tdx",
+      sourceDataVersion: "tdx-cache-v1",
       items: [benchmark],
       initialization: readyInitialization(),
     },
