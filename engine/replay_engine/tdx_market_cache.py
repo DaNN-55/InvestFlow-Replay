@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from contextlib import ExitStack
+from time import monotonic
 import math
 from pathlib import Path
 from threading import Lock, Thread
@@ -33,50 +35,45 @@ class TdxMarketUnavailableError(RuntimeError):
     pass
 
 
-class _RequestScopedTdxClient:
-    def __init__(self, factory: Any, host: str) -> None:
-        self.factory = factory
-        self.host = host
-
-    def _call(self, method_name: str, *args, **kwargs):
-        with self.factory(
-            host=self.host,
-            timeout=8,
-            auto_reconnect=True,
-            heartbeat_interval=0,
-        ) as client:
-            return getattr(client, method_name)(*args, **kwargs)
-
-    def get_security_list(self, *args, **kwargs):
-        return self._call("get_security_list", *args, **kwargs)
-
-    def get_security_bars(self, *args, **kwargs):
-        return self._call("get_security_bars", *args, **kwargs)
-
-    def get_index_bars(self, *args, **kwargs):
-        return self._call("get_index_bars", *args, **kwargs)
-
-    def get_xdxr_info(self, *args, **kwargs):
-        return self._call("get_xdxr_info", *args, **kwargs)
-
-
 class _FailoverTdxClient:
     def __init__(self, factory: Any, hosts: tuple[str, ...]) -> None:
         self.factory = factory
         self.hosts = tuple(hosts)
+        self._connections = {}
+        self._failed_until = {}
+        self._preferred_host = None
+
+    def __enter__(self):
+        return self
+
+    def close(self):
+        for context, _client in self._connections.values():
+            context.__exit__(None, None, None)
+        self._connections.clear()
+
+    def __exit__(self, *_args):
+        self.close()
 
     def _call(self, method_name: str, *args, require_non_empty: bool = False, **kwargs):
         errors: list[str] = []
-        for host in self.hosts:
+        hosts = sorted(self.hosts, key=lambda host: host != self._preferred_host)
+        for host in hosts:
+            if self._failed_until.get(host, 0) > monotonic():
+                continue
             try:
-                result = getattr(
-                    _RequestScopedTdxClient(self.factory, host),
-                    method_name,
-                )(*args, **kwargs)
+                if host not in self._connections:
+                    context = self.factory(host=host, timeout=8, auto_reconnect=True, heartbeat_interval=0)
+                    self._connections[host] = (context, context.__enter__())
+                result = getattr(self._connections[host][1], method_name)(*args, **kwargs)
                 if require_non_empty and (result is None or result.empty):
                     raise ValueError("返回空数据")
+                self._preferred_host = host
                 return result
             except Exception as exc:
+                connection = self._connections.pop(host, None)
+                if connection is not None:
+                    connection[0].__exit__(None, None, None)
+                self._failed_until[host] = monotonic() + 30
                 errors.append(f"{host}: {exc}")
         raise TdxMarketUnavailableError(
             f"通达信请求 {method_name} 在所有节点均失败：" + "；".join(errors)
@@ -1050,10 +1047,8 @@ class TdxMarketDataProvider:
         factory = self._resolved_client_factory()
         last_error: Exception | None = None
         try:
-            return self.sync_with_client(
-                _FailoverTdxClient(factory, self._connection_hosts()),
-                progress_callback=progress_callback,
-            )
+            with _FailoverTdxClient(factory, self._connection_hosts()) as client:
+                return self.sync_with_client(client, progress_callback=progress_callback)
         except Exception as exc:
             last_error = exc
         if ready:
@@ -1078,7 +1073,7 @@ class TdxMarketDataProvider:
         client: Any | None = None,
         target_count: int = 1,
     ) -> bool:
-        with self._pool_lock:
+        with self._pool_lock, ExitStack() as connections:
             excluded = {str(code).strip().upper() for code in excluded_ts_codes}
             desired = max(int(target_count), 1)
             connection = self.cache._connect()
@@ -1147,10 +1142,10 @@ class TdxMarketDataProvider:
                 }
                 return unseen_count > 0
 
-            resolved_client = client or _FailoverTdxClient(
+            resolved_client = client or connections.enter_context(_FailoverTdxClient(
                 self._resolved_client_factory(),
                 self._connection_hosts(),
-            )
+            ))
             updated_at = datetime.now().replace(microsecond=0)
             initial_unseen_count = unseen_count
             self._pool_status = {
@@ -1304,10 +1299,8 @@ class TdxMarketDataProvider:
         factory = self._resolved_client_factory()
         for host in self._connection_hosts():
             try:
-                rows = self._fetch_instruments(
-                    _RequestScopedTdxClient(factory, host),
-                    datetime.now().replace(microsecond=0),
-                )
+                with _FailoverTdxClient(factory, (host,)) as client:
+                    rows = self._fetch_instruments(client, datetime.now().replace(microsecond=0))
                 if not rows:
                     raise ValueError("通达信证券列表为空")
                 self.cache.upsert_instruments(rows)

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import date
+from contextlib import ExitStack
+import logging
+from threading import Lock
 from typing import Any
 
 from .config import MARKET_DB_PATH, MINUTE_REPLAY_DB_PATH
@@ -34,6 +37,7 @@ class ReplayMarketSupply:
         self.market_provider = market_data_provider or TdxMarketDataProvider(
             TdxMarketCache(MARKET_DB_PATH)
         )
+        self._prefetch_lock = Lock()
 
     def _ensure_cache(self) -> None:
         try:
@@ -97,15 +101,51 @@ class ReplayMarketSupply:
         excluded_ts_codes: tuple[str, ...],
         *,
         target_reserve: int = 12,
+        interval: str = "1d",
+        benchmark_code: str = "",
     ) -> dict[str, Any]:
-        available = self.market_provider.ensure_unseen_stock_available(
-            excluded_ts_codes,
-            target_count=target_reserve,
-        )
-        return {
-            "available": available,
-            "targetReserve": int(target_reserve),
-        }
+        if not self._prefetch_lock.acquire(blocking=False):
+            return {"state": "running"}
+        try:
+            available = self.market_provider.ensure_unseen_stock_available(
+                excluded_ts_codes, target_count=target_reserve,
+            )
+            prepared = 0
+            if available and interval == "hybrid" and benchmark_code:
+                excluded = set(excluded_ts_codes)
+                cached = self.minute_provider.prefetched_codes(benchmark_code) - excluded
+                prepared = min(3, len(cached))
+                excluded.update(cached)
+                with ExitStack() as connections:
+                    client = None
+                    for _ in range(6):
+                        if prepared >= 3:
+                            break
+                        try:
+                            candidate = self.daily_store.create_replay_scenario(
+                                game_length=20, benchmark_code=benchmark_code,
+                                seed=None, excluded_ts_codes=tuple(excluded),
+                            )
+                        except (ValueError, FileNotFoundError):
+                            break
+                        code = candidate["tsCode"]
+                        if code in excluded:
+                            break
+                        excluded.add(code)
+                        try:
+                            if client is None:
+                                client = connections.enter_context(self.minute_provider.download_client())
+                            self.minute_provider.prefetch(code, benchmark_code, client=client)
+                        except Exception:
+                            logging.getLogger(__name__).exception("五分钟预取失败: %s", code)
+                            continue
+                        prepared += 1
+            result = {"available": available, "targetReserve": int(target_reserve)}
+            if interval == "hybrid":
+                result["minutePrepared"] = prepared
+            return result
+        finally:
+            self._prefetch_lock.release()
 
     def create_scenario(
         self,

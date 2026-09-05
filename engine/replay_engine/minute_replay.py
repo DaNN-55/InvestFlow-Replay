@@ -3,8 +3,10 @@ from __future__ import annotations
 import math
 import random
 from collections import defaultdict
+from contextlib import contextmanager, nullcontext
 from datetime import date, datetime
 from pathlib import Path
+from threading import Condition, RLock
 from typing import Any, Iterable
 
 import duckdb
@@ -559,10 +561,69 @@ class MinuteReplayStore:
             result[f"{prefix}BarCount"] = int(bar_count)
         return result
 
+    def full_history_codes(self, instrument_type: str) -> set[str]:
+        if not self.path.exists():
+            return set()
+        with duckdb.connect(str(self.path)) as connection:
+            if not connection.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'minute_history_sync'").fetchone()[0]:
+                return set()
+            return {row[0] for row in connection.execute(
+                "SELECT instrument_code FROM minute_history_sync WHERE instrument_type = ?",
+                [instrument_type],
+            ).fetchall()}
+
 
 class TdxMinuteReplayProvider:
     def __init__(self, cache_path: Path):
         self.store = MinuteReplayStore(cache_path)
+        self._priority = Condition()
+        self._foreground = 0
+        self._io = RLock()
+
+    @contextmanager
+    def _background_slot(self):
+        with self._priority:
+            self._priority.wait_for(lambda: self._foreground == 0)
+            self._io.acquire()
+        try:
+            yield
+        finally:
+            self._io.release()
+
+    def create_scenario(self, **options) -> dict[str, Any]:
+        with self._priority:
+            self._foreground += 1
+        try:
+            with self._io:
+                return self._create_scenario(**options)
+        finally:
+            with self._priority:
+                self._foreground -= 1
+                self._priority.notify_all()
+
+    @staticmethod
+    def download_client():
+        from easy_tdx.client import TdxClient
+        from easy_tdx.config import get_known_hosts
+        hosts = tuple(dict.fromkeys([*TDX_HOSTS, *get_known_hosts()]))
+        return _FailoverTdxClient(TdxClient, hosts)
+
+    def prefetch(self, ts_code: str, benchmark_code: str, *, client=None) -> None:
+        from easy_tdx.models.enums import KlineCategory
+
+        with nullcontext(client) if client is not None else self.download_client() as client:
+            for code, kind in [(ts_code, "stock-5m"), (benchmark_code, "index-5m")]:
+                with self._background_slot():
+                    complete = self.store.has_full_history(code, kind)
+                if not complete:
+                    self._fetch(client, code, kind, category=KlineCategory.MIN_5,
+                                maximum_bars=TDX_5MIN_MAX_BARS, bar_time="start", background=True)
+
+    def prefetched_codes(self, benchmark_code: str) -> set[str]:
+        with self._background_slot():
+            if not self.store.has_full_history(benchmark_code, "index-5m"):
+                return set()
+            return self.store.full_history_codes("stock-5m")
 
     def cache_snapshot(self) -> dict[str, Any]:
         try:
@@ -593,45 +654,38 @@ class TdxMinuteReplayProvider:
         category: Any,
         maximum_bars: int,
         bar_time: str = "end",
+        background: bool = False,
     ) -> list[dict[str, Any]]:
         market = self._market_for_code(ts_code)
         symbol = self._symbol(ts_code)
         frames = []
+        complete = True
         for start in range(0, maximum_bars, TDX_PAGE_SIZE):
             try:
-                if instrument_type.startswith("index"):
-                    frame = client.get_index_bars(
-                        market,
-                        symbol,
-                        category,
-                        start,
-                        TDX_PAGE_SIZE,
-                        bar_time=bar_time,
-                    )
-                else:
-                    frame = client.get_security_bars(
-                        market,
-                        symbol,
-                        category,
-                        start,
-                        TDX_PAGE_SIZE,
-                        bar_time=bar_time,
-                    )
+                with self._background_slot() if background else self._io:
+                    fetch = client.get_index_bars if instrument_type.startswith("index") else client.get_security_bars
+                    frame = fetch(market, symbol, category, start, TDX_PAGE_SIZE, bar_time=bar_time)
             except Exception:
                 if frames:
+                    complete = False
                     break
                 raise
             if frame is None or frame.empty:
+                complete = False
                 break
             frames.extend(frame.to_dict("records"))
             if len(frame) < TDX_PAGE_SIZE:
                 break
         if not frames:
             raise ValueError(f"通达信未返回 {ts_code} 的行情")
-        self.store.merge(ts_code, instrument_type, frames)
-        if instrument_type.endswith("-5m") and maximum_bars >= TDX_5MIN_MAX_BARS:
-            self.store.mark_full_history(ts_code, instrument_type)
-        return self.store.load(ts_code, instrument_type)
+        with self._background_slot() if background else self._io:
+            self.store.merge(ts_code, instrument_type, frames)
+            if complete and instrument_type.endswith("-5m") and maximum_bars >= TDX_5MIN_MAX_BARS:
+                self.store.mark_full_history(ts_code, instrument_type)
+        if not complete:
+            raise ValueError(f"{ts_code} 行情下载中断，已保存部分缓存，下次继续补齐")
+        with self._io:
+            return self.store.load(ts_code, instrument_type)
 
     @staticmethod
     def _hybrid_download_limit(_training_days: int) -> int:
@@ -671,7 +725,7 @@ class TdxMinuteReplayProvider:
             recent_window_end_dates=recent_window_end_dates,
         )
 
-    def create_scenario(
+    def _create_scenario(
         self,
         *,
         ts_code: str,
@@ -804,6 +858,8 @@ class TdxMinuteReplayProvider:
                     )
         except Exception as exc:
             last_error = exc
+        finally:
+            client.close()
 
         if last_error is not None:
             raise ValueError(
