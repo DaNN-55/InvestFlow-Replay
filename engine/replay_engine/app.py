@@ -23,6 +23,8 @@ class ReplayScenarioRequest(BaseModel):
 class ReplayStockPrefetchRequest(BaseModel):
     excludedTsCodes: list[str] = Field(default_factory=list)
     targetReserve: int = Field(default=12, ge=1, le=24)
+    interval: str = "1d"
+    benchmarkCode: str = ""
 
 
 market_supply = create_market_supply()
@@ -89,4 +91,6 @@ def prefetch_stocks(request: ReplayStockPrefetchRequest):
     return market_supply.prefetch_replay_stocks(
         tuple(request.excludedTsCodes),
         target_reserve=request.targetReserve,
+        interval=request.interval,
+        benchmark_code=request.benchmarkCode,
     )

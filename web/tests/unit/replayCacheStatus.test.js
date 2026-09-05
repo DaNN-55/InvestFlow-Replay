@@ -24,7 +24,7 @@ test("renders an accessible dismissible cache status surface in the app shell", 
   assert.match(app, /ReplayCacheStatus/u);
   assert.match(component, /aria-label="行情缓存状态"/u);
   assert.match(component, /股票日线/u);
-  assert.match(component, /1分钟缓存/u);
+  assert.doesNotMatch(component, /1分钟缓存/u);
   assert.match(component, /存储占用/u);
   assert.match(component, /:aria-expanded="open"/u);
   assert.match(component, /document\.addEventListener\("pointerdown"/u);

@@ -102,7 +102,6 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutsideP
       <div class="replay-cache-status__group">
         <h3>分钟行情</h3>
         <dl>
-          <div><dt>1分钟缓存</dt><dd>{{ formatCacheCount(minute.oneMinuteInstrumentCount) }} 只 / {{ formatCacheCount(minute.oneMinuteBarCount) }} 条</dd></div>
           <div><dt>5分钟缓存</dt><dd>{{ formatCacheCount(minute.fiveMinuteInstrumentCount) }} 只 / {{ formatCacheCount(minute.fiveMinuteBarCount) }} 条</dd></div>
         </dl>
       </div>

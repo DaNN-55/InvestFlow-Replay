@@ -81,6 +81,8 @@ export function createReplayLifecycle({
         String(snapshot.tsCode || ""),
       ],
       targetReserve: 12,
+      interval,
+      benchmarkCode,
     }).catch(() => {});
     return session;
   }

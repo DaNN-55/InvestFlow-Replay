@@ -88,10 +88,10 @@ export function createEngineClient(baseUrl = DEFAULT_ENGINE_URL) {
       });
     },
 
-    async prefetchReplayStocks({ excludedTsCodes = [], targetReserve = 12 } = {}) {
+    async prefetchReplayStocks({ excludedTsCodes = [], targetReserve = 12, interval = "1d", benchmarkCode = "" } = {}) {
       return requestJson(`${baseUrl}/internal/replay/cache/stocks/prefetch`, {
         method: "POST",
-        body: JSON.stringify({ excludedTsCodes, targetReserve }),
+        body: JSON.stringify({ excludedTsCodes, targetReserve, interval, benchmarkCode }),
       });
     },
 

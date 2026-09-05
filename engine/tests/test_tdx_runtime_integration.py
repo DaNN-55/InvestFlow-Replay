@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+from contextlib import nullcontext
 import unittest
 from pathlib import Path
 
@@ -155,6 +156,38 @@ class CacheStatusMinuteProvider(RecordingMinuteProvider):
 
 
 class TdxRuntimeIntegrationTest(unittest.TestCase):
+    def test_minute_reserve_stops_at_three_and_replenishes_used_stock(self):
+        class Store(ReplayStoreStub):
+            def create_replay_scenario(self, **kwargs):
+                excluded = kwargs["excluded_ts_codes"]
+                code = next(code for code in ["600000.SH", "600001.SH", "600002.SH", "600003.SH"] if code not in excluded)
+                return {"tsCode": code}
+
+        class MinuteProvider:
+            def __init__(self):
+                self.codes = set()
+                self.downloads = []
+
+            def prefetched_codes(self, _benchmark):
+                return self.codes.copy()
+
+            def download_client(self):
+                return nullcontext(object())
+
+            def prefetch(self, code, _benchmark, *, client):
+                self.codes.add(code)
+                self.downloads.append(code)
+
+        minute = MinuteProvider()
+        supply = ReplayMarketSupply(store=Store(), market_data_provider=RecordingMarketProvider(), minute_replay_provider=minute)
+        options = {"interval": "hybrid", "benchmark_code": "000001.SH"}
+        self.assertEqual(supply.prefetch_replay_stocks((), **options)["minutePrepared"], 3)
+        self.assertEqual(minute.downloads, ["600000.SH", "600001.SH", "600002.SH"])
+        supply.prefetch_replay_stocks((), **options)
+        self.assertEqual(len(minute.downloads), 3)
+        supply.prefetch_replay_stocks(("600000.SH",), **options)
+        self.assertEqual(minute.downloads[-1], "600003.SH")
+
     def test_supply_owns_cache_status_and_stock_reserve(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
