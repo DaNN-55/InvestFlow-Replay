@@ -7,6 +7,11 @@ export default defineConfig(() => {
 
   return {
     plugins: [vue()],
+    build: {
+      rollupOptions: {
+        input: ["index.html", "landing/index.html"],
+      },
+    },
     server: {
       host: "127.0.0.1",
       port: webPort,
