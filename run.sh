@@ -122,4 +122,8 @@ wait_for_service "Web" "${web_pid}" "http://127.0.0.1:${WEB_PORT}/decision/marke
 trap - INT TERM
 
 echo "InvestFlow Replay 已启动：http://127.0.0.1:${WEB_PORT}/decision/market-replay"
-echo "首次进入会由通达信初始化日线缓存；5 分钟数据按需下载并落入本地缓存。"
+if [[ "${INVESTFLOW_REPLAY_MARKET_PROVIDER:-tdx}" == "fixture" ]]; then
+  echo "当前使用离线合成行情；会话、订单、事件和复盘仍保存到独立 Demo 存储。"
+else
+  echo "首次进入会由通达信初始化日线缓存；5 分钟数据按需下载并落入本地缓存。"
+fi

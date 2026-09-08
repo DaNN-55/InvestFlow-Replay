@@ -155,7 +155,7 @@ def build_stock_history(
     *,
     updated_at: datetime,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    from easy_tdx.mac.adjust import apply_forward_adjust
+    from .tdx_api import apply_forward_adjust
 
     raw = _normalize_bars(bars)
     if raw.empty:
@@ -753,13 +753,13 @@ class TdxMarketDataProvider:
     def _connection_hosts(self) -> tuple[str, ...]:
         if self.hosts is not None:
             return tuple(self.hosts)
-        from easy_tdx.config import get_known_hosts
+        from .tdx_api import get_known_hosts
 
         return tuple(dict.fromkeys([*get_known_hosts(), *TDX_HOSTS]))
 
     @staticmethod
     def _market_for_code(ts_code: str):
-        from easy_tdx.models.enums import Market
+        from .tdx_api import Market
 
         return Market.SH if str(ts_code).upper().endswith(".SH") else Market.SZ
 
@@ -856,7 +856,7 @@ class TdxMarketDataProvider:
         latest_cached_date: date | None,
         maximum_bars: int = TDX_MAX_DAILY_BARS,
     ) -> pd.DataFrame:
-        from easy_tdx.models.enums import KlineCategory
+        from .tdx_api import KlineCategory
 
         frames: list[pd.DataFrame] = []
         market = self._market_for_code(ts_code)
@@ -1020,7 +1020,7 @@ class TdxMarketDataProvider:
     def _resolved_client_factory(self):
         if self.client_factory is not None:
             return self.client_factory
-        from easy_tdx.client import TdxClient
+        from .tdx_api import TdxClient
 
         return TdxClient
 

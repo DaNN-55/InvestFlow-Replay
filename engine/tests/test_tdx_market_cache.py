@@ -544,7 +544,7 @@ class TdxMarketDataProviderTest(unittest.TestCase):
                 hosts=None,
                 client_factory=factory,
             )
-            with patch("easy_tdx.config.get_known_hosts", return_value=["dynamic-host"]):
+            with patch("replay_engine.tdx_api.get_known_hosts", return_value=["dynamic-host"]):
                 result = provider.ensure_instruments()
 
             self.assertEqual(result["mode"], "tdx")
