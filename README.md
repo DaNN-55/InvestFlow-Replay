@@ -39,6 +39,13 @@ InvestFlow Replay 面向个人研究与模拟交易。它将“我认为这条�
 
 需要 Python 3.10–3.13 与 Node.js 22+。
 
+当前为本地 Alpha，已在 macOS 上验收；其他系统尚未完成安装验收。首次下载：
+
+```bash
+git clone https://github.com/DaNN-55/InvestFlow-Replay.git
+cd InvestFlow-Replay
+```
+
 ```bash
 ./install.sh
 ./run.sh
@@ -70,6 +77,20 @@ InvestFlow Replay 面向个人研究与模拟交易。它将“我认为这条�
 
 如需清空 Demo 的会话与账本，先停止后执行 `./reset-demo.sh`。它只删除 `.demo-storage/`。
 
+第一次试用建议先完成一次离线演练：观察行情 → 模拟买卖并推进 → 提交盲评 → 揭晓 → 保存复盘 → 在历史演练中查看结果。
+
+## 展示页
+
+只预览产品介绍，不启动行情服务：
+
+```bash
+npm ci --prefix web
+npm run build --prefix web
+npm run preview --prefix web
+```
+
+打开 <http://127.0.0.1:4180/landing/>。页面为独立静态入口，不调用行情 API；这里的安装按钮指向仓库，不是免安装在线交易台。
+
 ## 本地系统边界
 
 | 层          | 实现              | 责任                                  |
@@ -77,10 +98,12 @@ InvestFlow Replay 面向个人研究与模拟交易。它将“我认为这条�
 | Web         | Vue 3 + Vite      | 演练配置、K 线、下单、复盘与交易追踪  |
 | Backend     | Node.js           | API、演练生命周期、订单事件和账本边界 |
 | Engine      | Python + FastAPI  | 行情准备、解析、缓存和演练场景创建    |
-| Market data | 通达信 / easy-tdx | 日线与 5 分钟行情缓存                 |
+| Market data | 通达信 / pytdxdata | 日线与 5 分钟行情缓存                 |
 | Storage     | DuckDB + SQLite   | 行情缓存与应用账本分离                |
 
 运行时数据不提交到仓库：`storage/market/` 保存行情缓存，`storage/app/` 保存演练、订单、复盘和策略账本。
+
+交易追踪文件位于 `storage/trade-records/`。备份前先用 `./stop.sh` 停止正式服务，再复制整个 `storage/`；恢复时保持服务停止，将备份恢复至同一路径。使用自定义存储目录时备份实际目录。演示数据独立位于 `.demo-storage/`。
 
 ## 验证
 
@@ -99,6 +122,16 @@ npm run build --prefix web
 - 在线模式依赖通达信服务与本地缓存覆盖；退市证券和 5 分钟行情的可用性不由本项目控制。
 - 离线 Demo 为合成数据，不能据此判断真实市场、证券或收益。
 - 浏览器 E2E 中有部分 API mock，用于固定前端交互契约；它们不冒充完整三层集成验证。
+
+## 反馈与版本记录
+
+遇到无法继续或看不懂的步骤，请通过 [Issues](https://github.com/DaNN-55/InvestFlow-Replay/issues) 反馈，附系统、版本、操作步骤和错误文字。请勿上传个人账本或未脱敏日志。
+
+[Alpha 发布草稿](docs/alpha-release.md) · [本地验收记录](docs/acceptance-2026-09-08.md)
+
+## 许可证
+
+本项目采用 [Apache License 2.0](LICENSE)。第三方依赖遵循各自许可证。
 
 ## 来源
 
