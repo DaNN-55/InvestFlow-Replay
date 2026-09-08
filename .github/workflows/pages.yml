@@ -1,0 +1,36 @@
+name: Deploy product page
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Prepare standalone page
+        run: |
+          mkdir _site
+          sed -e 's|href="/favicon.png"|href="./favicon.png"|g' \
+              -e 's|src="/replay-trading-desk.png"|src="./replay-trading-desk.png"|g' \
+              web/landing/index.html > _site/index.html
+          cp web/public/favicon.png web/public/replay-trading-desk.png _site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
