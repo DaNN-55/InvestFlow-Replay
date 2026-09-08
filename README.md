@@ -8,7 +8,7 @@
 
 <img src="./assets/readme/banner-v2.png" width="100%" alt="浅蓝风格的市场行情回放视觉封面">
 
-[正式界面](#正式界面) · [快速开始](#快速开始) · [验证](#验证) · [边界与限制](#边界与限制)
+[在线介绍](https://dann-55.github.io/InvestFlow-Replay/) · [下载 Alpha](https://github.com/DaNN-55/InvestFlow-Replay/releases/tag/v0.1.0-alpha.1) · [正式界面](#正式界面) · [快速开始](#快速开始) · [验证](#验证) · [边界与限制](#边界与限制)
 
 </div>
 
@@ -127,7 +127,7 @@ npm run build --prefix web
 
 遇到无法继续或看不懂的步骤，请通过 [Issues](https://github.com/DaNN-55/InvestFlow-Replay/issues) 反馈，附系统、版本、操作步骤和错误文字。请勿上传个人账本或未脱敏日志。
 
-[Alpha 发布草稿](docs/alpha-release.md) · [本地验收记录](docs/acceptance-2026-09-08.md)
+[Alpha 发布记录](docs/alpha-release.md) · [本地验收记录](docs/acceptance-2026-09-08.md)
 
 ## 许可证
 
