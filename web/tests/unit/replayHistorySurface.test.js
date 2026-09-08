@@ -65,6 +65,7 @@ describe("replay history tracking surface", () => {
     assert.equal(existsSync(composableUrl), true);
     assert.match(composableSource, /api\.listReplaySessions/u);
     assert.match(composableSource, /const items = shallowRef\(\[\]\)/u);
+    assert.match(composableSource, /const pageSize = ref\(10\)/u);
     assert.match(composableSource, /const selectedItem = computed/u);
     assert.match(composableSource, /async function applyFilters/u);
     assert.match(composableSource, /async function goToPage/u);

@@ -29,6 +29,7 @@ import {
 const route = useRoute();
 const router = useRouter();
 const primaryTab = ref("records");
+const TRADE_RECORD_PAGE_SIZE = 10;
 
 const editableFields = [
   "stockName",
@@ -88,6 +89,7 @@ const statusOptions = [
 ];
 
 const records = ref([]);
+const tradeRecordPage = ref(1);
 const selectedId = ref("");
 const selectedRecord = ref(null);
 const strategyProfile = reactive(createEmptyStrategyProfile());
@@ -177,6 +179,13 @@ const tradeRecordListItems = computed(() => records.value.map((record) => {
     updatedAt: formatCompactDate(record?.updatedAt || record?.createdAt),
   };
 }));
+const tradeRecordPageCount = computed(() =>
+  Math.max(1, Math.ceil(tradeRecordListItems.value.length / TRADE_RECORD_PAGE_SIZE)),
+);
+const pagedTradeRecordListItems = computed(() => {
+  const offset = (tradeRecordPage.value - 1) * TRADE_RECORD_PAGE_SIZE;
+  return tradeRecordListItems.value.slice(offset, offset + TRADE_RECORD_PAGE_SIZE);
+});
 
 function createEmptyForm() {
   return Object.fromEntries(editableFields.map((field) => [field, ""]));
@@ -394,6 +403,7 @@ async function createStandaloneTradeRecord(payload) {
     const record = extractRecord(await api.saveTradeRecord(payload));
     const id = recordId(record);
     createDrawerOpen.value = false;
+    tradeRecordPage.value = 1;
     updateRouteSelection(id);
     await loadRecords(id);
     statusText.value = "独立交易追踪单已创建";
@@ -481,6 +491,7 @@ async function loadRecords(preferredId = "") {
   try {
     const payload = await api.listTradeRecords();
     records.value = extractItems(payload);
+    tradeRecordPage.value = Math.min(tradeRecordPage.value, tradeRecordPageCount.value);
     const nextId = preferredId || String(route.query.id || "") || recordId(records.value[0]);
     if (nextId) {
       await selectRecordById(nextId, false);
@@ -501,6 +512,13 @@ async function loadRecords(preferredId = "") {
   } finally {
     loading.value = false;
   }
+}
+
+function goToTradeRecordPage(nextPage) {
+  tradeRecordPage.value = Math.min(
+    tradeRecordPageCount.value,
+    Math.max(1, Number(nextPage) || 1),
+  );
 }
 
 async function selectRecord(id) {
@@ -718,6 +736,7 @@ async function deleteSelectedRecord() {
   try {
     await api.deleteTradeRecord(selectedId.value);
     records.value = records.value.filter((item) => recordId(item) !== selectedId.value);
+    tradeRecordPage.value = Math.min(tradeRecordPage.value, tradeRecordPageCount.value);
     const nextId = recordId(records.value[0]);
     updateRouteSelection(nextId);
     if (nextId) {
@@ -826,10 +845,13 @@ onMounted(() => {
         </template>
 
         <TradeRecordList
-          :items="tradeRecordListItems"
+          :items="pagedTradeRecordListItems"
           :loading="loading"
+          :page="tradeRecordPage"
+          :page-count="tradeRecordPageCount"
           :selected-id="selectedId"
           @select="selectRecord"
+          @page="goToTradeRecordPage"
         />
         <button class="trade-records-list__create" type="button" aria-label="新建交易" @click="openCreateDrawer">
           <Plus :size="18" />

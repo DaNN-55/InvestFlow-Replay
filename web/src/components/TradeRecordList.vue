@@ -12,9 +12,17 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  page: {
+    type: Number,
+    default: 1,
+  },
+  pageCount: {
+    type: Number,
+    default: 1,
+  },
 });
 
-const emit = defineEmits(["select"]);
+const emit = defineEmits(["select", "page"]);
 </script>
 
 <template>
@@ -43,6 +51,11 @@ const emit = defineEmits(["select"]);
         </span>
       </button>
     </template>
+    <footer v-if="pageCount > 1" class="trade-record-list__pagination">
+      <button type="button" :disabled="page <= 1" @click="emit('page', page - 1)">上一页</button>
+      <span>第 {{ page }} / {{ pageCount }} 页</span>
+      <button type="button" :disabled="page >= pageCount" @click="emit('page', page + 1)">下一页</button>
+    </footer>
   </div>
 </template>
 
@@ -147,5 +160,34 @@ const emit = defineEmits(["select"]);
 
 .trade-record-list__profit--neutral {
   color: var(--ql-color-text-muted);
+}
+
+.trade-record-list__pagination {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.trade-record-list__pagination button {
+  border: 1px solid var(--ql-color-border-soft);
+  border-radius: 0.375rem;
+  background: var(--ql-color-bg-surface-strong);
+  color: var(--ql-color-text-body);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.625rem;
+}
+
+.trade-record-list__pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.trade-record-list__pagination span {
+  color: var(--ql-color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 </style>
