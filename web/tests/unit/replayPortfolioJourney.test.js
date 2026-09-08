@@ -19,7 +19,7 @@ test("replay setup presents the compact hero choices with one primary CTA", asyn
   assert.match(setup, /grid-template-columns: minmax\(0, 1fr\) minmax\(360px, 430px\)/u);
   assert.match(setup, /这次怎么练？/u);
   assert.match(setup, /调整资金与成本/u);
-  assert.match(setup, /<UiDrawer/u);
+  assert.match(setup, /<UiModal/u);
   assert.match(setup, /:aria-pressed="form\.barInterval === '1d'"/u);
   assert.match(setup, /:aria-pressed="form\.barInterval === 'hybrid'"/u);
   assert.match(setup, /:aria-pressed="form\.gameLength === length"/u);

@@ -3,13 +3,14 @@ import {
   ChevronDown,
   Play,
   RefreshCw,
+  Settings2,
   ShieldCheck,
 } from "lucide-vue-next";
 import { computed, reactive, ref, watch } from "vue";
 
 import UiButton from "../ui/UiButton.vue";
 import UiCard from "../ui/UiCard.vue";
-import UiDrawer from "../ui/UiDrawer.vue";
+import UiModal from "../ui/UiModal.vue";
 import UiInput from "../ui/UiInput.vue";
 import { formatReplayBenchmarkLabel } from "../../utils/replayMarket.js";
 
@@ -285,17 +286,17 @@ function submit() {
             @click="configurationOpen = true"
           >
             <span>调整资金与成本</span>
-            <ChevronDown :size="16" />
+            <Settings2 :size="16" />
           </button>
         </form>
       </UiCard>
     </div>
 
-    <UiDrawer
+    <UiModal
       :open="configurationOpen"
       title="资金与成本"
       description="修改会应用到本轮演练。"
-      panel-class="replay-setup__configuration-drawer"
+      panel-class="replay-setup__configuration-modal"
       @close="configurationOpen = false"
     >
       <div class="replay-setup__configuration-body">
@@ -342,7 +343,7 @@ function submit() {
                 </div>
               </details>
       </div>
-    </UiDrawer>
+    </UiModal>
   </div>
 </template>
 
@@ -628,8 +629,11 @@ function submit() {
   gap: 12px;
 }
 
-:global(.replay-setup__configuration-drawer) {
+:global(.ui-modal__overlay .ui-modal__panel.replay-setup__configuration-modal) {
   width: min(420px, calc(100vw - 24px));
+  min-height: 0;
+  max-height: calc(100dvh - 24px);
+  border-radius: 14px;
 }
 
 .replay-setup__input-wrap {

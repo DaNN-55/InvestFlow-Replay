@@ -12,7 +12,7 @@ export function useReplayHistory() {
   const items = shallowRef([]);
   const total = ref(0);
   const page = ref(1);
-  const pageSize = ref(20);
+  const pageSize = ref(10);
   const state = ref("all");
   const attemptKind = ref("all");
   const keyword = ref("");

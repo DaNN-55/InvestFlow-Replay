@@ -156,6 +156,37 @@ test("交易详情默认聚焦成交记录并按需展开交易计划", async ({
   await expect(riskBudgetLabel.locator("input")).toHaveCount(0);
 });
 
+test("交易追踪列表每页最多显示十条", async ({ page }) => {
+  const pagedRecords = Array.from({ length: 11 }, (_, index) => ({
+    ...record,
+    id: `trade-record-page-${index + 1}`,
+    stockCode: String(600000 + index),
+    stockName: `分页股票${index + 1}`,
+  }));
+  await page.unroute("**/api/**");
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/quant/decision/trade-records") {
+      await route.fulfill({ json: { items: pagedRecords } });
+      return;
+    }
+    if (url.pathname.startsWith("/api/quant/decision/trade-records/")) {
+      const id = url.pathname.split("/").at(-1);
+      await route.fulfill({ json: pagedRecords.find((item) => item.id === id) ?? {} });
+      return;
+    }
+    await route.fulfill({ json: {} });
+  });
+  await page.goto(`${baseUrl}/decision/trade-records`);
+
+  const list = page.locator(".trade-record-list");
+  await expect(list.locator(".trade-record-list__item")).toHaveCount(10);
+  await expect(list.getByText("第 1 / 2 页", { exact: true })).toBeVisible();
+  await list.getByRole("button", { name: "下一页", exact: true }).click();
+  await expect(list.locator(".trade-record-list__item")).toHaveCount(1);
+  await expect(list.getByText("第 2 / 2 页", { exact: true })).toBeVisible();
+});
+
 test("新建交易通过代码或名称选择后同步显示股票身份", async ({ page }) => {
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
   await page.getByRole("button", { name: "新建交易", exact: true }).click();
