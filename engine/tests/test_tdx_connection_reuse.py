@@ -64,7 +64,7 @@ class ConnectionReuseTest(unittest.TestCase):
                     "vol": 100, "amount": 1000,
                 } for index in range(800)])
 
-        with TemporaryDirectory() as directory, patch("easy_tdx.client.TdxClient", Client):
+        with TemporaryDirectory() as directory, patch("replay_engine.tdx_api.TdxClient", Client):
             provider = TdxMinuteReplayProvider(Path(directory) / "minute.duckdb")
             with self.assertRaisesRegex(ValueError, "中断"):
                 provider.prefetch("600000.SH", "000001.SH")

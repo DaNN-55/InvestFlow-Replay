@@ -34,6 +34,10 @@ const props = defineProps({
     type: Object,
     default: null,
   },
+  marketProvider: {
+    type: String,
+    default: "tdx",
+  },
 });
 
 const emit = defineEmits([
@@ -60,6 +64,7 @@ const lengthOptions = computed(() =>
     ? [20, 60, 120]
     : [20, 60, 120],
 );
+const isFixtureMarket = computed(() => props.marketProvider === "fixture");
 const compatibleBenchmarks = computed(() =>
   props.benchmarks.filter((benchmark) =>
     form.barInterval === "hybrid" ||
@@ -94,6 +99,16 @@ const benchmarkProgressText = computed(() => {
     : "首次初始化通达信行情缓存";
   return `${phase}${countText}：${status.message || "正在连接通达信"}`;
 });
+
+watch(
+  isFixtureMarket,
+  (fixture) => {
+    if (fixture && form.barInterval !== "1d") {
+      form.barInterval = "1d";
+    }
+  },
+  { immediate: true },
+);
 
 watch(
   () => form.barInterval,
@@ -155,7 +170,12 @@ function submit() {
         </span>
         <h1 class="replay-setup__title">用未知行情验证一条交易规则</h1>
         <p class="replay-setup__description">
-          从研究假设出发，在随机匿名历史行情中完成演练、模拟执行与复盘。
+          {{ isFixtureMarket
+            ? "从研究假设出发，在确定性的离线合成 K 线上完成演练、模拟执行与复盘。"
+            : "从研究假设出发，在随机匿名历史行情中完成演练、模拟执行与复盘。" }}
+        </p>
+        <p v-if="isFixtureMarket" class="replay-setup__fixture-note" role="status">
+          离线合成数据 · 不对应真实证券，也不代表真实市场
         </p>
       </div>
 
@@ -178,6 +198,7 @@ function submit() {
                 <strong>日线演练</strong>
               </button>
               <button
+                v-if="!isFixtureMarket"
                 type="button"
                 class="replay-setup__interval"
                 :class="{ 'replay-setup__interval--active': form.barInterval === 'hybrid' }"
@@ -216,7 +237,7 @@ function submit() {
                 :disabled="compatibleBenchmarks.length === 0"
               >
                 <option value="">
-                  请选择真实指数基准
+                  {{ isFixtureMarket ? "请选择 Demo 合成基准" : "请选择真实指数基准" }}
                 </option>
                 <option
                   v-for="benchmark in compatibleBenchmarks"
@@ -242,7 +263,7 @@ function submit() {
               <button type="button" @click="emit('retryBenchmarks')">重新加载</button>
             </div>
             <div v-else-if="compatibleBenchmarks.length === 0" class="replay-setup__playbook-state">
-              当前没有支持该演练模式的真实指数基准。
+              当前没有支持该演练模式的{{ isFixtureMarket ? "合成" : "真实" }}指数基准。
             </div>
           </section>
 
@@ -406,6 +427,17 @@ function submit() {
   color: var(--ql-color-text-muted);
   font-size: 15px;
   line-height: 1.8;
+}
+
+.replay-setup__fixture-note {
+  display: inline-flex;
+  margin: 12px 0 0;
+  padding: 5px 9px;
+  border: 1px solid var(--ql-color-warning);
+  border-radius: 7px;
+  color: var(--ql-color-warning);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .replay-setup__card {

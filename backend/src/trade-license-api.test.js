@@ -11,10 +11,11 @@ import { createApp } from "./app.js";
 describe("trade license API", () => {
   let root;
   let app;
+  let api;
 
-  before(() => {
+  before(async () => {
     root = mkdtempSync(join(tmpdir(), "investflow-trade-license-"));
-    app = createApp({
+    api = createApp({
       dbPath: join(root, "workbench.sqlite"),
       rankingDbPath: join(root, "mainline-rankings.sqlite"),
       storageRoot: join(root, "storage"),
@@ -22,11 +23,13 @@ describe("trade license API", () => {
       tradeRecordsRoot: join(root, "trade-records"),
       clock: () => new Date("2026-07-15T04:00:00.000Z"),
     });
+    app = api.listen(0, "127.0.0.1");
+    await new Promise((resolve) => app.once("listening", resolve));
   });
 
-  after(() => {
-    app.dispose();
-    app.dispose();
+  after(async () => {
+    await new Promise((resolve) => app.close(resolve));
+    api.dispose();
     rmSync(root, { recursive: true, force: true });
   });
 

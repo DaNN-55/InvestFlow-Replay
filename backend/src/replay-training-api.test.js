@@ -53,6 +53,7 @@ function blindReview(overrides = {}) {
 
 describe("replay playbook training API", () => {
   let app;
+  let api;
   let root;
   let engineServer;
   let scenarioRequests = 0;
@@ -79,7 +80,7 @@ describe("replay playbook training API", () => {
     await new Promise((resolve) => engineServer.listen(0, "127.0.0.1", resolve));
     const address = engineServer.address();
     root = mkdtempSync(join(tmpdir(), "investflow-replay-training-"));
-    app = createApp({
+    api = createApp({
       dbPath: join(root, "workbench.sqlite"),
       rankingDbPath: join(root, "rankings.sqlite"),
       storageRoot: join(root, "storage"),
@@ -87,10 +88,13 @@ describe("replay playbook training API", () => {
       tradeRecordsRoot: join(root, "trade-records"),
       engineUrl: `http://127.0.0.1:${address.port}`,
     });
+    app = api.listen(0, "127.0.0.1");
+    await new Promise((resolve) => app.once("listening", resolve));
   });
 
   after(async () => {
-    app.dispose();
+    await new Promise((resolve) => app.close(resolve));
+    api.dispose();
     await new Promise((resolve) => engineServer.close(resolve));
     rmSync(root, { recursive: true, force: true });
   });

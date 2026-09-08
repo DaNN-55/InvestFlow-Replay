@@ -75,6 +75,7 @@ function postReview(strategyAdjustment) {
 
 describe("replay playbook API", () => {
   let app;
+  let api;
   let root;
   let dbPath;
   let engineServer;
@@ -105,7 +106,7 @@ describe("replay playbook API", () => {
     const address = engineServer.address();
     root = mkdtempSync(join(tmpdir(), "investflow-replay-playbook-"));
     dbPath = join(root, "workbench.sqlite");
-    app = createApp({
+    api = createApp({
       dbPath,
       rankingDbPath: join(root, "rankings.sqlite"),
       storageRoot: join(root, "storage"),
@@ -113,10 +114,13 @@ describe("replay playbook API", () => {
       tradeRecordsRoot: join(root, "trade-records"),
       engineUrl: `http://127.0.0.1:${address.port}`,
     });
+    app = api.listen(0, "127.0.0.1");
+    await new Promise((resolve) => app.once("listening", resolve));
   });
 
   after(async () => {
-    app.dispose();
+    await new Promise((resolve) => app.close(resolve));
+    api.dispose();
     await new Promise((resolve) => engineServer.close(resolve));
     rmSync(root, { recursive: true, force: true });
   });
