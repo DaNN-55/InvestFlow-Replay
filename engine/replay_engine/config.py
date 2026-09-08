@@ -5,6 +5,9 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MARKET_PROVIDER = os.environ.get(
+    "INVESTFLOW_REPLAY_MARKET_PROVIDER", "tdx"
+).strip().lower()
 STORAGE_ROOT = Path(
     os.environ.get("INVESTFLOW_REPLAY_STORAGE_ROOT", PROJECT_ROOT / "storage")
 ).resolve()

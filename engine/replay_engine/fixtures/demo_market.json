@@ -1,0 +1,18 @@
+{
+  "version": "fixture-demo-market-v1",
+  "startDate": "2020-01-02",
+  "benchmark": {
+    "code": "DEMO-INDEX.SYN",
+    "name": "Demo 合成基准指数",
+    "basePrice": 1000.0,
+    "phase": 0.35
+  },
+  "instruments": [
+    { "code": "DEMO001.SYN", "symbol": "DEMO001", "name": "Demo 合成标的一", "basePrice": 18.0, "phase": 0.2 },
+    { "code": "DEMO002.SYN", "symbol": "DEMO002", "name": "Demo 合成标的二", "basePrice": 32.0, "phase": 1.1 },
+    { "code": "DEMO003.SYN", "symbol": "DEMO003", "name": "Demo 合成标的三", "basePrice": 51.0, "phase": 2.0 },
+    { "code": "DEMO004.SYN", "symbol": "DEMO004", "name": "Demo 合成标的四", "basePrice": 76.0, "phase": 2.8 },
+    { "code": "DEMO005.SYN", "symbol": "DEMO005", "name": "Demo 合成标的五", "basePrice": 24.0, "phase": 3.6 },
+    { "code": "DEMO006.SYN", "symbol": "DEMO006", "name": "Demo 合成标的六", "basePrice": 43.0, "phase": 4.4 }
+  ]
+}

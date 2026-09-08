@@ -603,13 +603,12 @@ class TdxMinuteReplayProvider:
 
     @staticmethod
     def download_client():
-        from easy_tdx.client import TdxClient
-        from easy_tdx.config import get_known_hosts
+        from .tdx_api import TdxClient, get_known_hosts
         hosts = tuple(dict.fromkeys([*TDX_HOSTS, *get_known_hosts()]))
         return _FailoverTdxClient(TdxClient, hosts)
 
     def prefetch(self, ts_code: str, benchmark_code: str, *, client=None) -> None:
-        from easy_tdx.models.enums import KlineCategory
+        from .tdx_api import KlineCategory
 
         with nullcontext(client) if client is not None else self.download_client() as client:
             for code, kind in [(ts_code, "stock-5m"), (benchmark_code, "index-5m")]:
@@ -637,7 +636,7 @@ class TdxMinuteReplayProvider:
 
     @staticmethod
     def _market_for_code(ts_code: str):
-        from easy_tdx.models.enums import Market
+        from .tdx_api import Market
 
         return Market.SH if str(ts_code).upper().endswith(".SH") else Market.SZ
 
@@ -788,12 +787,11 @@ class TdxMinuteReplayProvider:
             cache_error = exc
 
         try:
-            from easy_tdx.client import TdxClient
+            from .tdx_api import TdxClient
         except ImportError as exc:
-            raise RuntimeError("分钟演练依赖 easy-tdx，请先安装项目 Python 依赖") from exc
+            raise RuntimeError("分钟演练依赖 pytdxdata，请先安装项目 Python 依赖") from exc
 
-        from easy_tdx.models.enums import KlineCategory
-        from easy_tdx.config import get_known_hosts
+        from .tdx_api import KlineCategory, get_known_hosts
 
         hosts = tuple(dict.fromkeys([*TDX_HOSTS, *get_known_hosts()]))
         client = _FailoverTdxClient(TdxClient, hosts)
