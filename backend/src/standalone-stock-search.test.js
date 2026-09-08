@@ -11,6 +11,7 @@ import { createApp } from "./app.js";
 
 describe("standalone stock search", () => {
   let app;
+  let api;
   let engineServer;
   let root;
 
@@ -31,15 +32,18 @@ describe("standalone stock search", () => {
     await new Promise((resolve) => engineServer.listen(0, "127.0.0.1", resolve));
     const address = engineServer.address();
     root = mkdtempSync(join(tmpdir(), "investflow-standalone-stock-search-"));
-    app = createApp({
+    api = createApp({
       dbPath: join(root, "replay.sqlite"),
       tradeRecordsRoot: join(root, "trade-records"),
       engineUrl: `http://127.0.0.1:${address.port}`,
     });
+    app = api.listen(0, "127.0.0.1");
+    await new Promise((resolve) => app.once("listening", resolve));
   });
 
   after(async () => {
-    app.dispose();
+    await new Promise((resolve) => app.close(resolve));
+    api.dispose();
     await new Promise((resolve, reject) => engineServer.close((error) => error ? reject(error) : resolve()));
     rmSync(root, { recursive: true, force: true });
   });
