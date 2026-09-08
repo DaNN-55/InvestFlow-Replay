@@ -36,7 +36,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
             provider.store.save("600000.SH", "stock", rows)
             provider.store.save("000001.SH", "index", rows)
 
-            with patch("easy_tdx.client.TdxClient", side_effect=OSError("network down")):
+            with patch("replay_engine.tdx_api.TdxClient", side_effect=OSError("network down")):
                 scenario = provider.create_scenario(
                     ts_code="600000.SH",
                     name="浦发银行",
@@ -85,7 +85,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
             provider.store.mark_full_history("000001.SH", "index-5m")
 
             with patch(
-                "easy_tdx.client.TdxClient",
+                "replay_engine.tdx_api.TdxClient",
                 side_effect=OSError("network must not be used"),
             ) as client_class:
                 scenario = provider.create_scenario(
@@ -136,7 +136,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
             provider.store.mark_full_history("000001.SH", "index-5m")
 
             with (
-                patch("easy_tdx.client.TdxClient"),
+                patch("replay_engine.tdx_api.TdxClient"),
                 patch.object(provider, "_fetch", return_value=minute_rows) as fetch,
             ):
                 scenario = provider.create_scenario(
@@ -266,7 +266,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
             provider = TdxMinuteReplayProvider(Path(directory) / "minute.duckdb")
             provider_rows = [{"datetime": datetime(2026, 8, 4, 9, 35)}]
             with (
-                patch("easy_tdx.client.TdxClient") as client_class,
+                patch("replay_engine.tdx_api.TdxClient") as client_class,
                 patch.object(provider, "_fetch", return_value=provider_rows) as fetch,
                 patch(
                     "replay_engine.minute_replay.build_hybrid_replay_scenario",

@@ -2,5 +2,5 @@ fastapi
 uvicorn
 duckdb
 pandas
-easy-tdx==1.20.4
+pytdxdata==0.3.2
 pytest
