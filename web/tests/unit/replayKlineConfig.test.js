@@ -48,11 +48,31 @@ describe("replay KLineChart configuration", () => {
       current: { replayIndex: 3 },
     });
 
-    assert.equal(legends.length, 7);
+    assert.equal(legends.length, 8);
+    assert.deepEqual(legends[5], {
+      title: { text: "涨幅: ", color: "#64748b" },
+      value: { text: "--", color: "#64748b" },
+    });
     assert.deepEqual(legends.at(-1), {
       title: { text: "短期线: ", color: "#2563eb" },
       value: { text: "3.36", color: "#2563eb" },
     });
+  });
+
+  it("shows hovered candle gain with the matching rise or fall color", () => {
+    const styles = createReplayChartStyles({
+      background: "#ffffff",
+      grid: "#e5e7eb",
+      text: "#64748b",
+      rise: "#ef4444",
+      fall: "#10b981",
+    });
+
+    const rise = styles.candle.tooltip.custom({ current: { pctChange: 2.345 } });
+    const fall = styles.candle.tooltip.custom({ current: { pctChange: -1.2 } });
+
+    assert.deepEqual(rise[5].value, { text: "+2.35%", color: "#ef4444" });
+    assert.deepEqual(fall[5].value, { text: "-1.20%", color: "#10b981" });
   });
 
   it("keeps red-rise and green-fall candle colors independent from the theme", () => {

@@ -96,6 +96,7 @@ describe("replay market aggregation", () => {
         close: 12,
         volume: 250,
         amount: 2600,
+        pctChange: null,
       },
       {
         datetime: "第2周",
@@ -109,6 +110,7 @@ describe("replay market aggregation", () => {
         close: 13,
         volume: 180,
         amount: 2100,
+        pctChange: 8.333333333333325,
       },
     ]);
 

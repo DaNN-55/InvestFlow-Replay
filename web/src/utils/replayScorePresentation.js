@@ -264,6 +264,46 @@ export function buildReplayScoreWeightSnapshot(scoreCard) {
   }));
 }
 
+export function buildReplayScoreCalculationExplanation(scoreCard) {
+  const weights = scoreCard?.weights ?? {};
+  const executionWeight = Number(weights.executionDiscipline);
+  const riskWeight = Number(weights.riskControl);
+  const returnWeight = Number(weights.returnPerformance);
+  const reviewWeight = Number(weights.reviewQuality);
+  if (
+    ![
+      executionWeight,
+      riskWeight,
+      returnWeight,
+      reviewWeight,
+    ].every(Number.isFinite)
+  ) {
+    return "原始得分为各适用维度得分之和；综合评分按本局适用权重重新折算为 100 分。";
+  }
+
+  const isV3 = isV3ScoreCard(scoreCard);
+  const returnNeutral = isV3 ? 9.375 : 7.5;
+  const pointsPerReturnPct = isV3 ? 0.9375 : 0.75;
+  const parts = [
+    `执行纪律：执行纪律自评（1–5 分）÷ 5 × ${executionWeight}`,
+    `风险控制：风险控制自评（1–5 分）÷ 5 × ${riskWeight}`,
+  ];
+  const playbookWeight = Number(weights.playbookCompliance);
+  if (Number.isFinite(playbookWeight)) {
+    parts.push(`战法符合度：战法符合度自评（1–5 分）÷ 5 × ${playbookWeight}`);
+  }
+  parts.push(
+    `收益表现：${returnNeutral}＋总收益率（%）× ${pointsPerReturnPct}，结果限制在 0–${returnWeight} 分`,
+    `复盘质量：已完成必填项÷全部必填项× ${reviewWeight}`,
+  );
+  return [
+    "原始得分为以下项目之和：",
+    ...parts,
+    "综合评分：原始得分÷本局适用权重× 100",
+    "不适用维度不计分，也不计权重。",
+  ].join("\n");
+}
+
 export function formatReplayScoreMetric(metric) {
   if (metric.unavailable) {
     return "暂无指数数据";

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  buildReplayScoreCalculationExplanation,
   buildReplayScoreDimensions,
   buildReplayScoreMetrics,
   buildReplayScoreWeightSnapshot,
@@ -53,6 +54,25 @@ const v2ScoreCard = {
 };
 
 describe("replay score presentation", () => {
+  it("explains the frozen v3 score formula behind the raw score", () => {
+    const explanation = buildReplayScoreCalculationExplanation({
+      algorithmVersion: "replay-score-v3",
+      weights: {
+        executionDiscipline: 37.5,
+        riskControl: 31.25,
+        returnPerformance: 18.75,
+        reviewQuality: 12.5,
+      },
+    });
+
+    assert.match(explanation, /执行纪律自评（1–5 分）÷ 5 × 37\.5/u);
+    assert.match(explanation, /风险控制自评（1–5 分）÷ 5 × 31\.25/u);
+    assert.match(explanation, /9\.375＋总收益率（%）× 0\.9375/u);
+    assert.match(explanation, /原始得分÷本局适用权重× 100/u);
+    assert.match(explanation, /不适用维度不计分，也不计权重/u);
+    assert.equal(explanation.split("\n").length, 7);
+  });
+
   it("hides the retired playbook dimension from free-training score details", () => {
     const dimensions = buildReplayScoreDimensions(v2ScoreCard);
     assert.ok(dimensions.every((dimension) => dimension.description));

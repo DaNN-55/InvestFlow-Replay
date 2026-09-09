@@ -65,6 +65,7 @@ export function resolveReplayViewportAfterBarsChange({
 
 function createAggregateBar(bar, period, periodIndex) {
   const sequence = Number(bar.sequence);
+  const pctChange = bar.pctChange == null ? null : Number(bar.pctChange);
   return {
     datetime:
       period === "day" && bar.tradeDate
@@ -80,15 +81,35 @@ function createAggregateBar(bar, period, periodIndex) {
     close: toFiniteNumber(bar.close),
     volume: toFiniteNumber(bar.volume),
     amount: toFiniteNumber(bar.amount),
+    pctChange: Number.isFinite(pctChange) ? pctChange : null,
   };
+}
+
+function attachAggregatePctChanges(bars, { preferSource = false } = {}) {
+  return bars.map((bar, index) => {
+    if (preferSource && Number.isFinite(bar.pctChange)) {
+      return bar;
+    }
+    const previousClose = Number(bars[index - 1]?.close);
+    const calculated = previousClose > 0
+      ? ((Number(bar.close) / previousClose) - 1) * 100
+      : null;
+    return {
+      ...bar,
+      pctChange: Number.isFinite(calculated) ? calculated : bar.pctChange,
+    };
+  });
 }
 
 export function aggregateReplayBars(bars, period = "day") {
   const safeBars = Array.isArray(bars) ? bars : [];
   const normalizedPeriod = PERIOD_META[period] ? period : "day";
   if (["minute", "day"].includes(normalizedPeriod)) {
-    return safeBars.map((bar) =>
-      createAggregateBar(bar, normalizedPeriod, Number(bar.sequence)),
+    return attachAggregatePctChanges(
+      safeBars.map((bar) =>
+        createAggregateBar(bar, normalizedPeriod, Number(bar.sequence)),
+      ),
+      { preferSource: true },
     );
   }
 
@@ -112,7 +133,7 @@ export function aggregateReplayBars(bars, period = "day") {
     current.volume += toFiniteNumber(bar.volume);
     current.amount += toFiniteNumber(bar.amount);
   }
-  return result;
+  return attachAggregatePctChanges(result);
 }
 
 export function mapReplayExecutionsToTrades(executions, bars, options = {}) {

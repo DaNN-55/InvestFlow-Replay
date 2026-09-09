@@ -10,6 +10,7 @@ import {
   getReplayHistoryStatePresentation,
 } from "../../utils/replayHistoryPresentation.js";
 import {
+  buildReplayScoreCalculationExplanation,
   buildReplayScoreMetrics,
   buildReplayScoreWeightSnapshot,
   formatReplayScoreMetric,
@@ -99,6 +100,9 @@ const scoreMetrics = computed(() =>
 );
 const scoreWeightSnapshot = computed(() =>
   buildReplayScoreWeightSnapshot(props.item.scoreCard),
+);
+const scoreCalculationExplanation = computed(() =>
+  buildReplayScoreCalculationExplanation(props.item.scoreCard),
 );
 const playbookFitApplicable = computed(
   () =>
@@ -303,10 +307,6 @@ function isPositiveMetric(metric) {
         <div class="replay-history-detail__score-meta">
           <span class="replay-history-detail__score-meta-item">
             <span>权重快照：</span>
-            <UiTooltip
-              content="各维度权重来自评分算法；不适用的维度不计入本局得分。"
-              label="查看权重快照说明"
-            />
             <template v-for="(entry, index) in scoreWeightSnapshot" :key="entry.key">
               <span>
                 {{ entry.label }} {{ entry.weight }}{{ entry.applicable ? "" : "（不适用）" }}
@@ -322,12 +322,13 @@ function isPositiveMetric(metric) {
               {{ formatScore(item.scoreCard.appliedWeightTotal) }} / 100
               <template v-if="item.scoreCard.rawTotal != null">
                 · 原始得分 {{ formatScore(item.scoreCard.rawTotal) }}
+                <UiTooltip
+                  :content="scoreCalculationExplanation"
+                  label="查看综合评分计算规则"
+                  wide
+                />
               </template>
             </span>
-            <UiTooltip
-              content="不适用维度会从总权重中扣除；原始得分按本局适用权重重新折算为 100 分。"
-              label="查看适用权重说明"
-            />
           </span>
         </div>
         <div

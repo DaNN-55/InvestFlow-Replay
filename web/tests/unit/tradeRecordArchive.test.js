@@ -37,8 +37,12 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function asyncArchive({ records, getTradeRecord }) {
-  const route = { query: {} };
+function asyncArchive({ records, getTradeRecord, listTradeRecords }) {
+  const route = {
+    name: "quant-trade-records",
+    path: "/decision/trade-records",
+    query: {},
+  };
   const replacements = [];
   const archive = useTradeRecordArchive({
     __test: {
@@ -50,7 +54,7 @@ function asyncArchive({ records, getTradeRecord }) {
         },
       },
       api: {
-        listTradeRecords: async () => ({ items: records }),
+        listTradeRecords: listTradeRecords ?? (async () => ({ items: records })),
         getTradeRecord: getTradeRecord ?? (async (id) =>
           records.find((item) => item.id === id)),
       },
@@ -258,5 +262,22 @@ describe("trade record archive", () => {
       path: "/decision/trade-records",
       query: { id: "record-1" },
     });
+  });
+
+  it("does not restore the trade-record route after navigation away", async () => {
+    const records = [record(1)];
+    const list = deferred();
+    const { archive, route, replacements } = asyncArchive({
+      records,
+      listTradeRecords: () => list.promise,
+    });
+    const loading = archive.load({ preferredId: "record-1" });
+
+    route.name = "quant-market-replay";
+    route.path = "/decision/market-replay";
+    list.resolve({ items: records });
+    await loading;
+
+    assert.deepEqual(replacements, []);
   });
 });

@@ -18,6 +18,10 @@ defineProps({
     type: String,
     default: "查看说明",
   },
+  wide: {
+    type: Boolean,
+    default: false,
+  },
 });
 </script>
 
@@ -33,7 +37,10 @@ defineProps({
       </TooltipTrigger>
       <TooltipPortal>
         <TooltipContent
-          class="ui-tooltip__content"
+          :class="[
+            'ui-tooltip__content',
+            { 'ui-tooltip__content--wide': wide },
+          ]"
           side="top"
           :side-offset="7"
           :collision-padding="10"
@@ -86,6 +93,11 @@ defineProps({
   font-size: 11px;
   font-weight: 550;
   line-height: 1.5;
+  white-space: pre-line;
+}
+
+.ui-tooltip__content--wide {
+  max-width: min(460px, calc(100vw - 20px));
 }
 
 .ui-tooltip__arrow {

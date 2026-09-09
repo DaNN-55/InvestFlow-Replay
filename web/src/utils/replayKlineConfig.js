@@ -13,8 +13,26 @@ const BASE_CANDLE_TOOLTIP_LEGENDS = Object.freeze([
   Object.freeze({ title: "high", value: "{high}" }),
   Object.freeze({ title: "low", value: "{low}" }),
   Object.freeze({ title: "close", value: "{close}" }),
-  Object.freeze({ title: "volume", value: "{volume}" }),
 ]);
+
+function createPctChangeLegend(current, { rise, fall, text }) {
+  const pctChange = Number(current?.pctChange);
+  const available = current?.pctChange !== null &&
+    current?.pctChange !== undefined &&
+    Number.isFinite(pctChange);
+  const color = !available || pctChange === 0
+    ? text
+    : pctChange > 0 ? rise : fall;
+  return {
+    title: { text: "涨幅: ", color: text },
+    value: {
+      text: available
+        ? `${pctChange > 0 ? "+" : ""}${pctChange.toFixed(2)}%`
+        : "--",
+      color,
+    },
+  };
+}
 
 export function createReplayChartStyles({
   background,
@@ -44,6 +62,8 @@ export function createReplayChartStyles({
       tooltip: {
         custom: (data) => [
           ...BASE_CANDLE_TOOLTIP_LEGENDS,
+          createPctChangeLegend(data.current, { rise, fall, text }),
+          { title: "volume", value: "{volume}" },
           ...(mainIndicatorLegends(data.current?.replayIndex) ?? []),
         ],
       },

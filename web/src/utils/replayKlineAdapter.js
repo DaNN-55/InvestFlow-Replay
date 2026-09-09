@@ -70,6 +70,7 @@ export function adaptReplayBars(bars = []) {
       close,
       volume: optionalFiniteNumber(bar?.volume, 0, "成交量", index),
       amount: optionalFiniteNumber(bar?.amount, 0, "成交额", index),
+      pctChange: optionalFiniteNumber(bar?.pctChange, null, "涨幅", index),
       replayIndex: index,
       replayKey: createReplayKey(bar, index, period),
       replayLabel,
