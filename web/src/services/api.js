@@ -2,6 +2,10 @@ function createRequestError(message, extra = {}) {
   return Object.assign(new Error(message), extra);
 }
 
+export function extractApiRecord(payload) {
+  return payload?.item ?? payload?.record ?? payload ?? null;
+}
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     headers: { Accept: "application/json", "content-type": "application/json", ...(options.headers ?? {}) },

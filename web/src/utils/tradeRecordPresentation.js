@@ -1,5 +1,43 @@
 import { formatDisplayDate } from "./datePresentation.js";
 
+export const TRADE_RECORD_ACCOUNT_TYPE_OPTIONS = Object.freeze([
+  { value: "simulated", label: "模拟" },
+  { value: "live", label: "实盘" },
+]);
+
+export const TRADE_RECORD_TRADE_TYPE_OPTIONS = Object.freeze([
+  { value: "system", label: "系统交易" },
+  { value: "subjective", label: "主观交易" },
+  { value: "violation", label: "违规交易" },
+]);
+
+export const TRADE_RECORD_STATUS_OPTIONS = Object.freeze([
+  { value: "draft", label: "草稿" },
+  { value: "planned", label: "买入许可证" },
+  { value: "entered", label: "已买入" },
+  { value: "holding", label: "持仓复盘" },
+  { value: "exited", label: "已卖出" },
+  { value: "reviewed", label: "最终复盘" },
+  { value: "cancelled", label: "已取消" },
+  { value: "expired", label: "已失效" },
+]);
+
+function optionLabel(options, value) {
+  return options.find((option) => option.value === value)?.label || value || "--";
+}
+
+export function formatTradeRecordAccountType(value) {
+  return optionLabel(TRADE_RECORD_ACCOUNT_TYPE_OPTIONS, value);
+}
+
+export function formatTradeRecordTradeType(value) {
+  return optionLabel(TRADE_RECORD_TRADE_TYPE_OPTIONS, value);
+}
+
+export function formatTradeRecordStatus(value) {
+  return optionLabel(TRADE_RECORD_STATUS_OPTIONS, value);
+}
+
 const SECTOR_TYPE_LABELS = {
   ths_concept: "同花顺概念",
   ths_industry: "同花顺行业",
@@ -51,6 +89,13 @@ function firstPresent(...values) {
     if (Array.isArray(value)) return value.length > 0;
     return true;
   });
+}
+
+export function formatTradeRecordStock(record) {
+  const snapshot = record?.frozenSnapshot ?? record?.evaluationSnapshot ?? record?.snapshot ?? {};
+  const code = record?.stockCode ?? snapshot?.stockCode ?? snapshot?.stock?.code ?? "";
+  const name = record?.stockName ?? snapshot?.stockName ?? snapshot?.stock?.name ?? "";
+  return `${name || "--"} ${code || ""}`.trim();
 }
 
 function compactText(value, maxLength = 100) {
