@@ -1,13 +1,18 @@
 <script setup>
 import { Clock3 } from "lucide-vue-next";
-import { computed, shallowRef } from "vue";
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  shallowRef,
+} from "vue";
 
 import { buildReplayIntradaySeries } from "../../utils/replayIntradayChart.js";
 
-const CHART_WIDTH = 640;
+const MIN_CHART_WIDTH = 280;
 const CHART_HEIGHT = 270;
-const PLOT_LEFT = 46;
-const PLOT_RIGHT = 588;
+const PLOT_LEFT = 40;
+const RIGHT_AXIS_WIDTH = 44;
 const PRICE_TOP = 16;
 const PRICE_BOTTOM = 178;
 const VOLUME_TOP = 204;
@@ -32,6 +37,12 @@ const props = defineProps({
 });
 
 const hoverIndex = shallowRef(null);
+const panel = shallowRef(null);
+const chartWidth = shallowRef(340);
+const plotRight = computed(() =>
+  Math.max(PLOT_LEFT + 120, chartWidth.value - RIGHT_AXIS_WIDTH),
+);
+let resizeObserver = null;
 const barsPerDay = computed(() => Math.floor(240 / Math.max(1, props.stepMinutes)));
 const series = computed(() =>
   buildReplayIntradaySeries(props.bars, {
@@ -84,7 +95,7 @@ const intradayTitle = computed(() =>
 
 function xAt(index) {
   return PLOT_LEFT +
-    Number(series.value.xRatios[index] ?? 0) * (PLOT_RIGHT - PLOT_LEFT);
+    Number(series.value.xRatios[index] ?? 0) * (plotRight.value - PLOT_LEFT);
 }
 
 function yAt(price) {
@@ -122,10 +133,10 @@ function volumeColor(bar, index) {
 function handlePointerMove(event) {
   if (!props.bars.length) return;
   const bounds = event.currentTarget.getBoundingClientRect();
-  const svgX = (event.clientX - bounds.left) / bounds.width * CHART_WIDTH;
+  const svgX = (event.clientX - bounds.left) / bounds.width * chartWidth.value;
   const ratio = Math.min(
     1,
-    Math.max(0, (svgX - PLOT_LEFT) / (PLOT_RIGHT - PLOT_LEFT)),
+    Math.max(0, (svgX - PLOT_LEFT) / (plotRight.value - PLOT_LEFT)),
   );
   const index = Math.round(ratio * (barsPerDay.value - 1));
   hoverIndex.value = index < props.bars.length ? index : null;
@@ -139,10 +150,28 @@ function formatVolume(value) {
   const volume = Number(value ?? 0);
   return volume >= 10000 ? `${(volume / 10000).toFixed(1)}万` : volume.toFixed(0);
 }
+
+onMounted(() => {
+  const updateWidth = () => {
+    chartWidth.value = Math.max(
+      MIN_CHART_WIDTH,
+      Math.round(panel.value?.clientWidth ?? 340),
+    );
+  };
+  updateWidth();
+  if (typeof ResizeObserver !== "undefined" && panel.value) {
+    resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(panel.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+});
 </script>
 
 <template>
-  <section class="replay-intraday-panel">
+  <section ref="panel" class="replay-intraday-panel">
     <header class="replay-intraday-panel__header">
       <div>
         <h2><Clock3 :size="15" />{{ intradayTitle }}</h2>
@@ -159,20 +188,25 @@ function formatVolume(value) {
     <svg
       v-if="bars.length"
       class="replay-intraday-panel__chart"
-      :viewBox="`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`"
+      :viewBox="`0 0 ${chartWidth} ${CHART_HEIGHT}`"
       preserveAspectRatio="none"
       role="img"
       aria-label="当日分时折线图"
       @pointermove="handlePointerMove"
       @pointerleave="hoverIndex = null"
     >
-      <rect width="640" height="270" fill="var(--ql-color-bg-muted)" />
+      <rect :width="chartWidth" :height="CHART_HEIGHT" fill="var(--ql-color-bg-muted)" />
+      <g class="replay-intraday-panel__axis-bands">
+        <rect x="0" :width="PLOT_LEFT" :height="VOLUME_BOTTOM" />
+        <rect :x="plotRight" :width="chartWidth - plotRight" :height="VOLUME_BOTTOM" />
+      </g>
       <g class="replay-intraday-panel__grid">
         <template v-for="tick in priceTicks" :key="tick.y">
-          <line :x1="PLOT_LEFT" :x2="PLOT_RIGHT" :y1="tick.y" :y2="tick.y" />
-          <text x="4" :y="tick.y + 3">{{ formatPrice(tick.price) }}</text>
+          <line :x1="PLOT_LEFT" :x2="plotRight" :y1="tick.y" :y2="tick.y" />
+          <text class="axis-label axis-label--price" x="4" :y="tick.y + 3">{{ formatPrice(tick.price) }}</text>
           <text
-            x="636"
+            class="axis-label axis-label--percent"
+            :x="chartWidth - 4"
             :y="tick.y + 3"
             text-anchor="end"
             :class="tick.percent > 0 ? 'rise' : tick.percent < 0 ? 'fall' : ''"
@@ -183,15 +217,15 @@ function formatVolume(value) {
         <line
           v-for="tick in timeTicks"
           :key="tick.label"
-          :x1="PLOT_LEFT + tick.ratio * (PLOT_RIGHT - PLOT_LEFT)"
-          :x2="PLOT_LEFT + tick.ratio * (PLOT_RIGHT - PLOT_LEFT)"
+          :x1="PLOT_LEFT + tick.ratio * (plotRight - PLOT_LEFT)"
+          :x2="PLOT_LEFT + tick.ratio * (plotRight - PLOT_LEFT)"
           :y1="PRICE_TOP"
           :y2="VOLUME_BOTTOM"
         />
       </g>
       <line
         :x1="PLOT_LEFT"
-        :x2="PLOT_RIGHT"
+        :x2="plotRight"
         :y1="referenceY"
         :y2="referenceY"
         class="replay-intraday-panel__reference"
@@ -217,7 +251,7 @@ function formatVolume(value) {
         <text
           v-for="tick in timeTicks"
           :key="tick.label"
-          :x="PLOT_LEFT + tick.ratio * (PLOT_RIGHT - PLOT_LEFT)"
+          :x="PLOT_LEFT + tick.ratio * (plotRight - PLOT_LEFT)"
           y="263"
           :text-anchor="tick.anchor"
         >
@@ -295,6 +329,11 @@ function formatVolume(value) {
   vector-effect: non-scaling-stroke;
 }
 
+.replay-intraday-panel__axis-bands rect {
+  fill: var(--ql-color-bg-surface-strong);
+  opacity: 0.82;
+}
+
 .replay-intraday-panel__grid text,
 .replay-intraday-panel__times text {
   fill: var(--ql-color-text-muted);
@@ -302,12 +341,17 @@ function formatVolume(value) {
   font-variant-numeric: tabular-nums;
 }
 
+.replay-intraday-panel__grid .axis-label {
+  fill: var(--ql-ink);
+  font-size: 10px;
+}
+
 .replay-intraday-panel__grid .rise {
-  fill: #dc2626;
+  fill: var(--ql-rise);
 }
 
 .replay-intraday-panel__grid .fall {
-  fill: #059669;
+  fill: var(--ql-fall);
 }
 
 .replay-intraday-panel__reference {

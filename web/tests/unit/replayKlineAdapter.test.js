@@ -61,6 +61,14 @@ describe("replay KLineChart adapter", () => {
     assert.equal(JSON.stringify(anonymous.data).includes("2026"), false);
   });
 
+  it("preserves the candle percentage change for the hover data row", () => {
+    const adapted = adaptReplayBars([
+      { ...sourceBars[0], pctChange: 2.3456 },
+    ]);
+
+    assert.equal(adapted.data[0].pctChange, 2.3456);
+  });
+
   it("rejects an invalid OHLC bar instead of silently drawing partial data", () => {
     assert.throws(
       () => adaptReplayBars([{ ...sourceBars[0], high: "invalid" }]),

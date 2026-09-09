@@ -171,6 +171,7 @@ export function useTradeRecordArchive({ pageSize = 10, __test } = {}) {
   }
 
   function syncRouteSelection(id) {
+    if (route.name !== "quant-trade-records") return;
     if (String(route.query.id ?? "") === id) return;
     const query = { ...route.query };
     if (id) query.id = id;

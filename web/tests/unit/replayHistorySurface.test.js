@@ -107,6 +107,11 @@ describe("replay history tracking surface", () => {
     assert.match(recordsSource, /router\.push\("\/decision\/market-replay"\)/u);
     assert.match(filtersSource, /状态筛选/u);
     assert.match(filtersSource, /关键词/u);
+    assert.match(filtersSource, />\s*查询\s*</u);
+    assert.match(filtersSource, /class="replay-history-filters__submit"[\s\S]*?size="lg"/u);
+    assert.match(filtersSource, /\.replay-history-filters__submit \{[\s\S]*?font-size: 14px;/u);
+    assert.doesNotMatch(filtersSource, />\s*刷新\s*</u);
+    assert.doesNotMatch(recordsSource, /@refresh=/u);
     assert.match(listSource, /共 \{\{ total \}\} 局/u);
     assert.match(listSource, /@click="emit\('select'/u);
     assert.match(detailSource, /打开演练/u);
@@ -129,7 +134,7 @@ describe("replay history tracking surface", () => {
     assert.match(recordsSource, /删除复盘修正/u);
     assert.match(recordsSource, /detailLoading/u);
     assert.match(recordsSource, /detailError/u);
-    assert.match(recordsSource, /重试详情/u);
+    assert.doesNotMatch(recordsSource, />\s*重试(?:详情)?\s*</u);
     for (const label of [
       "执行纪律",
       "风险控制",
@@ -150,6 +155,10 @@ describe("replay history tracking surface", () => {
     }
     assert.match(detailSource, /算法/u);
     assert.match(detailSource, /权重快照/u);
+    assert.doesNotMatch(detailSource, /查看权重快照说明/u);
+    assert.match(detailSource, /查看综合评分计算规则/u);
+    assert.match(detailSource, /label="查看综合评分计算规则"[\s\S]*?wide/u);
+    assert.match(detailSource, /scoreCalculationExplanation/u);
     assert.match(detailSource, /不适用/u);
     assert.match(detailSource, /<details[\s\S]*?item\.scoreCard[\s\S]*?open/u);
     assert.doesNotMatch(detailSource, /点击折叠/u);
@@ -199,5 +208,15 @@ describe("replay history tracking surface", () => {
       detailSource,
       /replay-history-detail__algorithm[\s\S]*?attemptPresentation\.scoreNote/u,
     );
+  });
+
+  it("uses the same selector component for all three basic-information fields", () => {
+    const basicInformation = viewSource.match(
+      /<h3>基本信息<\/h3>([\s\S]*?)<\/section>/u,
+    )?.[1] ?? "";
+
+    assert.equal((basicInformation.match(/<UiSelect/gu) ?? []).length, 3);
+    assert.match(basicInformation, /:model-value="form\.status"/u);
+    assert.doesNotMatch(basicInformation, /trade-record-readonly/u);
   });
 });

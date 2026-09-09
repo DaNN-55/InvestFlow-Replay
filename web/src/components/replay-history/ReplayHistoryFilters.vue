@@ -24,7 +24,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(["apply", "refresh"]);
+const emit = defineEmits(["apply"]);
 const filters = reactive({
   state: props.state,
   attemptKind: props.attemptKind,
@@ -81,17 +81,13 @@ function submit() {
       />
     </label>
     <div class="replay-history-filters__actions">
-      <UiButton type="submit" size="sm" :loading="loading">
-        查询
-      </UiButton>
       <UiButton
-        type="button"
-        size="sm"
-        variant="secondary"
-        :disabled="loading"
-        @click="emit('refresh')"
+        class="replay-history-filters__submit"
+        type="submit"
+        size="lg"
+        :loading="loading"
       >
-        刷新
+        查询
       </UiButton>
     </div>
   </form>
@@ -123,6 +119,10 @@ function submit() {
 .replay-history-filters__actions {
   display: flex;
   gap: 0.5rem;
+}
+
+.replay-history-filters__submit {
+  font-size: 14px;
 }
 
 @media (max-width: 720px) {

@@ -191,6 +191,34 @@ test("交易追踪列表每页最多显示十条", async ({ page }) => {
   await expect(list.locator(".trade-record-list__item--selected")).toContainText("分页股票11");
 });
 
+test("从交易追踪页可以进入行情演练", async ({ page }) => {
+  let notifyListStarted;
+  let releaseList;
+  const listStarted = new Promise((resolve) => { notifyListStarted = resolve; });
+  const delayedList = new Promise((resolve) => { releaseList = resolve; });
+  await page.unroute("**/api/**");
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/quant/decision/trade-records") {
+      notifyListStarted();
+      await delayedList;
+      await route.fulfill({ json: { items: [record] } });
+      return;
+    }
+    await route.fulfill({ json: {} });
+  });
+  await page.goto(`${baseUrl}/decision/market-replay`);
+  await page.getByRole("link", { name: "交易追踪", exact: true }).click();
+  await listStarted;
+
+  await page.getByRole("link", { name: "行情演练", exact: true }).click();
+  releaseList();
+
+  await expect(page).toHaveURL(`${baseUrl}/decision/market-replay`);
+  await page.waitForTimeout(200);
+  await expect(page).toHaveURL(`${baseUrl}/decision/market-replay`);
+});
+
 test("新建交易通过代码或名称选择后同步显示股票身份", async ({ page }) => {
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
   await page.getByRole("button", { name: "新建交易", exact: true }).click();

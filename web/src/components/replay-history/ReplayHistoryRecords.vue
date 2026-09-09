@@ -6,7 +6,6 @@ import { useReplayHistory } from "../../composables/useReplayHistory.js";
 import { api } from "../../services/api.js";
 import ConfirmDialog from "../ConfirmDialog.vue";
 import ReplayReviewCorrectionForm from "../replay/ReplayReviewCorrectionForm.vue";
-import UiButton from "../ui/UiButton.vue";
 import UiCard from "../ui/UiCard.vue";
 import UiModal from "../ui/UiModal.vue";
 import { getLatestReplayReviewSnapshot } from "../../utils/replayReviewCorrections.js";
@@ -33,7 +32,6 @@ const {
   applyFilters,
   goToPage,
   selectItem,
-  loadSelectedDetail,
   refresh,
 } = useReplayHistory();
 
@@ -262,7 +260,6 @@ async function addCandidate(item) {
         :keyword="keyword"
         :loading="loading"
         @apply="applyFilters"
-        @refresh="refresh"
       />
     </UiCard>
 
@@ -271,9 +268,6 @@ async function addCandidate(item) {
       class="replay-history-records__message replay-history-records__message--error"
     >
       <span>{{ error }}</span>
-      <UiButton type="button" size="sm" variant="secondary" @click="refresh">
-        重试
-      </UiButton>
     </div>
 
     <div v-else class="replay-history-records__layout">
@@ -305,14 +299,6 @@ async function addCandidate(item) {
         class="replay-history-records__message replay-history-records__message--error"
       >
         <span>{{ detailError }}</span>
-        <UiButton
-          type="button"
-          size="sm"
-          variant="secondary"
-          @click="loadSelectedDetail(selectedId)"
-        >
-          重试详情
-        </UiButton>
       </div>
       <div
         v-else-if="detailLoading || (selectedItem && !loading)"

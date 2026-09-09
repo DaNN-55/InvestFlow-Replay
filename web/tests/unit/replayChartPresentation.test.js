@@ -43,6 +43,10 @@ describe("replay chart presentation", () => {
       "setIndicators",
     ]);
     assert.equal(presentation.chart.value.bars.length, 2);
+    assert.equal(presentation.chart.value.bars[0].pctChange, null);
+    assert.ok(
+      Math.abs(presentation.chart.value.bars[1].pctChange - 9.0909090909) < 0.000001,
+    );
     assert.equal(presentation.latestQuote.value.close, "12.00");
     assert.equal(presentation.latestQuote.value.amount, "2.00 亿");
 

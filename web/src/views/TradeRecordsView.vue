@@ -30,6 +30,7 @@ import {
   formatTradeRecordStatus,
   formatTradeRecordStock,
   TRADE_RECORD_ACCOUNT_TYPE_OPTIONS,
+  TRADE_RECORD_STATUS_OPTIONS,
   TRADE_RECORD_TRADE_TYPE_OPTIONS,
 } from "../utils/tradeRecordPresentation.js";
 
@@ -85,6 +86,7 @@ const editableFields = [
 
 const accountTypeOptions = TRADE_RECORD_ACCOUNT_TYPE_OPTIONS;
 const tradeTypeOptions = TRADE_RECORD_TRADE_TYPE_OPTIONS;
+const statusOptions = TRADE_RECORD_STATUS_OPTIONS;
 
 const strategyProfile = reactive(createEmptyStrategyProfile());
 const executionEvents = ref([]);
@@ -603,6 +605,7 @@ async function deleteSelectedRecord() {
 watch(
   () => route.query.id,
   (id) => {
+    if (route.name !== "quant-trade-records") return;
     const nextId = String(id || "");
     if (nextId !== selectedId.value) {
       void tradeRecordArchive.select(nextId).then(applySelectionResult);
@@ -750,7 +753,10 @@ onMounted(() => {
                 </label>
                 <label>
                   <span>当前阶段</span>
-                  <div class="trade-record-readonly">{{ statusLabel(form.status) }}</div>
+                  <UiSelect :model-value="form.status" size="sm" disabled>
+                    <option value="">未设置</option>
+                    <option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                  </UiSelect>
                 </label>
               </div>
             </section>
@@ -1029,17 +1035,6 @@ onMounted(() => {
 
 .trade-record-detail {
   min-width: 0;
-}
-
-.trade-record-readonly {
-  align-items: center;
-  background: var(--ql-color-bg-muted);
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-  color: var(--ql-color-text-body);
-  display: flex;
-  min-height: 2rem;
-  padding: 0 0.625rem;
 }
 
 .trade-license-metrics {
