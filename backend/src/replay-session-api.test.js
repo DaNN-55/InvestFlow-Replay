@@ -10,6 +10,8 @@ import request from "supertest";
 
 import { createApp } from "./app.js";
 import { createDatabase } from "./db.js";
+import { createReplayLifecycle } from "./replay-lifecycle.js";
+import { createReplayLifecycleStore } from "./replay-lifecycle-store.js";
 
 function privateScenario(gameLength = 20, seed = null) {
   const bars = Array.from({ length: 250 + gameLength }, (_, index) => {
@@ -1399,6 +1401,122 @@ describe("replay session API", () => {
     assert.deepEqual(restored.body.session, post.body.session);
 
   });
+});
+
+function createHybridDatabaseSession(database, id) {
+  const snapshot = privateHybridScenario(5);
+  const createdAt = "2026-08-09T00:00:00.000Z";
+  return database.createReplaySession({
+    id,
+    sourceDataVersion: snapshot.sourceDataVersion,
+    gameLength: snapshot.gameLength,
+    observationBars: snapshot.observationBars,
+    revealedFutureBars: 0,
+    status: "active",
+    revision: 0,
+    snapshot,
+    account: {
+      initialCapital: 100000,
+      cash: 100000,
+      positionQuantity: 0,
+      availableQuantity: 0,
+      lockedQuantity: 0,
+      averageCost: 0,
+      realizedPnl: 0,
+      totalFees: 0,
+    },
+    costConfig: {
+      commissionRate: 0.0003,
+      minCommission: 5,
+      stampTaxRate: 0.0005,
+      transferFeeRate: 0.00001,
+      slippageBps: 0,
+    },
+    trainingConfig: { mode: "free" },
+    createdAt,
+    updatedAt: createdAt,
+  });
+}
+
+function createDatabaseReplayLifecycle(database) {
+  return createReplayLifecycle({
+    store: createReplayLifecycleStore(database),
+    now: () => "2026-08-09T00:01:00.000Z",
+  });
+}
+
+it("rolls back every internal step when whole-day advancement fails", () => {
+  const root = mkdtempSync(join(tmpdir(), "investflow-replay-day-rollback-"));
+  const dbPath = join(root, "day-rollback.sqlite");
+  const database = createDatabase(dbPath);
+  const session = createHybridDatabaseSession(database, "day-rollback-session");
+  const lifecycle = createDatabaseReplayLifecycle(database);
+  const triggerDb = new DatabaseSync(dbPath);
+  triggerDb.exec(`
+    CREATE TRIGGER fail_second_day_step
+    BEFORE UPDATE OF revision ON replay_sessions
+    WHEN NEW.id = 'day-rollback-session' AND NEW.revision = 2
+    BEGIN
+      SELECT RAISE(ABORT, 'forced day-step failure');
+    END;
+  `);
+  triggerDb.close();
+
+  assert.throws(
+    () => lifecycle.advanceSession({
+      sessionId: session.id,
+      actionId: "day-rollback",
+      expectedRevision: session.revision,
+      mode: "day",
+    }),
+    /forced day-step failure/u,
+  );
+
+  const restored = database.getReplaySession(session.id);
+  assert.equal(restored.revision, 0);
+  assert.equal(restored.revealedFutureBars, 0);
+  const inspectionDb = new DatabaseSync(dbPath, { readOnly: true });
+  const eventCount = inspectionDb
+    .prepare("SELECT COUNT(*) AS count FROM replay_events WHERE session_id = ?")
+    .get(session.id).count;
+  inspectionDb.close();
+  assert.equal(eventCount, 0);
+
+  database.close();
+  rmSync(root, { recursive: true, force: true });
+});
+
+it("retries a whole-day action without advancing the session twice", () => {
+  const root = mkdtempSync(join(tmpdir(), "investflow-replay-day-retry-"));
+  const dbPath = join(root, "day-retry.sqlite");
+  const database = createDatabase(dbPath);
+  const session = createHybridDatabaseSession(database, "day-retry-session");
+  const lifecycle = createDatabaseReplayLifecycle(database);
+  const command = {
+    sessionId: session.id,
+    actionId: "day-retry",
+    expectedRevision: session.revision,
+    mode: "day",
+  };
+
+  const first = lifecycle.advanceSession(command);
+  const repeated = lifecycle.advanceSession(command);
+
+  assert.equal(first.idempotent, false);
+  assert.equal(first.session.revealedFutureBars, 3);
+  assert.equal(first.session.revision, 3);
+  assert.equal(repeated.idempotent, true);
+  assert.equal(repeated.session.revealedFutureBars, 3);
+  assert.equal(repeated.session.revision, 3);
+  const inspectionDb = new DatabaseSync(dbPath, { readOnly: true });
+  const eventCount = inspectionDb
+    .prepare("SELECT COUNT(*) AS count FROM replay_events WHERE session_id = ?")
+    .get(session.id).count;
+  inspectionDb.close();
+  assert.equal(eventCount, 3);
+
+  database.close();
+  rmSync(root, { recursive: true, force: true });
 });
 
 it("freezes the scoring configuration at session creation and uses it at settlement", () => {

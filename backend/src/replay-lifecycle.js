@@ -116,72 +116,69 @@ export function createReplayLifecycle({
     });
   }
 
-  function advanceOnce({ sessionId, actionId, expectedRevision, mode, step }) {
-    return store.advanceSession({
-      sessionId,
-      actionId: `${actionId}:${step}`,
-      expectedRevision,
-      requestPayload: buildActionRequest(expectedRevision, { mode }),
-      updatedAt: now(),
-    });
-  }
-
   function advanceSession({
     sessionId,
     actionId,
     expectedRevision,
     mode = "minute",
   }) {
-    if (mode === "day" && store.advanceSessionThroughDay) {
-      return store.advanceSessionThroughDay({
-        sessionId,
-        actionId,
-        expectedRevision,
-        updatedAt: now(),
-      });
-    }
-    let result = advanceOnce({
-      sessionId,
-      actionId,
-      expectedRevision,
-      mode,
-      step: 0,
-    });
-    if (!result) {
-      return null;
-    }
+    if (mode === "day") {
+      const updatedAt = now();
+      return store.runInTransaction((transactionStore) => {
+        let result = transactionStore.advanceSession({
+          sessionId,
+          actionId: `${actionId}:0`,
+          expectedRevision,
+          requestPayload: buildActionRequest(expectedRevision, { mode }),
+          updatedAt,
+        });
+        if (!result) {
+          return null;
+        }
+        if (!result.advanced || result.idempotent) {
+          const session = transactionStore.getSession(sessionId);
+          return { ...result, session };
+        }
 
-    const isHybrid = result.session?.snapshot?.interval === "hybrid";
-    if (mode !== "day" || !isHybrid || !result.advanced || result.idempotent) {
-      return result;
-    }
-
-    const firstSequence =
-      Number(result.session.observationBars) +
-      Number(result.session.revealedFutureBars);
-    const targetTradeDate = String(
-      result.session.snapshot?.bars?.[firstSequence - 1]?.tradeDate ?? "",
-    );
-    let step = 1;
-    while (
-      result.session.status !== "completed" &&
-      String(
-        result.session.snapshot?.bars?.[
+        const firstSequence =
           Number(result.session.observationBars) +
-            Number(result.session.revealedFutureBars)
-        ]?.tradeDate ?? "",
-      ) === targetTradeDate
-    ) {
-      result = advanceOnce({
-        sessionId,
-        actionId,
-        expectedRevision: Number(result.session.revision),
-        mode,
-        step,
+          Number(result.session.revealedFutureBars);
+        const targetTradeDate = String(
+          result.session.snapshot?.bars?.[firstSequence - 1]?.tradeDate ?? "",
+        );
+        let step = 1;
+        while (
+          result.session.status !== "completed" &&
+          String(
+            result.session.snapshot?.bars?.[
+              Number(result.session.observationBars) +
+                Number(result.session.revealedFutureBars)
+            ]?.tradeDate ?? "",
+          ) === targetTradeDate
+        ) {
+          const nextRevision = Number(result.session.revision);
+          result = transactionStore.advanceSession({
+            sessionId,
+            actionId: `${actionId}:${step}`,
+            expectedRevision: nextRevision,
+            requestPayload: buildActionRequest(nextRevision, { mode }),
+            updatedAt,
+          });
+          step += 1;
+        }
+        return {
+          ...result,
+          session: transactionStore.getSession(sessionId),
+        };
       });
-      step += 1;
     }
-    return result;
+    return store.advanceSession({
+      sessionId,
+      actionId: `${actionId}:0`,
+      expectedRevision,
+      requestPayload: buildActionRequest(expectedRevision, { mode }),
+      updatedAt: now(),
+    });
   }
 
   function finishSession({
