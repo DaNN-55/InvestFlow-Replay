@@ -185,6 +185,10 @@ test("交易追踪列表每页最多显示十条", async ({ page }) => {
   await list.getByRole("button", { name: "下一页", exact: true }).click();
   await expect(list.locator(".trade-record-list__item")).toHaveCount(1);
   await expect(list.getByText("第 2 / 2 页", { exact: true })).toBeVisible();
+
+  await page.goto(`${baseUrl}/decision/trade-records?id=trade-record-page-11`);
+  await expect(list.getByText("第 2 / 2 页", { exact: true })).toBeVisible();
+  await expect(list.locator(".trade-record-list__item--selected")).toContainText("分页股票11");
 });
 
 test("新建交易通过代码或名称选择后同步显示股票身份", async ({ page }) => {

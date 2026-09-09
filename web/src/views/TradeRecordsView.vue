@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { Ellipsis, Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 
 import ConfirmDialog from "../components/ConfirmDialog.vue";
@@ -17,19 +17,34 @@ import UiInput from "../components/ui/UiInput.vue";
 import UiSelect from "../components/ui/UiSelect.vue";
 import UiTextarea from "../components/ui/UiTextarea.vue";
 import UiTooltip from "../components/ui/UiTooltip.vue";
-import { api } from "../services/api";
-import { buildTradeRecordAnalytics } from "../utils/tradeRecordAnalytics.js";
+import { useTradeRecordArchive } from "../composables/useTradeRecordArchive.js";
+import { api, extractApiRecord } from "../services/api.js";
 import { formatDisplayDate } from "../utils/datePresentation.js";
 import {
   buildTradeRecordDraftSavePayload,
   calculateTradeLicense,
   resolveLegacyTradeRecordPlan,
 } from "../utils/tradeLicense.js";
+import {
+  formatTradeRecordAccountType,
+  formatTradeRecordStatus,
+  formatTradeRecordStock,
+  TRADE_RECORD_ACCOUNT_TYPE_OPTIONS,
+  TRADE_RECORD_TRADE_TYPE_OPTIONS,
+} from "../utils/tradeRecordPresentation.js";
 
 const route = useRoute();
-const router = useRouter();
 const primaryTab = ref("records");
-const TRADE_RECORD_PAGE_SIZE = 10;
+const tradeRecordArchive = useTradeRecordArchive();
+const records = tradeRecordArchive.records;
+const tradeRecordPage = tradeRecordArchive.page;
+const selectedId = tradeRecordArchive.selectedId;
+const selectedRecord = tradeRecordArchive.selectedRecord;
+const loading = tradeRecordArchive.loading;
+const detailLoading = tradeRecordArchive.detailLoading;
+const tradeAnalytics = tradeRecordArchive.analytics;
+const pagedTradeRecordListItems = tradeRecordArchive.pagedItems;
+const tradeRecordPageCount = tradeRecordArchive.pageCount;
 
 const editableFields = [
   "stockName",
@@ -68,35 +83,12 @@ const editableFields = [
   "exitReason",
 ];
 
-const accountTypeOptions = [
-  { value: "simulated", label: "模拟" },
-  { value: "live", label: "实盘" },
-];
-const tradeTypeOptions = [
-  { value: "system", label: "系统交易" },
-  { value: "subjective", label: "主观交易" },
-  { value: "violation", label: "违规交易" },
-];
-const statusOptions = [
-  { value: "draft", label: "草稿" },
-  { value: "planned", label: "买入许可证" },
-  { value: "entered", label: "已买入" },
-  { value: "holding", label: "持仓复盘" },
-  { value: "exited", label: "已卖出" },
-  { value: "reviewed", label: "最终复盘" },
-  { value: "cancelled", label: "已取消" },
-  { value: "expired", label: "已失效" },
-];
+const accountTypeOptions = TRADE_RECORD_ACCOUNT_TYPE_OPTIONS;
+const tradeTypeOptions = TRADE_RECORD_TRADE_TYPE_OPTIONS;
 
-const records = ref([]);
-const tradeRecordPage = ref(1);
-const selectedId = ref("");
-const selectedRecord = ref(null);
 const strategyProfile = reactive(createEmptyStrategyProfile());
 const executionEvents = ref([]);
 const form = ref(createEmptyForm());
-const loading = ref(false);
-const detailLoading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
 const statusText = ref("");
@@ -166,27 +158,6 @@ const licensePreview = computed(() => calculateTradeLicense({
   maxPositionPct: selectedMaxPositionPct.value,
   lotSize: executionSettings.value?.lotSize ?? 100,
 }));
-const tradeAnalytics = computed(() => buildTradeRecordAnalytics(records.value));
-const tradeRecordListItems = computed(() => records.value.map((record) => {
-  const profit = formatRecordProfitPct(record);
-  return {
-    id: recordId(record),
-    title: formatStock(record),
-    status: statusLabel(record?.status),
-    meta: `${accountTypeLabel(record?.accountType)} · ${tradeTypeLabel(record?.tradeType)} · ${record?.strategyProfile?.name || "未指定"}`,
-    profit: profit === "--" ? "" : profit,
-    profitTone: getProfitTone(profit),
-    updatedAt: formatCompactDate(record?.updatedAt || record?.createdAt),
-  };
-}));
-const tradeRecordPageCount = computed(() =>
-  Math.max(1, Math.ceil(tradeRecordListItems.value.length / TRADE_RECORD_PAGE_SIZE)),
-);
-const pagedTradeRecordListItems = computed(() => {
-  const offset = (tradeRecordPage.value - 1) * TRADE_RECORD_PAGE_SIZE;
-  return tradeRecordListItems.value.slice(offset, offset + TRADE_RECORD_PAGE_SIZE);
-});
-
 function createEmptyForm() {
   return Object.fromEntries(editableFields.map((field) => [field, ""]));
 }
@@ -222,23 +193,8 @@ function buildStrategyProfilePayload() {
   return { ...strategyProfile };
 }
 
-function extractItems(payload) {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-  return payload?.items ?? payload?.records ?? [];
-}
-
-function extractRecord(payload) {
-  return payload?.item ?? payload?.record ?? payload ?? null;
-}
-
 function hasRecordContent(record) {
   return record && Object.keys(record).length > 0;
-}
-
-function recordId(record) {
-  return record?.id ?? record?.recordId ?? "";
 }
 
 function applyRecordToForm(record) {
@@ -280,32 +236,25 @@ function buildSavePayload() {
   };
 }
 
-function applyUpdatedRecord(record) {
-  selectedRecord.value = record;
-  applyRecordToForm(record);
-  records.value = records.value.map((item) =>
-    recordId(item) === recordId(record) ? { ...item, ...record } : item,
-  );
+function selectedWriteTarget() {
+  return {
+    id: selectedId.value,
+    record: selectedRecord.value,
+  };
+}
+
+function applyUpdatedRecord(record, { targetId = "", select = false } = {}) {
+  const shouldRefreshForm = select || selectedId.value === targetId;
+  const archivedRecord = tradeRecordArchive.acceptSavedRecord(record, { select });
+  if (shouldRefreshForm) applyRecordToForm(archivedRecord);
 }
 
 async function loadExecutionSettings() {
   executionSettings.value = await api.getDecisionExecutionSettings();
 }
 
-function formatStock(record) {
-  const snapshot = record?.frozenSnapshot ?? record?.evaluationSnapshot ?? record?.snapshot ?? {};
-  const code = record?.stockCode ?? snapshot?.stockCode ?? snapshot?.stock?.code ?? "";
-  const name = record?.stockName ?? snapshot?.stockName ?? snapshot?.stock?.name ?? "";
-  return `${name || "--"} ${code || ""}`.trim();
-}
-
 function formatDate(value) {
   return formatDisplayDate(value);
-}
-
-function formatCompactDate(value) {
-  if (!value) return "";
-  return String(value).slice(5, 10);
 }
 
 function formatRange(low, high) {
@@ -321,46 +270,11 @@ function formatRange(low, high) {
   return `${low ?? "--"} - ${high ?? "--"}`;
 }
 
-function optionLabel(options, value) {
-  return options.find((option) => option.value === value)?.label || value || "--";
-}
-
-function tradeTypeLabel(value) {
-  return optionLabel(tradeTypeOptions, value);
-}
-
-function statusLabel(value) {
-  return optionLabel(statusOptions, value);
-}
-
-function accountTypeLabel(value) {
-  return optionLabel(accountTypeOptions, value);
-}
+const statusLabel = formatTradeRecordStatus;
+const accountTypeLabel = formatTradeRecordAccountType;
 
 function stageIs(...stages) {
   return stages.includes(selectedStage.value);
-}
-
-function parseTradeNumber(value) {
-  if (value == null || value === "") {
-    return null;
-  }
-  const normalized = String(value).replace(/,/gu, "").trim();
-  const matched = normalized.match(/[-+]?\d+(?:\.\d+)?/u);
-  if (!matched) {
-    return null;
-  }
-  const parsed = Number(matched[0]);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function formatTradePercent(value) {
-  const parsed = parseTradeNumber(value);
-  if (parsed == null) {
-    return "--";
-  }
-  const sign = parsed > 0 ? "+" : "";
-  return `${sign}${parsed.toFixed(2)}%`;
 }
 
 function formatAnalyticsPercent(value, { signed = false } = {}) {
@@ -375,37 +289,15 @@ function formatProfitLossRatio(value) {
   return `${Number(value).toFixed(2).replace(/\.00$/u, "")} 倍`;
 }
 
-function formatRecordProfitPct(record) {
-  const ledgerReturnPct = parseTradeNumber(record?.ledger?.returnPct);
-  if (ledgerReturnPct != null && ["open", "closed"].includes(record?.ledger?.state)) {
-    return formatTradePercent(ledgerReturnPct);
-  }
-  const entryPrice = parseTradeNumber(record?.actualEntryPrice);
-  const exitPrice = parseTradeNumber(record?.actualExitPrice);
-  if (entryPrice == null || exitPrice == null || entryPrice === 0) {
-    return "--";
-  }
-  return formatTradePercent(((exitPrice - entryPrice) / entryPrice) * 100);
-}
-
-function getProfitTone(value) {
-  const profit = parseTradeNumber(value);
-  if (profit == null || profit === 0) return "neutral";
-  return profit > 0 ? "positive" : "negative";
-}
-
 async function createStandaloneTradeRecord(payload) {
   creating.value = true;
   createErrorText.value = "";
   statusText.value = "";
   errorText.value = "";
   try {
-    const record = extractRecord(await api.saveTradeRecord(payload));
-    const id = recordId(record);
+    const record = extractApiRecord(await api.saveTradeRecord(payload));
+    applyUpdatedRecord(record, { select: true });
     createDrawerOpen.value = false;
-    tradeRecordPage.value = 1;
-    updateRouteSelection(id);
-    await loadRecords(id);
     statusText.value = "独立交易追踪单已创建";
   } catch (error) {
     createErrorText.value = error?.message ?? "交易追踪单创建失败";
@@ -429,10 +321,11 @@ function openEditDrawer() {
 
 async function updateSelectedIdentity(payload) {
   if (!selectedId.value) return;
+  const target = selectedWriteTarget();
   const updates = {
     ...payload,
     strategyProfile: payload.strategyProfile
-      ? { ...(selectedRecord.value?.strategyProfile ?? {}), ...payload.strategyProfile }
+      ? { ...(target.record?.strategyProfile ?? {}), ...payload.strategyProfile }
       : null,
   };
   creating.value = true;
@@ -440,13 +333,13 @@ async function updateSelectedIdentity(payload) {
   statusText.value = "";
   errorText.value = "";
   try {
-    const returnedRecord = extractRecord(await api.updateTradeRecord(selectedId.value, updates));
+    const returnedRecord = extractApiRecord(await api.updateTradeRecord(target.id, updates));
     const record = {
-      ...(selectedRecord.value ?? {}),
+      ...(target.record ?? {}),
       ...updates,
       ...(hasRecordContent(returnedRecord) ? returnedRecord : {}),
     };
-    applyUpdatedRecord(record);
+    applyUpdatedRecord(record, { targetId: target.id });
     createDrawerOpen.value = false;
     statusText.value = "交易信息已修改";
   } catch (error) {
@@ -471,92 +364,41 @@ function normalizeViolations(record) {
     .filter(Boolean);
 }
 
-function updateRouteSelection(id) {
-  const nextQuery = { ...route.query };
-  if (id) {
-    nextQuery.id = id;
-  } else {
-    delete nextQuery.id;
-  }
-  router.replace({
-    path: "/decision/trade-records",
-    query: nextQuery,
-  });
-}
-
 async function loadRecords(preferredId = "") {
-  loading.value = true;
   errorText.value = "";
   statusText.value = "";
-  try {
-    const payload = await api.listTradeRecords();
-    records.value = extractItems(payload);
-    tradeRecordPage.value = Math.min(tradeRecordPage.value, tradeRecordPageCount.value);
-    const nextId = preferredId || String(route.query.id || "") || recordId(records.value[0]);
-    if (nextId) {
-      await selectRecordById(nextId, false);
-    } else {
-      selectedId.value = "";
-      selectedRecord.value = null;
-      form.value = createEmptyForm();
-      Object.assign(strategyProfile, createEmptyStrategyProfile());
-      executionEvents.value = [];
-    }
-  } catch (error) {
-    records.value = [];
-    selectedRecord.value = null;
-    form.value = createEmptyForm();
-    Object.assign(strategyProfile, createEmptyStrategyProfile());
-    executionEvents.value = [];
-    errorText.value = error?.message ?? "交易追踪列表加载失败";
-  } finally {
-    loading.value = false;
+  const result = await tradeRecordArchive.load({ preferredId });
+  if (tradeRecordArchive.errorMessage.value) {
+    clearSelectedRecord();
+    errorText.value = tradeRecordArchive.errorMessage.value;
+    return;
   }
+  applySelectionResult(result);
 }
 
 function goToTradeRecordPage(nextPage) {
-  tradeRecordPage.value = Math.min(
-    tradeRecordPageCount.value,
-    Math.max(1, Number(nextPage) || 1),
-  );
+  tradeRecordArchive.setPage(nextPage);
 }
 
 async function selectRecord(id) {
-  if (!id) {
-    return;
-  }
-  updateRouteSelection(id);
-  await selectRecordById(id, true);
+  const result = await tradeRecordArchive.select(id);
+  applySelectionResult(result);
 }
 
-async function selectRecordById(id, useListFallback = true) {
-  selectedId.value = id;
-  const fallback = records.value.find((record) => recordId(record) === id) ?? null;
-  if (useListFallback && fallback) {
-    selectedRecord.value = fallback;
-    applyRecordToForm(fallback);
+function clearSelectedRecord() {
+  form.value = createEmptyForm();
+  Object.assign(strategyProfile, createEmptyStrategyProfile());
+  executionEvents.value = [];
+}
+
+function applySelectionResult(result) {
+  if (result?.stale) return;
+  if (!result?.record) {
+    clearSelectedRecord();
+    return;
   }
-  detailLoading.value = true;
-  errorText.value = "";
-  try {
-    const payload = await api.getTradeRecord(id);
-    const record = extractRecord(payload);
-    selectedRecord.value = record;
-    applyRecordToForm(record);
-  } catch (error) {
-    if (fallback) {
-      selectedRecord.value = fallback;
-      applyRecordToForm(fallback);
-    } else {
-      selectedRecord.value = null;
-      form.value = createEmptyForm();
-      Object.assign(strategyProfile, createEmptyStrategyProfile());
-      executionEvents.value = [];
-    }
-    errorText.value = error?.message ?? "交易追踪详情加载失败";
-  } finally {
-    detailLoading.value = false;
-  }
+  applyRecordToForm(result.record);
+  errorText.value = result.error ?? "";
 }
 
 async function saveSelectedRecord() {
@@ -570,20 +412,21 @@ async function saveSelectedRecord() {
     return;
   }
   saving.value = true;
+  const target = selectedWriteTarget();
   statusText.value = "";
   errorText.value = "";
   try {
     const savePayload = buildSavePayload();
-    const payload = await api.updateTradeRecord(selectedId.value, savePayload);
-    const returnedRecord = extractRecord(payload);
+    const payload = await api.updateTradeRecord(target.id, savePayload);
+    const returnedRecord = extractApiRecord(payload);
     const record = hasRecordContent(returnedRecord) ? {
-      ...(selectedRecord.value ?? {}),
+      ...(target.record ?? {}),
       ...returnedRecord,
     } : {
-      ...(selectedRecord.value ?? {}),
+      ...(target.record ?? {}),
       ...savePayload,
     };
-    applyUpdatedRecord(record);
+    applyUpdatedRecord(record, { targetId: target.id });
     statusText.value = "交易追踪单已保存";
   } catch (error) {
     errorText.value = error?.message ?? "交易追踪单保存失败";
@@ -596,12 +439,13 @@ async function addExecutionEvent(event) {
   if (!selectedId.value) {
     return;
   }
+  const target = selectedWriteTarget();
   saving.value = true;
   statusText.value = "";
   errorText.value = "";
   try {
-    const record = extractRecord(await api.recordTradeExecutionEvent(selectedId.value, event));
-    applyUpdatedRecord(record);
+    const record = extractApiRecord(await api.recordTradeExecutionEvent(target.id, event));
+    applyUpdatedRecord(record, { targetId: target.id });
     statusText.value = "动作记录已添加";
   } catch (error) {
     errorText.value = error?.message ?? "动作记录添加失败";
@@ -625,17 +469,19 @@ function closeExecutionEventEditor() {
 
 async function saveExecutionEvent(event) {
   if (!selectedId.value || !selectedExecutionEvent.value?.id) return;
+  const target = selectedWriteTarget();
+  const eventId = selectedExecutionEvent.value.id;
   saving.value = true;
   executionEventErrorText.value = "";
   statusText.value = "";
   errorText.value = "";
   try {
-    const record = extractRecord(await api.updateTradeExecutionEvent(
-      selectedId.value,
-      selectedExecutionEvent.value.id,
+    const record = extractApiRecord(await api.updateTradeExecutionEvent(
+      target.id,
+      eventId,
       event,
     ));
-    applyUpdatedRecord(record);
+    applyUpdatedRecord(record, { targetId: target.id });
     executionEventEditorOpen.value = false;
     selectedExecutionEvent.value = null;
     statusText.value = "成交或动作记录已修改";
@@ -652,15 +498,17 @@ function requestDeleteExecutionEvent(event) {
 
 async function deleteExecutionEvent() {
   if (!selectedId.value || !pendingExecutionEventDelete.value?.id) return;
+  const target = selectedWriteTarget();
+  const eventId = pendingExecutionEventDelete.value.id;
   deletingExecutionEvent.value = true;
   statusText.value = "";
   errorText.value = "";
   try {
-    const record = extractRecord(await api.deleteTradeExecutionEvent(
-      selectedId.value,
-      pendingExecutionEventDelete.value.id,
+    const record = extractApiRecord(await api.deleteTradeExecutionEvent(
+      target.id,
+      eventId,
     ));
-    applyUpdatedRecord(record);
+    applyUpdatedRecord(record, { targetId: target.id });
     pendingExecutionEventDelete.value = null;
     statusText.value = "成交或动作记录已删除";
   } catch (error) {
@@ -677,13 +525,15 @@ async function issueSelectedLicense() {
       : licensePreview.value.errors?.[0]?.message ?? "当前计划不能生成许可证";
     return;
   }
+  const target = selectedWriteTarget();
+  const savePayload = buildSavePayload();
   saving.value = true;
   statusText.value = "";
   errorText.value = "";
   try {
-    await api.updateTradeRecord(selectedId.value, buildSavePayload());
-    const record = extractRecord(await api.issueTradeLicense(selectedId.value));
-    applyUpdatedRecord(record);
+    await api.updateTradeRecord(target.id, savePayload);
+    const record = extractApiRecord(await api.issueTradeLicense(target.id));
+    applyUpdatedRecord(record, { targetId: target.id });
     statusText.value = "买入许可证已生成";
   } catch (error) {
     errorText.value = error?.message ?? "买入许可证生成失败";
@@ -693,16 +543,18 @@ async function issueSelectedLicense() {
 }
 
 async function recordSelectedEntry() {
+  const target = selectedWriteTarget();
+  const entry = {
+    actualEntryDate: form.value.actualEntryDate,
+    actualEntryPrice: form.value.actualEntryPrice,
+    actualEntryQuantity: form.value.actualEntryQuantity,
+  };
   saving.value = true;
   statusText.value = "";
   errorText.value = "";
   try {
-    const record = extractRecord(await api.recordTradeEntry(selectedId.value, {
-      actualEntryDate: form.value.actualEntryDate,
-      actualEntryPrice: form.value.actualEntryPrice,
-      actualEntryQuantity: form.value.actualEntryQuantity,
-    }));
-    applyUpdatedRecord(record);
+    const record = extractApiRecord(await api.recordTradeEntry(target.id, entry));
+    applyUpdatedRecord(record, { targetId: target.id });
     statusText.value = "合规买入已记录";
   } catch (error) {
     errorText.value = error?.message ?? "买入记录失败";
@@ -712,12 +564,13 @@ async function recordSelectedEntry() {
 }
 
 async function cancelSelectedPlan() {
+  const target = selectedWriteTarget();
   saving.value = true;
   statusText.value = "";
   errorText.value = "";
   try {
-    const record = extractRecord(await api.cancelTradeRecord(selectedId.value));
-    applyUpdatedRecord(record);
+    const record = extractApiRecord(await api.cancelTradeRecord(target.id));
+    applyUpdatedRecord(record, { targetId: target.id });
     statusText.value = "交易计划已取消";
   } catch (error) {
     errorText.value = error?.message ?? "取消计划失败";
@@ -734,20 +587,10 @@ async function deleteSelectedRecord() {
   statusText.value = "";
   errorText.value = "";
   try {
-    await api.deleteTradeRecord(selectedId.value);
-    records.value = records.value.filter((item) => recordId(item) !== selectedId.value);
-    tradeRecordPage.value = Math.min(tradeRecordPage.value, tradeRecordPageCount.value);
-    const nextId = recordId(records.value[0]);
-    updateRouteSelection(nextId);
-    if (nextId) {
-      await selectRecordById(nextId, true);
-    } else {
-      selectedId.value = "";
-      selectedRecord.value = null;
-      form.value = createEmptyForm();
-      Object.assign(strategyProfile, createEmptyStrategyProfile());
-      executionEvents.value = [];
-    }
+    const deletedId = selectedId.value;
+    await api.deleteTradeRecord(deletedId);
+    const result = await tradeRecordArchive.remove(deletedId);
+    applySelectionResult(result);
     recordDeleteConfirmOpen.value = false;
     statusText.value = "交易追踪单已删除";
   } catch (error) {
@@ -761,8 +604,8 @@ watch(
   () => route.query.id,
   (id) => {
     const nextId = String(id || "");
-    if (nextId && nextId !== selectedId.value) {
-      void selectRecordById(nextId, true);
+    if (nextId !== selectedId.value) {
+      void tradeRecordArchive.select(nextId).then(applySelectionResult);
     }
   },
 );
@@ -863,7 +706,7 @@ onMounted(() => {
           <div class="ql-flex ql-w-full ql-flex-col ql-gap-3 lg:ql-flex-row lg:ql-items-start lg:ql-justify-between">
             <div class="ql-min-w-0">
               <h2 class="ql-text-base ql-font-semibold ql-text-slate-900">
-                {{ selectedRecord ? formatStock(selectedRecord) : "详情表单" }}
+                {{ selectedRecord ? formatTradeRecordStock(selectedRecord) : "详情表单" }}
               </h2>
               <p class="ql-mt-1 ql-text-xs ql-text-slate-500">
                 {{ selectedRecord ? `账户：${accountTypeLabel(form.accountType)} · 阶段：${statusLabel(form.status)}` : "请选择一条交易追踪单" }}
@@ -1108,7 +951,7 @@ onMounted(() => {
       <ConfirmDialog
         :open="recordDeleteConfirmOpen"
         title="删除交易追踪单"
-        :message="`确认删除 ${selectedRecord ? formatStock(selectedRecord) : '这条记录'}？删除后无法从页面恢复。`"
+        :message="`确认删除 ${selectedRecord ? formatTradeRecordStock(selectedRecord) : '这条记录'}？删除后无法从页面恢复。`"
         confirm-text="确认删除"
         :busy="deleting"
         @cancel="recordDeleteConfirmOpen = false"
