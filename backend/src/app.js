@@ -14,8 +14,29 @@ import express from "express";
 
 import { createDatabase } from "./db.js";
 import { createEngineClient, EngineClientError } from "./engine-client.js";
-import { createReplayLifecycle } from "./replay-lifecycle.js";
 import { createReplayLifecycleStore } from "./replay-lifecycle-store.js";
+import { createReplayInteraction } from "./replay-interaction.js";
+
+export function publicErrorCode(error) {
+  return [
+    "INVALID_REQUEST",
+    "NOT_FOUND",
+    "UPSTREAM_UNAVAILABLE",
+    "UPSTREAM_INVALID_RESPONSE",
+    "MARKET_CACHE_INSUFFICIENT",
+    "RUNTIME_SYNC_FAILED",
+    "CONFIG_PERSIST_FAILED",
+    "INTERNAL_ERROR",
+  ].includes(error?.code)
+    ? error.code
+    : error?.status === 400
+      ? "INVALID_REQUEST"
+      : error?.status === 404
+        ? "NOT_FOUND"
+        : error?.status === 502
+          ? "UPSTREAM_UNAVAILABLE"
+          : "INTERNAL_ERROR";
+}
 import { calculateTradeLicense, resolveTradeRecordLifecycle } from "./trade-license.js";
 import { calculateTradeLedger } from "./trade-ledger.js";
 
@@ -29,14 +50,6 @@ import { calculateTradeLedger } from "./trade-ledger.js";
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STORAGE_ROOT = resolve(MODULE_DIR, "..", "..", "storage");
 const DEFAULT_TRADE_RECORDS_ROOT = resolve(DEFAULT_STORAGE_ROOT, "trade-records");
-const DEFAULT_REPLAY_COST_CONFIG = Object.freeze({
-  commissionRate: 0.0003,
-  minCommission: 5,
-  stampTaxRate: 0.0005,
-  transferFeeRate: 0.00001,
-  slippageBps: 5,
-});
-
 function isoNow() {
   return new Date().toISOString();
 }
@@ -53,438 +66,6 @@ function assertCondition(condition, message, status = 400) {
 
 function normalizeBody(body) {
   return body && typeof body === "object" ? body : {};
-}
-
-function normalizeReplayCostConfig(value) {
-  const input = value == null ? {} : value;
-  assertCondition(
-    input && typeof input === "object" && !Array.isArray(input),
-    "costConfig 必须是对象",
-  );
-  const allowedFields = new Set(Object.keys(DEFAULT_REPLAY_COST_CONFIG));
-  assertCondition(
-    Object.keys(input).every((key) => allowedFields.has(key)),
-    "costConfig 包含不支持的字段",
-  );
-  const config = {
-    ...DEFAULT_REPLAY_COST_CONFIG,
-    ...input,
-  };
-  for (const field of [
-    "commissionRate",
-    "stampTaxRate",
-    "transferFeeRate",
-  ]) {
-    assertCondition(
-      typeof config[field] === "number" &&
-        Number.isFinite(config[field]) &&
-        config[field] >= 0 &&
-        config[field] < 1,
-      `${field} 必须是大于等于 0 且小于 1 的数字`,
-    );
-  }
-  assertCondition(
-    typeof config.minCommission === "number" &&
-      Number.isFinite(config.minCommission) &&
-      config.minCommission >= 0,
-    "minCommission 必须是大于等于 0 的数字",
-  );
-  assertCondition(
-    typeof config.slippageBps === "number" &&
-      Number.isFinite(config.slippageBps) &&
-      config.slippageBps >= 0 &&
-      config.slippageBps < 10000,
-    "slippageBps 必须是大于等于 0 且小于 10000 的数字",
-  );
-  return config;
-}
-
-function normalizeReplayAction(body) {
-  assertCondition(typeof body.actionId === "string", "actionId 必须是字符串");
-  const actionId = body.actionId.trim();
-  assertCondition(
-    actionId.length > 0 && actionId.length <= 128,
-    "actionId 必须是 1 至 128 个字符",
-  );
-  assertCondition(
-    typeof body.expectedRevision === "number" &&
-      Number.isSafeInteger(body.expectedRevision) &&
-      body.expectedRevision >= 0,
-    "expectedRevision 必须是大于等于 0 的安全整数",
-  );
-  return {
-    actionId,
-    expectedRevision: body.expectedRevision,
-  };
-}
-
-function normalizeReplayOrder(body) {
-  const allowedFields = new Set([
-    "actionId",
-    "expectedRevision",
-    "side",
-    "quantity",
-    "cashRatio",
-    "positionRatio",
-    "decision",
-  ]);
-  assertCondition(
-    Object.keys(body).every((key) => allowedFields.has(key)),
-    "委托包含不支持的字段",
-  );
-  const action = normalizeReplayAction(body);
-  const side = String(body.side ?? "")
-    .trim()
-    .toLowerCase();
-  assertCondition(["buy", "sell"].includes(side), "side 只支持 buy 或 sell");
-  const selectors = [
-    body.quantity == null ? null : "shares",
-    body.cashRatio == null ? null : "cash_ratio",
-    body.positionRatio == null ? null : "position_ratio",
-  ].filter(Boolean);
-  assertCondition(selectors.length === 1, "委托必须且只能指定一种数量方式");
-  const quantityType = selectors[0];
-  if (quantityType === "shares") {
-    assertCondition(
-      typeof body.quantity === "number" &&
-        Number.isSafeInteger(body.quantity) &&
-        body.quantity >= 100,
-      "quantity 必须是大于等于 100 的安全整数",
-    );
-  }
-  if (quantityType === "cash_ratio") {
-    assertCondition(side === "buy", "cashRatio 仅支持买入委托");
-    assertCondition(
-      typeof body.cashRatio === "number" &&
-        Number.isFinite(body.cashRatio) &&
-        body.cashRatio > 0 &&
-        body.cashRatio <= 1,
-      "cashRatio 必须大于 0 且不超过 1",
-    );
-  }
-  if (quantityType === "position_ratio") {
-    assertCondition(side === "sell", "positionRatio 仅支持卖出委托");
-    assertCondition(
-      typeof body.positionRatio === "number" &&
-        Number.isFinite(body.positionRatio) &&
-        body.positionRatio > 0 &&
-        body.positionRatio <= 1,
-      "positionRatio 必须大于 0 且不超过 1",
-    );
-  }
-  const order = {
-    side,
-    quantityType,
-    requestedQuantity:
-      quantityType === "shares" ? body.quantity : null,
-    ratio:
-      quantityType === "cash_ratio"
-        ? body.cashRatio
-        : quantityType === "position_ratio"
-          ? body.positionRatio
-          : null,
-    decision: normalizeReplayOrderDecision(body.decision, side),
-  };
-  return {
-    ...action,
-    order,
-    requestPayload: {
-      expectedRevision: action.expectedRevision,
-      ...order,
-    },
-  };
-}
-
-function normalizeReplayOrderDecision(value, side) {
-  if (value == null) {
-    return null;
-  }
-  assertCondition(
-    value && typeof value === "object" && !Array.isArray(value),
-    "decision 必须是对象或 null",
-  );
-  const allowedFields = new Set([
-    "reasonTags",
-    "confidence",
-    "thesis",
-    "plan",
-    "riskPlan",
-    "stopLossPrice",
-    "invalidationRule",
-    "exitType",
-    "remainingPositionPlan",
-  ]);
-  assertCondition(
-    Object.keys(value).every((key) => allowedFields.has(key)),
-    "decision 包含不支持的字段",
-  );
-  const reasonTags = normalizeReplayReasonTags(value.reasonTags, { required: true });
-  const confidence = Number(value.confidence);
-  assertCondition(
-    Number.isSafeInteger(confidence) && confidence >= 1 && confidence <= 5,
-    "decision.confidence 必须是 1 至 5 的整数",
-  );
-  const thesis = String(value.thesis ?? "").trim();
-  const plan = String(value.plan ?? "").trim();
-  assertCondition(thesis.length >= 10 && thesis.length <= 2000, "decision.thesis 必须是 10 至 2000 个字符");
-  assertCondition(plan.length >= 10 && plan.length <= 2000, "decision.plan 必须是 10 至 2000 个字符");
-
-  if (side === "buy") {
-    const riskPlan = String(value.riskPlan ?? "").trim();
-    assertCondition(riskPlan.length >= 10 && riskPlan.length <= 1000, "decision.riskPlan 必须是 10 至 1000 个字符");
-    const stopLossPrice = normalizeReplayPositivePrice(value.stopLossPrice, "decision.stopLossPrice");
-    const invalidationRule = normalizeReplayInvalidationRule(value.invalidationRule, { partial: false });
-    assertCondition(
-      stopLossPrice != null || invalidationRule != null,
-      "买入决策必须填写止损价或失效条件",
-    );
-    return {
-      reasonTags,
-      confidence,
-      thesis,
-      plan,
-      riskPlan,
-      stopLossPrice,
-      invalidationRule,
-    };
-  }
-
-  const exitType = String(value.exitType ?? "").trim().toLowerCase();
-  assertCondition(
-    ["take_profit", "stop_loss", "thesis_invalidated", "reduce_risk", "manual"].includes(exitType),
-    "decision.exitType 不受支持",
-  );
-  const remainingPositionPlan = String(value.remainingPositionPlan ?? "").trim();
-  assertCondition(
-    remainingPositionPlan.length >= 2 && remainingPositionPlan.length <= 1000,
-    "decision.remainingPositionPlan 必须是 2 至 1000 个字符",
-  );
-  return {
-    reasonTags,
-    confidence,
-    thesis,
-    plan,
-    exitType,
-    remainingPositionPlan,
-  };
-}
-
-function normalizeReplayBlindReview(body) {
-  const allowedFields = new Set([
-    "actionId",
-    "expectedRevision",
-    "strategyName",
-    "playbookId",
-    "playbookVersionId",
-    "thesis",
-    "tradePlan",
-    "riskPlan",
-    "confidence",
-    "trendView",
-    "outlook",
-    "reasonTags",
-    "stopLossPrice",
-    "invalidationRule",
-  ]);
-  assertCondition(
-    Object.keys(body).every((key) => allowedFields.has(key)),
-    "盲评包含不支持的字段",
-  );
-  const action = normalizeReplayAction(body);
-  const strategyName = String(body.strategyName ?? "").trim();
-  const playbookId = String(body.playbookId ?? "").trim();
-  const playbookVersionId = String(body.playbookVersionId ?? "").trim();
-  const thesis = String(body.thesis ?? "").trim();
-  const tradePlan = String(body.tradePlan ?? "").trim();
-  const riskPlan = String(body.riskPlan ?? "").trim();
-  assertCondition(strategyName.length <= 120, "strategyName 最多 120 个字符");
-  assertCondition(
-    Boolean(playbookId) === Boolean(playbookVersionId),
-    "playbookId 和 playbookVersionId 必须同时提供",
-  );
-  assertCondition(playbookId.length <= 120, "playbookId 最多 120 个字符");
-  assertCondition(
-    playbookVersionId.length <= 120,
-    "playbookVersionId 最多 120 个字符",
-  );
-  assertCondition(
-    thesis.length >= 10 && thesis.length <= 2000,
-    "thesis 必须是 10 至 2000 个字符",
-  );
-  assertCondition(
-    tradePlan.length >= 10 && tradePlan.length <= 2000,
-    "tradePlan 必须是 10 至 2000 个字符",
-  );
-  assertCondition(
-    riskPlan.length >= 10 && riskPlan.length <= 1000,
-    "riskPlan 必须是 10 至 1000 个字符",
-  );
-  assertCondition(
-    typeof body.confidence === "number" &&
-      Number.isSafeInteger(body.confidence) &&
-      body.confidence >= 1 &&
-      body.confidence <= 5,
-    "confidence 必须是 1 至 5 的整数",
-  );
-  const allowedViews = ["bullish", "bearish", "range", "uncertain"];
-  const normalizeOptionalMarketView = (field) => {
-    if (!Object.hasOwn(body, field)) {
-      return null;
-    }
-    const value = String(body[field] ?? "").trim().toLowerCase();
-    assertCondition(allowedViews.includes(value), `${field} 不受支持`);
-    return value;
-  };
-  const trendView = normalizeOptionalMarketView("trendView");
-  const outlook = normalizeOptionalMarketView("outlook");
-  const reasonTags = normalizeReplayReasonTags(body.reasonTags, {
-    required: true,
-  });
-  const stopLossPrice = normalizeReplayPositivePrice(
-    body.stopLossPrice,
-    "stopLossPrice",
-  );
-  const invalidationRule = normalizeReplayInvalidationRule(
-    body.invalidationRule,
-    { partial: false },
-  );
-  const review = {
-    strategyName,
-    ...(playbookId ? { playbookId, playbookVersionId } : {}),
-    thesis,
-    tradePlan,
-    riskPlan,
-    confidence: body.confidence,
-    ...(trendView ? { trendView } : {}),
-    ...(outlook ? { outlook } : {}),
-    reasonTags,
-    stopLossPrice,
-    invalidationRule,
-  };
-  return {
-    ...action,
-    review,
-    requestPayload: {
-      expectedRevision: action.expectedRevision,
-      review,
-    },
-  };
-}
-
-function normalizeReplayPositivePrice(value, fieldName) {
-  if (value == null) {
-    return null;
-  }
-  assertCondition(
-    typeof value === "number" && Number.isFinite(value) && value > 0,
-    `${fieldName} 必须是正数或 null`,
-  );
-  return value;
-}
-
-function normalizeReplayReasonTags(value, { required }) {
-  if (value == null && !required) {
-    return undefined;
-  }
-  assertCondition(Array.isArray(value), "reasonTags 必须是数组");
-  const normalized = [];
-  const seen = new Set();
-  for (const item of value) {
-    assertCondition(typeof item === "string", "reasonTags 每项必须是字符串");
-    const tag = item.trim();
-    assertCondition(
-      tag.length >= 1 && tag.length <= 40,
-      "reasonTags 每项必须是 1 至 40 个字符",
-    );
-    if (!seen.has(tag)) {
-      seen.add(tag);
-      normalized.push(tag);
-    }
-  }
-  assertCondition(
-    normalized.length <= 8,
-    "reasonTags 最多 8 项",
-  );
-  if (required) {
-    assertCondition(normalized.length >= 1, "reasonTags 至少 1 项");
-  }
-  return normalized;
-}
-
-function normalizeReplayInvalidationRule(value, { partial }) {
-  if (value == null) {
-    return null;
-  }
-  assertCondition(
-    typeof value === "object" &&
-      !Array.isArray(value),
-    "invalidationRule 必须是对象或 null",
-  );
-  const allowedFields = new Set(["basis", "operator", "threshold", "note"]);
-  assertCondition(
-    Object.keys(value).every((key) => allowedFields.has(key)),
-    "invalidationRule 包含不支持的字段",
-  );
-  const result = {};
-  if (!partial || Object.hasOwn(value, "basis")) {
-    const basis = String(value.basis ?? "").trim().toLowerCase();
-    assertCondition(basis === "close", "invalidationRule.basis 只支持 close");
-    result.basis = basis;
-  }
-  if (!partial || Object.hasOwn(value, "operator")) {
-    const operator = String(value.operator ?? "").trim().toLowerCase();
-    assertCondition(
-      ["lte", "gte"].includes(operator),
-      "invalidationRule.operator 只支持 lte、gte",
-    );
-    result.operator = operator;
-  }
-  if (!partial || Object.hasOwn(value, "threshold")) {
-    if (partial && value.threshold == null) {
-      result.threshold = null;
-    } else {
-      result.threshold = normalizeReplayPositivePrice(
-        value.threshold,
-        "invalidationRule.threshold",
-      );
-      assertCondition(
-        result.threshold != null,
-        "invalidationRule.threshold 必须是正数",
-      );
-    }
-  }
-  if (Object.hasOwn(value, "note")) {
-    assertCondition(
-      typeof value.note === "string",
-      "invalidationRule.note 必须是字符串",
-    );
-    const note = value.note.trim();
-    assertCondition(
-      note.length <= 300,
-      "invalidationRule.note 最多 300 个字符",
-    );
-    result.note = note;
-  }
-  return result;
-}
-
-function normalizeReplayTrainingSelection(body) {
-  const mode = body.trainingMode == null
-    ? "free"
-    : String(body.trainingMode).trim();
-  assertCondition(mode === "free", "trainingMode 只支持 free");
-  const playbookId = String(body.playbookId ?? "").trim();
-  const playbookVersionId = String(body.playbookVersionId ?? "").trim();
-  assertCondition(playbookId.length <= 120, "playbookId 最多 120 个字符");
-  assertCondition(
-    playbookVersionId.length <= 120,
-    "playbookVersionId 最多 120 个字符",
-  );
-  assertCondition(
-    !playbookId && !playbookVersionId,
-    "自由演练不能在开局时指定战法",
-  );
-  return { mode };
 }
 
 function normalizeReplayPlaybookCreate(body) {
@@ -571,363 +152,6 @@ function normalizeReplayPlaybookCandidateReject(body) {
   assertCondition(reason.length <= 500, "reason 最多 500 个字符");
   return { reason };
 }
-
-function normalizeReplayPostReview(body) {
-  const allowedFields = new Set([
-    "actionId",
-    "expectedRevision",
-    "outcome",
-    "executionReview",
-    "mistakes",
-    "lessons",
-    "disciplineScore",
-    "riskControlScore",
-    "playbookFitScore",
-    "strategyAdjustment",
-  ]);
-  assertCondition(
-    Object.keys(body).every((key) => allowedFields.has(key)),
-    "事后复盘包含不支持的字段",
-  );
-  const action = normalizeReplayAction(body);
-  const outcome = String(body.outcome ?? "").trim().toLowerCase();
-  const executionReview = String(body.executionReview ?? "").trim();
-  const mistakes = String(body.mistakes ?? "").trim();
-  const lessons = String(body.lessons ?? "").trim();
-  const strategyAdjustment = String(body.strategyAdjustment ?? "").trim();
-  assertCondition(
-    ["correct", "partial", "wrong"].includes(outcome),
-    "outcome 只支持 correct、partial 或 wrong",
-  );
-  assertCondition(
-    executionReview.length >= 10 && executionReview.length <= 2000,
-    "executionReview 必须是 10 至 2000 个字符",
-  );
-  assertCondition(
-    mistakes.length >= 1 && mistakes.length <= 2000,
-    "mistakes 必须是 1 至 2000 个字符",
-  );
-  assertCondition(
-    lessons.length >= 10 && lessons.length <= 2000,
-    "lessons 必须是 10 至 2000 个字符",
-  );
-  assertCondition(
-    typeof body.disciplineScore === "number" &&
-      Number.isSafeInteger(body.disciplineScore) &&
-      body.disciplineScore >= 1 &&
-      body.disciplineScore <= 5,
-    "disciplineScore 必须是 1 至 5 的整数",
-  );
-  assertCondition(
-    typeof body.riskControlScore === "number" &&
-      Number.isSafeInteger(body.riskControlScore) &&
-      body.riskControlScore >= 1 &&
-      body.riskControlScore <= 5,
-    "riskControlScore 必须是 1 至 5 的整数",
-  );
-  assertCondition(
-    body.playbookFitScore == null ||
-      (typeof body.playbookFitScore === "number" &&
-        Number.isSafeInteger(body.playbookFitScore) &&
-        body.playbookFitScore >= 1 &&
-        body.playbookFitScore <= 5),
-    "playbookFitScore 必须是 1 至 5 的整数",
-  );
-  assertCondition(
-    strategyAdjustment.length <= 2000,
-    "strategyAdjustment 最多 2000 个字符",
-  );
-  const review = {
-    outcome,
-    executionReview,
-    mistakes,
-    lessons,
-    disciplineScore: body.disciplineScore,
-    riskControlScore: body.riskControlScore,
-    ...(body.playbookFitScore == null
-      ? {}
-      : { playbookFitScore: body.playbookFitScore }),
-    strategyAdjustment,
-  };
-  return {
-    ...action,
-    review,
-    requestPayload: {
-      expectedRevision: action.expectedRevision,
-      review,
-    },
-  };
-}
-
-function normalizeReplayReviewCorrection(body, stage) {
-  const changeNote = String(body.changeNote ?? "").trim();
-  assertCondition(
-    changeNote.length >= 1 && changeNote.length <= 500,
-    "changeNote 必须是 1 至 500 个字符",
-  );
-  const reviewBody = { ...body };
-  delete reviewBody.changeNote;
-  const normalized =
-    stage === "blind"
-      ? normalizeReplayBlindReview(reviewBody)
-      : normalizeReplayPostReview(reviewBody);
-  return {
-    ...normalized,
-    changeNote,
-    requestPayload: {
-      ...normalized.requestPayload,
-      changeNote,
-    },
-  };
-}
-
-function normalizeReplayReviewDraftRequest(body, stage) {
-  assertCondition(
-    Object.keys(body).length === 2 &&
-      Object.hasOwn(body, "draft") &&
-      Object.hasOwn(body, "expectedRevision"),
-    "草稿请求只支持 draft 和 expectedRevision 字段",
-  );
-  assertCondition(
-    typeof body.expectedRevision === "number" &&
-      Number.isSafeInteger(body.expectedRevision) &&
-      body.expectedRevision >= 0,
-    "expectedRevision 必须是大于等于 0 的安全整数",
-  );
-  const draft = body.draft;
-  assertCondition(
-    draft &&
-      typeof draft === "object" &&
-      !Array.isArray(draft),
-    "draft 必须是对象",
-  );
-  const textLimits =
-    stage === "blind"
-      ? {
-          strategyName: 120,
-          playbookId: 120,
-          playbookVersionId: 120,
-          thesis: 2000,
-          tradePlan: 2000,
-          riskPlan: 1000,
-        }
-      : {
-          executionReview: 2000,
-          mistakes: 2000,
-          lessons: 2000,
-          strategyAdjustment: 2000,
-        };
-  const structuredFields =
-    stage === "blind"
-      ? [
-          "confidence",
-          "trendView",
-          "outlook",
-          "reasonTags",
-          "stopLossPrice",
-          "invalidationRule",
-        ]
-      : [
-          "outcome",
-          "disciplineScore",
-          "riskControlScore",
-          "playbookFitScore",
-        ];
-  const allowedFields = new Set([
-    ...Object.keys(textLimits),
-    ...structuredFields,
-  ]);
-  assertCondition(
-    Object.keys(draft).every((key) => allowedFields.has(key)),
-    "draft 包含不支持的字段",
-  );
-  const normalized = {};
-  for (const [field, maximum] of Object.entries(textLimits)) {
-    if (!Object.hasOwn(draft, field)) {
-      continue;
-    }
-    assertCondition(typeof draft[field] === "string", `${field} 必须是字符串`);
-    const value = draft[field].trim();
-    assertCondition(value.length <= maximum, `${field} 最多 ${maximum} 个字符`);
-    normalized[field] = value;
-  }
-  if (stage === "blind") {
-    if (Object.hasOwn(draft, "confidence")) {
-      assertReplayDraftScore(draft.confidence, "confidence");
-      normalized.confidence = draft.confidence;
-    }
-    for (const field of ["trendView", "outlook"]) {
-      if (!Object.hasOwn(draft, field)) {
-        continue;
-      }
-      assertCondition(typeof draft[field] === "string", `${field} 必须是字符串`);
-      const value = draft[field].trim().toLowerCase();
-      assertCondition(
-        value === "" ||
-          ["bullish", "bearish", "range", "uncertain"].includes(value),
-        `${field} 不受支持`,
-      );
-      normalized[field] = value;
-    }
-    if (Object.hasOwn(draft, "reasonTags")) {
-      normalized.reasonTags = normalizeReplayReasonTags(draft.reasonTags, {
-        required: false,
-      });
-    }
-    if (Object.hasOwn(draft, "stopLossPrice")) {
-      normalized.stopLossPrice = normalizeReplayPositivePrice(
-        draft.stopLossPrice,
-        "stopLossPrice",
-      );
-    }
-    if (Object.hasOwn(draft, "invalidationRule")) {
-      normalized.invalidationRule = normalizeReplayInvalidationRule(
-        draft.invalidationRule,
-        { partial: true },
-      );
-    }
-  } else {
-    if (Object.hasOwn(draft, "outcome")) {
-      assertCondition(typeof draft.outcome === "string", "outcome 必须是字符串");
-      const outcome = draft.outcome.trim().toLowerCase();
-      assertCondition(
-        outcome === "" || ["correct", "partial", "wrong"].includes(outcome),
-        "outcome 不受支持",
-      );
-      normalized.outcome = outcome;
-    }
-    for (const field of [
-      "disciplineScore",
-      "riskControlScore",
-      "playbookFitScore",
-    ]) {
-      if (!Object.hasOwn(draft, field)) {
-        continue;
-      }
-      assertReplayDraftScore(draft[field], field);
-      normalized[field] = draft[field];
-    }
-  }
-  return {
-    draft: normalized,
-    expectedRevision: body.expectedRevision,
-  };
-}
-
-function normalizeReplayReviewDraftDeleteRequest(body) {
-  assertCondition(
-    Object.keys(body).length === 1 &&
-      Object.hasOwn(body, "expectedRevision"),
-    "删除草稿请求只支持 expectedRevision 字段",
-  );
-  assertCondition(
-    typeof body.expectedRevision === "number" &&
-      Number.isSafeInteger(body.expectedRevision) &&
-      body.expectedRevision >= 0,
-    "expectedRevision 必须是大于等于 0 的安全整数",
-  );
-  return {
-    expectedRevision: body.expectedRevision,
-  };
-}
-
-function assertReplayDraftScore(value, fieldName) {
-  assertCondition(
-    value == null ||
-      (typeof value === "number" &&
-        Number.isSafeInteger(value) &&
-        value >= 1 &&
-        value <= 5),
-    `${fieldName} 必须是 1 至 5 的整数或 null`,
-  );
-}
-
-function normalizeReplayHistoryQuery(query) {
-  const allowedStates = new Set([
-    "all",
-    "active",
-    "awaiting_blind",
-    "awaiting_reveal",
-    "awaiting_post",
-    "reviewed",
-    "skipped",
-  ]);
-  const state = String(query.state ?? "all").trim().toLowerCase();
-  assertCondition(allowedStates.has(state), "state 不受支持");
-  const attemptKind = String(query.attemptKind ?? "all")
-    .trim()
-    .toLowerCase();
-  assertCondition(
-    ["all", "first", "retrain"].includes(attemptKind),
-    "attemptKind 不受支持",
-  );
-  const keyword = String(query.keyword ?? "").trim();
-  assertCondition(keyword.length <= 120, "keyword 最多 120 个字符");
-  const page = query.page == null || query.page === ""
-    ? 1
-    : Number(query.page);
-  const pageSize = query.pageSize == null || query.pageSize === ""
-    ? 20
-    : Number(query.pageSize);
-  assertCondition(
-    Number.isSafeInteger(page) && page >= 1,
-    "page 必须是大于等于 1 的安全整数",
-  );
-  assertCondition(
-    Number.isSafeInteger(pageSize) && pageSize >= 1 && pageSize <= 100,
-    "pageSize 必须是 1 至 100 的安全整数",
-  );
-  return {
-    state,
-    attemptKind,
-    keyword,
-    page,
-    pageSize,
-  };
-}
-
-function roundReplayValue(value) {
-  return Number(Number(value).toFixed(10));
-}
-
-function classifyReplayMarketStatus(bar) {
-  if (!bar) {
-    return "invalid_market_data";
-  }
-  const volume = Number(bar.volume);
-  if (!Number.isFinite(volume) || volume <= 0) {
-    return "suspended";
-  }
-  const prices = [bar.open, bar.high, bar.low, bar.close].map(Number);
-  if (prices.some((price) => !Number.isFinite(price) || price <= 0)) {
-    return "invalid_market_data";
-  }
-  const limitType =
-    typeof bar.limitType === "string" && bar.limitType.trim()
-      ? bar.limitType.trim().toUpperCase()
-      : null;
-  if (limitType === "U") {
-    return "limit_up";
-  }
-  if (limitType === "D") {
-    return "limit_down";
-  }
-  return "normal";
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 function beijingToday(value = new Date()) {
   return new Date(value.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -1627,8 +851,9 @@ export function createApp(options = {}) {
   const clock = typeof options.clock === "function" ? options.clock : () => new Date();
   const database = createDatabase(options.dbPath);
   const engine = createEngineClient(options.engineUrl);
-  const replayLifecycle = createReplayLifecycle({
-    store: createReplayLifecycleStore(database),
+  const replayStore = createReplayLifecycleStore(database);
+  const replayInteraction = createReplayInteraction({
+    store: replayStore,
     scenarioSource: engine,
     createId: randomUUID,
     now: isoNow,
@@ -2251,374 +1476,9 @@ export function createApp(options = {}) {
     },
   );
 
-  function toPublicReplayReviewDraft(draft) {
-    if (!draft) {
-      return null;
-    }
-    return {
-      stage: draft.stage,
-      data: draft.data,
-      revision: draft.revision,
-      updatedAt: draft.updatedAt,
-    };
-  }
-
-  function aggregateHybridDailyBars(dailyContext, minuteBars) {
-    const grouped = new Map();
-    for (const bar of minuteBars) {
-      const tradeDate = String(bar.tradeDate ?? "");
-      if (!grouped.has(tradeDate)) {
-        grouped.set(tradeDate, []);
-      }
-      grouped.get(tradeDate).push(bar);
-    }
-    const formedDays = [...grouped.values()].map((bars) => ({
-      ...bars[0],
-      high: Math.max(...bars.map((bar) => Number(bar.high))),
-      low: Math.min(...bars.map((bar) => Number(bar.low))),
-      close: Number(bars.at(-1)?.close ?? bars[0].close),
-      volume: bars.reduce((sum, bar) => sum + Number(bar.volume ?? 0), 0),
-      amount: bars.reduce((sum, bar) => sum + Number(bar.amount ?? 0), 0),
-      tradeTime: null,
-    }));
-    return [...dailyContext, ...formedDays];
-  }
-
-  function toPublicReplaySession(session) {
-    const progressBarCount =
-      Number(session.observationBars) + Number(session.revealedFutureBars);
-    const privateBars = Array.isArray(session.snapshot?.bars)
-      ? session.snapshot.bars
-      : [];
-    const isRevealed = Boolean(session.revealedAt);
-    const replayWindowBarCount =
-      Number(session.observationBars) + Number(session.gameLength);
-    const publicBarCount = isRevealed
-      ? Math.min(privateBars.length, replayWindowBarCount)
-      : progressBarCount;
-    const markPrice = Number(privateBars[progressBarCount - 1]?.close ?? 0);
-    const account = session.account ?? {};
-    const positionQuantity = Number(account.positionQuantity ?? 0);
-    const averageCost = Number(account.averageCost ?? 0);
-    const marketValue = roundReplayValue(markPrice * positionQuantity);
-    const unrealizedPnl = roundReplayValue(
-      (markPrice - averageCost) * positionQuantity,
-    );
-    const realizedPnl = roundReplayValue(account.realizedPnl ?? 0);
-    const totalEquity = roundReplayValue(
-      Number(account.cash ?? 0) + marketValue,
-    );
-    const initialCapital = Number(account.initialCapital ?? 0);
-    const review = session.review ?? {};
-    const blindReview = review.blindReview ?? null;
-    const postReview = isRevealed ? review.postReview ?? null : null;
-    const marketEvent =
-      Number(session.revealedFutureBars) > 0
-        ? {
-            sequence: progressBarCount,
-            status: classifyReplayMarketStatus(
-              privateBars[progressBarCount - 1],
-            ),
-          }
-        : null;
-    const snapshotInterval = String(session.snapshot?.interval ?? "1d");
-    const interval = ["1m", "hybrid"].includes(snapshotInterval)
-      ? snapshotInterval
-      : "1d";
-    const stepMinutes = interval === "hybrid"
-      ? Number(session.snapshot?.stepMinutes ?? 1)
-      : interval === "1m" ? 1 : null;
-    const barUnit = interval === "1m" ? "分钟" : "日";
-    const hybridFutureBars = interval === "hybrid"
-      ? privateBars.slice(
-          Number(session.observationBars),
-          Number(session.observationBars) +
-            (isRevealed ? Number(session.gameLength) : Number(session.revealedFutureBars)),
-        )
-      : [];
-    const hybridNextBar = interval === "hybrid"
-      ? privateBars[
-          Number(session.observationBars) + Number(session.revealedFutureBars)
-        ] ?? null
-      : null;
-    const hybridLastDate = String(hybridFutureBars.at(-1)?.tradeDate ?? "");
-    const hybridCurrentDayComplete = Boolean(hybridLastDate) &&
-      (!hybridNextBar || String(hybridNextBar.tradeDate ?? "") !== hybridLastDate);
-    const hybridDates = [...new Set(hybridFutureBars.map((bar) => String(bar.tradeDate ?? "")))];
-    const hybridCompletedDays = Math.max(
-      0,
-      hybridDates.length - (hybridCurrentDayComplete ? 0 : 1),
-    );
-    const hybridMinuteBars = hybridLastDate
-      ? hybridFutureBars.filter((bar) => String(bar.tradeDate ?? "") === hybridLastDate)
-      : [];
-    const displayPrivateBars = interval === "hybrid"
-      ? aggregateHybridDailyBars(
-          privateBars.slice(0, Number(session.observationBars)),
-          hybridFutureBars,
-        )
-      : privateBars.slice(0, publicBarCount);
-    return {
-      id: session.id,
-      sourceDataVersion: session.sourceDataVersion,
-      interval,
-      ...(stepMinutes ? { stepMinutes } : {}),
-      gameLength:
-        interval === "hybrid"
-          ? Number(session.snapshot?.trainingDays ?? 0)
-          : session.gameLength,
-      observationBars: session.observationBars,
-      revealedFutureBars:
-        interval === "hybrid"
-          ? hybridCompletedDays
-          : session.revealedFutureBars,
-      ...(interval === "hybrid"
-        ? { revealedMinuteBars: Number(session.revealedFutureBars) }
-        : {}),
-      status: session.status,
-      completionReason: session.completionReason,
-      benchmarkCode: String(session.snapshot?.benchmark?.code ?? ""),
-      revealed: isRevealed,
-      revision: Number(session.revision ?? 0),
-      marketEvent,
-      attemptInfo: session.attemptInfo ?? {
-        attemptNumber: 1,
-        kind: "first",
-        countsTowardFirstScore: true,
-        sourceSessionId: null,
-      },
-      trainingConfig: session.trainingConfig ?? { mode: "free" },
-      costConfig: {
-        commissionRate: Number(session.costConfig?.commissionRate ?? 0),
-        minCommission: Number(session.costConfig?.minCommission ?? 0),
-        stampTaxRate: Number(session.costConfig?.stampTaxRate ?? 0),
-        transferFeeRate: Number(session.costConfig?.transferFeeRate ?? 0),
-        slippageBps: Number(session.costConfig?.slippageBps ?? 0),
-      },
-      account: {
-        initialCapital,
-        cash: Number(account.cash ?? 0),
-        positionQuantity,
-        availableQuantity: Number(account.availableQuantity ?? 0),
-        lockedQuantity: Number(account.lockedQuantity ?? 0),
-        averageCost,
-        totalFees: Number(account.totalFees ?? 0),
-      },
-      pendingOrders: (session.pendingOrders ?? []).map((order) => ({
-        orderId: order.orderId,
-        side: order.side,
-        quantityType: order.quantityType,
-        requestedQuantity: order.requestedQuantity,
-        ratio: order.ratio,
-        decision: order.decision ?? null,
-        submittedSequence: order.submittedSequence,
-        scheduledSequence: order.scheduledSequence,
-      })),
-      executions: (session.executions ?? []).map((execution) => {
-        if (execution.status === "filled") {
-          return {
-              orderId: execution.orderId,
-              status: "filled",
-              side: execution.side,
-              decision: execution.decision ?? null,
-              sequence: execution.sequence,
-              quantity: execution.quantity,
-              referencePrice: execution.referencePrice,
-              price: execution.price,
-              slippageBps: execution.slippageBps,
-              notional: execution.notional,
-              commission: execution.commission,
-              stampTax: execution.stampTax,
-              transferFee: execution.transferFee,
-              totalFee: execution.totalFee,
-          };
-        }
-        return {
-          orderId: execution.orderId,
-          status:
-            execution.status === "cancelled" ? "cancelled" : "rejected",
-          side: execution.side,
-          decision: execution.decision ?? null,
-          sequence: execution.sequence,
-          reasonCode: execution.reasonCode,
-          reasonMessage: execution.reasonMessage,
-        };
-      }),
-      valuation: {
-        markPrice,
-        marketValue,
-        totalEquity,
-        realizedPnl,
-        unrealizedPnl,
-        totalPnl: roundReplayValue(totalEquity - initialCapital),
-      },
-      review: {
-        blindSaved: Boolean(blindReview),
-        postSaved: Boolean(postReview),
-        blindLocked: isRevealed,
-        legacyBlindMissing: isRevealed && !blindReview,
-        blindReview,
-        postReview,
-      },
-      reviewDrafts: {
-        blind: toPublicReplayReviewDraft(session.reviewDrafts?.blind),
-        post: isRevealed
-          ? toPublicReplayReviewDraft(session.reviewDrafts?.post)
-          : null,
-      },
-      corrections: (session.corrections ?? [])
-        .filter(
-          (correction) =>
-            isRevealed || correction.stage === "blind",
-        )
-        .map((correction) => ({
-          id: correction.id,
-          stage: correction.stage,
-          revisionNumber: correction.revisionNumber,
-          fullReviewSnapshot: correction.fullReviewSnapshot,
-          changeNote: correction.changeNote,
-          createdAt: correction.createdAt,
-        })),
-      scoreCard: isRevealed ? review.scoreCard ?? null : null,
-      ...(interval === "hybrid"
-        ? {
-            intraday: {
-              completedDays:
-                hybridCompletedDays,
-              trainingDays: Number(session.snapshot?.trainingDays ?? 0),
-              currentMinute: hybridMinuteBars.length,
-              currentDayComplete: hybridCurrentDayComplete,
-            },
-            minuteBars: hybridMinuteBars.map((bar, index) => ({
-              sequence: Number(bar.sequence),
-              displayLabel: isRevealed
-                ? String(bar.tradeTime ?? "")
-                : stepMinutes === 1
-                  ? `第 ${index + 1} 分钟`
-                  : `第 ${index + 1} 个${stepMinutes}分钟`,
-              ...(isRevealed
-                ? {
-                    tradeDate: String(bar.tradeDate ?? ""),
-                    tradeTime: String(bar.tradeTime ?? ""),
-                  }
-                : {}),
-              open: Number(bar.open),
-              high: Number(bar.high),
-              low: Number(bar.low),
-              close: Number(bar.close),
-              volume: Number(bar.volume ?? 0),
-              amount: Number(bar.amount ?? 0),
-              adjustedAmount: Number(bar.adjustedAmount ?? bar.amount ?? 0),
-              weekIndex: Number(bar.weekIndex),
-              monthIndex: Number(bar.monthIndex),
-            })),
-          }
-        : {}),
-      ...(isRevealed
-        ? {
-            reveal: {
-              tsCode: String(session.snapshot?.tsCode ?? ""),
-              symbol: String(session.snapshot?.symbol ?? ""),
-              exchange: String(session.snapshot?.exchange ?? ""),
-              name: String(session.snapshot?.name ?? ""),
-              startDate: String(privateBars[0]?.tradeDate ?? ""),
-              endDate: String(
-                privateBars[publicBarCount - 1]?.tradeDate ?? "",
-              ),
-              ...(interval === "1m"
-                ? {
-                    startTime: String(privateBars[0]?.tradeTime ?? ""),
-                    endTime: String(
-                      privateBars[publicBarCount - 1]?.tradeTime ?? "",
-                    ),
-                  }
-                : {}),
-            },
-          }
-        : {}),
-      bars: displayPrivateBars.map((bar, index) => ({
-        sequence: index + 1,
-        displayLabel: isRevealed
-          ? String(bar.tradeTime ?? bar.tradeDate ?? "")
-          : interval === "hybrid" && index >= Number(session.observationBars)
-            ? `第 ${index + 1} 日${
-                index === displayPrivateBars.length - 1 && !hybridCurrentDayComplete
-                  ? "（形成中）"
-                  : ""
-              }`
-            : `第 ${index + 1} ${barUnit}`,
-        ...(isRevealed
-          ? {
-              tradeDate: String(bar.tradeDate ?? ""),
-              ...(bar.tradeTime
-                ? { tradeTime: String(bar.tradeTime) }
-                : {}),
-            }
-          : {}),
-        open: Number(bar.open),
-        high: Number(bar.high),
-        low: Number(bar.low),
-        close: Number(bar.close),
-        volume: Number(bar.volume ?? 0),
-        amount: Number(bar.amount ?? 0),
-        weekIndex: Number(bar.weekIndex),
-        monthIndex: Number(bar.monthIndex),
-      })),
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-    };
-  }
-
   app.post("/api/quant/replay/sessions", async (req, res, next) => {
     try {
-      const body = normalizeBody(req.body);
-      const interval = ["1m", "hybrid"].includes(body.interval)
-        ? body.interval
-        : "1d";
-      const gameLength = body.gameLength == null
-        ? interval === "1m" ? 240 : interval === "hybrid" ? 20 : 60
-        : Number(body.gameLength);
-      const supportedGameLengths = {
-        "1d": [20, 60, 120],
-        "1m": [240, 720, 1200],
-        hybrid: [20, 60, 120],
-      };
-      assertCondition(
-        supportedGameLengths[interval].includes(gameLength),
-        interval === "1m"
-          ? "分钟演练长度只支持 240、720、1200"
-          : interval === "hybrid"
-            ? "日内模拟长度只支持 20、60、120 个交易日"
-          : "gameLength 只支持 20、60、120",
-      );
-      const seed = body.seed == null ? null : Number(body.seed);
-      assertCondition(
-        seed == null || Number.isSafeInteger(seed),
-        "seed 必须是安全整数",
-      );
-      const initialCapital =
-        body.initialCapital == null ? 100000 : body.initialCapital;
-      assertCondition(
-        typeof initialCapital === "number" &&
-          Number.isFinite(initialCapital) &&
-          initialCapital > 0,
-        "initialCapital 必须是大于 0 的数字",
-      );
-      const costConfig = normalizeReplayCostConfig(body.costConfig);
-      normalizeReplayTrainingSelection(body);
-      const trainingConfig = { mode: "free" };
-      const session = await replayLifecycle.createSession({
-        gameLength,
-        benchmarkCode: body.benchmarkCode,
-        seed,
-        interval,
-        initialCapital,
-        costConfig,
-        trainingConfig,
-      });
-      res.status(201).json({
-        session: toPublicReplaySession(session),
-      });
+      res.status(201).json(await replayInteraction.create(normalizeBody(req.body)));
     } catch (error) {
       next(error);
     }
@@ -2626,8 +1486,7 @@ export function createApp(options = {}) {
 
   app.get("/api/quant/replay/sessions", (req, res, next) => {
     try {
-      const query = normalizeReplayHistoryQuery(req.query ?? {});
-      res.json(database.listReplaySessions(query));
+      res.json(replayInteraction.list(req.query ?? {}));
     } catch (error) {
       next(error);
     }
@@ -2635,13 +1494,7 @@ export function createApp(options = {}) {
 
   app.get("/api/quant/replay/sessions/:sessionId", (req, res, next) => {
     try {
-      const session = database.getReplaySession(
-        String(req.params.sessionId ?? ""),
-      );
-      assertCondition(Boolean(session), "找不到行情演练会话", 404);
-      res.json({
-        session: toPublicReplaySession(session),
-      });
+      res.json(replayInteraction.get(String(req.params.sessionId ?? "")));
     } catch (error) {
       next(error);
     }
@@ -2649,10 +1502,7 @@ export function createApp(options = {}) {
 
   app.delete("/api/quant/replay/sessions/:sessionId", (req, res, next) => {
     try {
-      const sessionId = String(req.params.sessionId ?? "");
-      const deleted = replayLifecycle.deleteSession(sessionId);
-      assertCondition(deleted, "找不到行情演练会话", 404);
-      res.json({ deleted: true, sessionId });
+      res.json(replayInteraction.deleteSession(String(req.params.sessionId ?? "")));
     } catch (error) {
       next(error);
     }
@@ -2662,18 +1512,10 @@ export function createApp(options = {}) {
     "/api/quant/replay/sessions/:sessionId/retrain",
     (req, res, next) => {
       try {
-        const body = normalizeBody(req.body);
-        assertCondition(
-          Object.keys(body).length === 0,
-          "复练请求不支持额外字段",
-        );
-        const session = replayLifecycle.retrainSession(
+        res.status(201).json(replayInteraction.retrain(
           String(req.params.sessionId ?? ""),
-        );
-        assertCondition(Boolean(session), "找不到行情演练会话", 404);
-        res.status(201).json({
-          session: toPublicReplaySession(session),
-        });
+          normalizeBody(req.body),
+        ));
       } catch (error) {
         next(error);
       }
@@ -2682,20 +1524,10 @@ export function createApp(options = {}) {
 
   app.post("/api/quant/replay/sessions/:sessionId/orders", (req, res, next) => {
     try {
-      const normalized = normalizeReplayOrder(normalizeBody(req.body));
-      const result = replayLifecycle.submitOrder({
-        sessionId: String(req.params.sessionId ?? ""),
-        actionId: normalized.actionId,
-        expectedRevision: normalized.expectedRevision,
-        order: normalized.order,
-        requestPayload: normalized.requestPayload,
-      });
-      assertCondition(Boolean(result), "找不到行情演练会话", 404);
-      res.status(result.created ? 201 : 200).json({
-        created: result.created,
-        idempotent: result.idempotent,
-        session: toPublicReplaySession(result.session),
-      });
+      const result = replayInteraction.submitOrder(
+        String(req.params.sessionId ?? ""), normalizeBody(req.body),
+      );
+      res.status(result.created ? 201 : 200).json(result);
     } catch (error) {
       next(error);
     }
@@ -2705,21 +1537,9 @@ export function createApp(options = {}) {
     "/api/quant/replay/sessions/:sessionId/advance",
     (req, res, next) => {
       try {
-        const body = normalizeBody(req.body);
-        const action = normalizeReplayAction(body);
-        const mode = body.mode === "day" ? "day" : "minute";
-        const result = replayLifecycle.advanceSession({
-          sessionId: String(req.params.sessionId ?? ""),
-          actionId: action.actionId,
-          expectedRevision: action.expectedRevision,
-          mode,
-        });
-        assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        res.json({
-          advanced: result.advanced,
-          idempotent: result.idempotent,
-          session: toPublicReplaySession(result.session),
-        });
+        res.json(replayInteraction.advance(
+          String(req.params.sessionId ?? ""), normalizeBody(req.body),
+        ));
       } catch (error) {
         next(error);
       }
@@ -2730,32 +1550,9 @@ export function createApp(options = {}) {
     "/api/quant/replay/sessions/:sessionId/finish",
     (req, res, next) => {
       try {
-        const body = normalizeBody(req.body);
-        const action = normalizeReplayAction(body);
-        const completionReason = body.reason == null
-          ? "early"
-          : String(body.reason).trim().toLowerCase();
-        assertCondition(
-          ["early", "no_opportunity"].includes(completionReason),
-          "reason 只支持 early 或 no_opportunity",
-        );
-        const requestPayload = {
-          expectedRevision: action.expectedRevision,
-          ...(body.reason == null ? {} : { reason: completionReason }),
-        };
-        const result = replayLifecycle.finishSession({
-          sessionId: String(req.params.sessionId ?? ""),
-          actionId: action.actionId,
-          expectedRevision: action.expectedRevision,
-          completionReason,
-          requestPayload,
-        });
-        assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        res.json({
-          finished: result.finished,
-          idempotent: result.idempotent,
-          session: toPublicReplaySession(result.session),
-        });
+        res.json(replayInteraction.finish(
+          String(req.params.sessionId ?? ""), normalizeBody(req.body),
+        ));
       } catch (error) {
         next(error);
       }
@@ -2766,19 +1563,9 @@ export function createApp(options = {}) {
     "/api/quant/replay/sessions/:sessionId/reviews/blind",
     (req, res, next) => {
       try {
-        const normalized = normalizeReplayBlindReview(
-          normalizeBody(req.body),
-        );
-        const result = replayLifecycle.saveBlindReview({
-          sessionId: String(req.params.sessionId ?? ""),
-          normalized,
-        });
-        assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        res.json({
-          saved: result.saved,
-          idempotent: result.idempotent,
-          session: toPublicReplaySession(result.session),
-        });
+        res.json(replayInteraction.saveBlindReview(
+          String(req.params.sessionId ?? ""), normalizeBody(req.body),
+        ));
       } catch (error) {
         next(error);
       }
@@ -2790,22 +1577,9 @@ export function createApp(options = {}) {
       `/api/quant/replay/sessions/:sessionId/reviews/${stage}/draft`,
       (req, res, next) => {
         try {
-          const normalized = normalizeReplayReviewDraftRequest(
-            normalizeBody(req.body),
-            stage,
-          );
-          const session = replayLifecycle.saveReviewDraft({
-            sessionId: String(req.params.sessionId ?? ""),
-            stage,
-            normalized,
-          });
-          assertCondition(Boolean(session), "找不到行情演练会话", 404);
-          res.json({
-            saved: true,
-            draft: toPublicReplayReviewDraft(
-              session.reviewDrafts[stage],
-            ),
-          });
+          res.json(replayInteraction.saveReviewDraft(
+            String(req.params.sessionId ?? ""), stage, normalizeBody(req.body),
+          ));
         } catch (error) {
           next(error);
         }
@@ -2815,19 +1589,9 @@ export function createApp(options = {}) {
       `/api/quant/replay/sessions/:sessionId/reviews/${stage}/draft`,
       (req, res, next) => {
         try {
-          const normalized = normalizeReplayReviewDraftDeleteRequest(
-            normalizeBody(req.body),
-          );
-          const result = replayLifecycle.deleteReviewDraft({
-            sessionId: String(req.params.sessionId ?? ""),
-            stage,
-            expectedRevision: normalized.expectedRevision,
-          });
-          assertCondition(Boolean(result), "找不到行情演练会话", 404);
-          res.json({
-            deleted: result.deleted,
-            revision: result.revision,
-          });
+          res.json(replayInteraction.deleteReviewDraft(
+            String(req.params.sessionId ?? ""), stage, normalizeBody(req.body),
+          ));
         } catch (error) {
           next(error);
         }
@@ -2839,19 +1603,9 @@ export function createApp(options = {}) {
     "/api/quant/replay/sessions/:sessionId/reviews/post",
     (req, res, next) => {
       try {
-        const normalized = normalizeReplayPostReview(
-          normalizeBody(req.body),
-        );
-        const result = replayLifecycle.savePostReview({
-          sessionId: String(req.params.sessionId ?? ""),
-          normalized,
-        });
-        assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        res.json({
-          saved: result.saved,
-          idempotent: result.idempotent,
-          session: toPublicReplaySession(result.session),
-        });
+        res.json(replayInteraction.savePostReview(
+          String(req.params.sessionId ?? ""), normalizeBody(req.body),
+        ));
       } catch (error) {
         next(error);
       }
@@ -2862,23 +1616,9 @@ export function createApp(options = {}) {
     "/api/quant/replay/sessions/:sessionId/reviews/blind/corrections",
     (req, res, next) => {
       try {
-        const normalized = normalizeReplayReviewCorrection(
-          normalizeBody(req.body),
-          "blind",
-        );
-        const sessionId = String(req.params.sessionId ?? "");
-        const result = replayLifecycle.appendReviewCorrection({
-          sessionId,
-          stage: "blind",
-          normalized,
-        });
-        assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        res.json({
-          saved: result.saved,
-          idempotent: result.idempotent,
-          correction: result.correction,
-          session: toPublicReplaySession(result.session),
-        });
+        res.json(replayInteraction.appendReviewCorrection(
+          String(req.params.sessionId ?? ""), "blind", normalizeBody(req.body),
+        ));
       } catch (error) {
         next(error);
       }
@@ -2889,23 +1629,9 @@ export function createApp(options = {}) {
     "/api/quant/replay/sessions/:sessionId/reviews/post/corrections",
     (req, res, next) => {
       try {
-        const normalized = normalizeReplayReviewCorrection(
-          normalizeBody(req.body),
-          "post",
-        );
-        const sessionId = String(req.params.sessionId ?? "");
-        const result = replayLifecycle.appendReviewCorrection({
-          sessionId,
-          stage: "post",
-          normalized,
-        });
-        assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        res.json({
-          saved: result.saved,
-          idempotent: result.idempotent,
-          correction: result.correction,
-          session: toPublicReplaySession(result.session),
-        });
+        res.json(replayInteraction.appendReviewCorrection(
+          String(req.params.sessionId ?? ""), "post", normalizeBody(req.body),
+        ));
       } catch (error) {
         next(error);
       }
@@ -2917,21 +1643,12 @@ export function createApp(options = {}) {
     (req, res, next) => {
       try {
         const stage = String(req.params.stage ?? "");
-        assertCondition(["blind", "post"].includes(stage), "修正阶段无效");
-        const normalized = normalizeReplayReviewCorrection(
+        res.json(replayInteraction.updateReviewCorrection(
+          String(req.params.sessionId ?? ""),
+          stage,
+          String(req.params.correctionId ?? ""),
           normalizeBody(req.body),
-          stage,
-        );
-        const sessionId = String(req.params.sessionId ?? "");
-        const result = replayLifecycle.updateReviewCorrection({
-          sessionId,
-          correctionId: String(req.params.correctionId ?? ""),
-          stage,
-          normalized,
-        });
-        assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        assertCondition(Boolean(result.correction), "找不到复盘修正记录", 404);
-        res.json({ correction: result.correction, session: toPublicReplaySession(result.session) });
+        ));
       } catch (error) {
         next(error);
       }
@@ -2943,18 +1660,12 @@ export function createApp(options = {}) {
     (req, res, next) => {
       try {
         const stage = String(req.params.stage ?? "");
-        assertCondition(["blind", "post"].includes(stage), "修正阶段无效");
-        const action = normalizeReplayAction(normalizeBody(req.body));
-        const result = replayLifecycle.deleteReviewCorrection({
-          sessionId: String(req.params.sessionId ?? ""),
-          correctionId: String(req.params.correctionId ?? ""),
+        res.json(replayInteraction.deleteReviewCorrection(
+          String(req.params.sessionId ?? ""),
           stage,
-          actionId: action.actionId,
-          expectedRevision: action.expectedRevision,
-        });
-        assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        assertCondition(result.deleted, "找不到复盘修正记录", 404);
-        res.json({ deleted: true, session: toPublicReplaySession(result.session) });
+          String(req.params.correctionId ?? ""),
+          normalizeBody(req.body),
+        ));
       } catch (error) {
         next(error);
       }
@@ -2965,19 +1676,9 @@ export function createApp(options = {}) {
     "/api/quant/replay/sessions/:sessionId/reveal",
     (req, res, next) => {
       try {
-        const body = normalizeBody(req.body);
-        const action = normalizeReplayAction(body);
-        const result = replayLifecycle.revealSession({
-          sessionId: String(req.params.sessionId ?? ""),
-          actionId: action.actionId,
-          expectedRevision: action.expectedRevision,
-        });
-        assertCondition(Boolean(result), "找不到行情演练会话", 404);
-        res.json({
-          revealed: result.revealed,
-          idempotent: result.idempotent,
-          session: toPublicReplaySession(result.session),
-        });
+        res.json(replayInteraction.reveal(
+          String(req.params.sessionId ?? ""), normalizeBody(req.body),
+        ));
       } catch (error) {
         next(error);
       }
@@ -3192,24 +1893,7 @@ export function createApp(options = {}) {
     const status =
       error?.status ??
       (error instanceof EngineClientError ? error.status : 500);
-    const errorCode = [
-      "INVALID_REQUEST",
-      "NOT_FOUND",
-      "UPSTREAM_UNAVAILABLE",
-      "UPSTREAM_INVALID_RESPONSE",
-      "MARKET_CACHE_INSUFFICIENT",
-      "RUNTIME_SYNC_FAILED",
-      "CONFIG_PERSIST_FAILED",
-      "INTERNAL_ERROR",
-    ].includes(error?.code)
-      ? error.code
-      : status === 400
-        ? "INVALID_REQUEST"
-        : status === 404
-          ? "NOT_FOUND"
-          : status === 502
-            ? "UPSTREAM_UNAVAILABLE"
-            : "INTERNAL_ERROR";
+    const errorCode = publicErrorCode({ ...error, status });
 
     res.status(status).json({
       error: {
