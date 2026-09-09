@@ -11,8 +11,12 @@ export function createReplayLifecycleStore(database) {
       database.getReplayPlaybookVersionLink(playbookId, versionId),
     submitOrder: (command) => database.submitReplayOrder(command),
     advanceSession: (command) => database.advanceReplaySession(command),
-    advanceSessionThroughDay: (command) =>
-      database.advanceReplaySessionThroughDay(command),
+    runInTransaction: (operation) =>
+      database.runInReplayTransaction((transaction) =>
+        operation({
+          getSession: transaction.getReplaySession,
+          advanceSession: transaction.advanceReplaySession,
+        })),
     finishSession: (command) => database.finishReplaySession(command),
     saveBlindReview: (command) => database.saveReplayBlindReview(command),
     savePostReview: (command) => database.saveReplayPostReview(command),

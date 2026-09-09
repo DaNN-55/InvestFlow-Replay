@@ -74,18 +74,34 @@ describe("replay lifecycle", () => {
     assert.deepEqual(prefetched.excludedTsCodes, ["000001.SZ", "600000.SH"]);
   });
 
-  it("owns hybrid whole-day advancement and internal step revisions", () => {
+  it("owns whole-day action steps, revision relay and trade-date stopping", () => {
     const calls = [];
     const sessions = [
       hybridSession({ revealedFutureBars: 1, revision: 5 }),
       hybridSession({ revealedFutureBars: 2, revision: 6 }),
       hybridSession({ revealedFutureBars: 3, revision: 7 }),
     ];
+    let currentSession = null;
+    let transactionCount = 0;
+    const transactionStore = {
+      advanceSession(command) {
+        calls.push(command);
+        currentSession = sessions.shift();
+        return {
+          session: currentSession,
+          advanced: true,
+          idempotent: false,
+        };
+      },
+      getSession() {
+        return currentSession;
+      },
+    };
     const lifecycle = createReplayLifecycle({
       store: {
-        advanceSession(command) {
-          calls.push(command);
-          return { session: sessions.shift(), advanced: true, idempotent: false };
+        runInTransaction(operation) {
+          transactionCount += 1;
+          return operation(transactionStore);
         },
       },
       now: () => "2026-08-09T00:00:00.000Z",
@@ -98,9 +114,13 @@ describe("replay lifecycle", () => {
       mode: "day",
     });
 
+    assert.equal(transactionCount, 1);
     assert.equal(result.session.revealedFutureBars, 3);
     assert.deepEqual(
-      calls.map(({ actionId, expectedRevision }) => ({ actionId, expectedRevision })),
+      calls.map(({ actionId, expectedRevision }) => ({
+        actionId,
+        expectedRevision,
+      })),
       [
         { actionId: "advance-day:0", expectedRevision: 4 },
         { actionId: "advance-day:1", expectedRevision: 5 },
@@ -108,24 +128,36 @@ describe("replay lifecycle", () => {
       ],
     );
     assert.ok(calls.every((call) => call.requestPayload.mode === "day"));
+    assert.ok(calls.every(
+      (call) => call.updatedAt === "2026-08-09T00:00:00.000Z",
+    ));
   });
 
-  it("does not replay internal steps for an idempotent day command", () => {
+  it("stops a retried whole-day action after its idempotent first step", () => {
     const calls = [];
+    const currentSession = hybridSession({
+      revealedFutureBars: 3,
+      revision: 7,
+    });
     const lifecycle = createReplayLifecycle({
       store: {
-        advanceSession(command) {
-          calls.push(command);
-          return {
-            session: hybridSession({ revealedFutureBars: 1, revision: 5 }),
-            advanced: true,
-            idempotent: true,
-          };
+        runInTransaction(operation) {
+          return operation({
+            advanceSession(command) {
+              calls.push(command);
+              return {
+                session: currentSession,
+                advanced: true,
+                idempotent: true,
+              };
+            },
+            getSession: () => currentSession,
+          });
         },
       },
     });
 
-    lifecycle.advanceSession({
+    const result = lifecycle.advanceSession({
       sessionId: "session-1",
       actionId: "advance-day",
       expectedRevision: 4,
@@ -133,6 +165,9 @@ describe("replay lifecycle", () => {
     });
 
     assert.equal(calls.length, 1);
+    assert.equal(calls[0].actionId, "advance-day:0");
+    assert.equal(result.idempotent, true);
+    assert.equal(result.session.revision, 7);
   });
 
   it("keeps order and finish timestamps behind the lifecycle seam", () => {
@@ -259,33 +294,4 @@ describe("replay lifecycle", () => {
     assert.equal(normalized.requestPayload.review, review);
   });
 
-  it("uses the store batch command for whole-day advancement", () => {
-    const calls = [];
-    const lifecycle = createReplayLifecycle({
-      store: {
-        advanceSessionThroughDay(command) {
-          calls.push(command);
-          return { session: hybridSession({ revealedFutureBars: 3, revision: 7 }) };
-        },
-        advanceSession() {
-          assert.fail("whole-day advancement should not use single-step persistence");
-        },
-      },
-      now: () => "2026-08-09T00:00:00.000Z",
-    });
-
-    lifecycle.advanceSession({
-      sessionId: "session-1",
-      actionId: "advance-day",
-      expectedRevision: 4,
-      mode: "day",
-    });
-
-    assert.deepEqual(calls, [{
-      sessionId: "session-1",
-      actionId: "advance-day",
-      expectedRevision: 4,
-      updatedAt: "2026-08-09T00:00:00.000Z",
-    }]);
-  });
 });

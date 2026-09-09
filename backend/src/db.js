@@ -4258,6 +4258,25 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       }
     },
 
+    runInReplayTransaction(operation) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const result = operation({
+          getReplaySession: (sessionId) => readReplaySession(sessionId),
+          advanceReplaySession: (command) => this.advanceReplaySession({
+            ...command,
+            manageTransaction: false,
+            hydrateResult: false,
+          }),
+        });
+        db.exec("COMMIT");
+        return result;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+
     advanceReplaySession({
       sessionId,
       actionId,
@@ -4658,108 +4677,6 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         throw error;
       }
     },
-
-    advanceReplaySessionThroughDay(command) {
-      db.exec("BEGIN IMMEDIATE");
-      try {
-        let result = this.advanceReplaySession({
-          ...command,
-          actionId: `${command.actionId}:0`,
-          requestPayload: {
-            expectedRevision: command.expectedRevision,
-            mode: "day",
-          },
-          manageTransaction: false,
-          hydrateResult: false,
-        });
-        if (!result || !result.advanced || result.idempotent) {
-          const session = result?.session
-            ? readReplaySession(command.sessionId)
-            : null;
-          db.exec("COMMIT");
-          return result ? { ...result, session } : null;
-        }
-
-        const firstSequence =
-          Number(result.session.observationBars) +
-          Number(result.session.revealedFutureBars);
-        const targetTradeDate = String(
-          result.session.snapshot?.bars?.[firstSequence - 1]?.tradeDate ?? "",
-        );
-        let step = 1;
-        while (
-          result.session.status !== "completed" &&
-          String(
-            result.session.snapshot?.bars?.[
-              Number(result.session.observationBars) +
-                Number(result.session.revealedFutureBars)
-            ]?.tradeDate ?? "",
-          ) === targetTradeDate
-        ) {
-          result = this.advanceReplaySession({
-            ...command,
-            actionId: `${command.actionId}:${step}`,
-            expectedRevision: Number(result.session.revision),
-            requestPayload: {
-              expectedRevision: Number(result.session.revision),
-              mode: "day",
-            },
-            manageTransaction: false,
-            hydrateResult: false,
-          });
-          step += 1;
-        }
-        const session = readReplaySession(command.sessionId);
-        db.exec("COMMIT");
-        return { ...result, session };
-      } catch (error) {
-        db.exec("ROLLBACK");
-        throw error;
-      }
-    },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   };
 }
