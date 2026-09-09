@@ -124,6 +124,42 @@ class TdxMarketCacheTransformTest(unittest.TestCase):
         self.assertEqual(len(calendar_rows), 2)
         self.assertTrue(all(row["trade_date"] is not None for row in index_rows))
 
+    def test_index_history_deduplicates_intraday_timestamps_on_one_trade_date(self) -> None:
+        bars = pd.DataFrame(
+            [
+                {
+                    "datetime": "2023-05-26 00:00:00",
+                    "open": 3200,
+                    "high": 3210,
+                    "low": 3190,
+                    "close": 3205,
+                    "vol": 100,
+                    "amount": 1000,
+                },
+                {
+                    "datetime": "2023-05-26 15:00:00",
+                    "open": 3201,
+                    "high": 3211,
+                    "low": 3191,
+                    "close": 3206,
+                    "vol": 101,
+                    "amount": 1001,
+                },
+            ]
+        )
+
+        index_rows, calendar_rows = build_index_history(
+            "000001.SH",
+            "SSE",
+            bars,
+            updated_at=datetime(2023, 5, 26, 16, 0),
+        )
+
+        self.assertEqual(len(index_rows), 1)
+        self.assertEqual(len(calendar_rows), 1)
+        self.assertEqual(index_rows[0]["trade_date"].isoformat(), "2023-05-26")
+        self.assertEqual(index_rows[0]["close"], 3206)
+
 
 class TdxMarketCacheSchemaTest(unittest.TestCase):
     def test_empty_cache_creates_replay_tables_and_incremental_upsert_preserves_other_rows(self) -> None:
@@ -230,6 +266,34 @@ class TdxMarketCacheSchemaTest(unittest.TestCase):
             finally:
                 connection.close()
             self.assertEqual(len(dates), 3)
+
+    def test_index_cache_write_deduplicates_calendar_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cache = TdxMarketCache(Path(directory) / "market.duckdb")
+            updated_at = datetime(2023, 5, 26, 16, 0)
+            index_rows, calendar_rows = build_index_history(
+                "000001.SH",
+                "SSE",
+                make_daily_frame("2023-05-26", 1, 3200),
+                updated_at=updated_at,
+            )
+
+            duplicate = {**calendar_rows[0], "updated_at": datetime(2023, 5, 26, 17, 0)}
+            cache.replace_index_history(
+                "000001.SH",
+                "SSE",
+                index_rows,
+                [calendar_rows[0], duplicate],
+            )
+
+            connection = duckdb.connect(str(cache.path), read_only=True)
+            try:
+                count = connection.execute(
+                    "SELECT COUNT(*) FROM trade_calendar WHERE exchange = 'SSE' AND cal_date = DATE '2023-05-26'"
+                ).fetchone()[0]
+            finally:
+                connection.close()
+            self.assertEqual(count, 1)
 
 
 class FakeTdxClient:

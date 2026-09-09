@@ -4,6 +4,7 @@ from datetime import date, datetime
 from contextlib import ExitStack
 from time import monotonic
 import math
+import logging
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
@@ -19,6 +20,8 @@ TDX_HOSTS = (
     "115.238.56.198",
     "111.229.247.189",
 )
+
+LOGGER = logging.getLogger(__name__)
 DEFAULT_REPLAY_BENCHMARK_CODES = (
     "000001.SH",
     "000016.SH",
@@ -121,7 +124,21 @@ def _normalize_bars(rows: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError("通达信行情缺少字段：" + "、".join(missing))
     frame["datetime"] = pd.to_datetime(frame["datetime"], errors="coerce")
-    frame = frame.sort_values("datetime").drop_duplicates("datetime", keep="last")
+    # TDX daily pages can contain the same trade date with different clock times.
+    # The cache schema is keyed by trading date, so normalize and deduplicate at
+    # that same granularity before any rows are turned into cache records.
+    frame["trade_date"] = frame["datetime"].dt.normalize()
+    duplicate_trade_dates = int(frame.duplicated("trade_date", keep=False).sum())
+    if duplicate_trade_dates:
+        LOGGER.warning(
+            "TDX daily page contains %s rows sharing a trade date; keeping the latest timestamp per date",
+            duplicate_trade_dates,
+        )
+    frame = (
+        frame.sort_values(["trade_date", "datetime"], kind="stable")
+        .drop_duplicates("trade_date", keep="last")
+        .drop(columns=["trade_date"])
+    )
     for column in ("open", "high", "low", "close"):
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
     volume_column = "vol" if "vol" in frame.columns else "volume"
@@ -526,6 +543,15 @@ class TdxMarketCache:
         calendar_rows: list[dict[str, Any]] | None,
     ) -> None:
         self.ensure_schema()
+        calendar_by_key = {
+            (str(row["exchange"]).upper(), row["cal_date"]): row
+            for row in (calendar_rows or [])
+        }
+        if calendar_rows is not None and len(calendar_by_key) != len(calendar_rows):
+            LOGGER.warning(
+                "Deduplicated %s duplicate trade-calendar rows before cache write",
+                len(calendar_rows) - len(calendar_by_key),
+            )
         connection = self._connect()
         try:
             connection.execute("BEGIN TRANSACTION")
@@ -555,14 +581,14 @@ class TdxMarketCache:
                 )
             if calendar_rows is not None:
                 connection.execute("DELETE FROM trade_calendar WHERE exchange = ?", [exchange])
-                if calendar_rows:
+                if calendar_by_key:
                     connection.executemany(
                         "INSERT INTO trade_calendar VALUES (?, ?, ?, ?, ?)",
                         [
                             tuple(row[key] for key in (
                                 "exchange", "cal_date", "is_open", "pretrade_date", "updated_at",
                             ))
-                            for row in calendar_rows
+                            for row in calendar_by_key.values()
                         ],
                     )
             connection.execute("COMMIT")
