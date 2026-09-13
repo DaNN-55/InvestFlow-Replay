@@ -28,12 +28,7 @@ InvestFlow Replay 面向个人研究与模拟交易。它将“我认为这条�
 
 ## 正式界面
 
-正式项目使用本地通达信缓存；以下素材来自真实项目的日线与日内模拟配置界面，不包含个人交易记录。
-
-<p align="center">
-  <img src="./assets/readme/replay-setup.png" width="49%" alt="正式项目的日线演练配置界面">
-  <img src="./assets/readme/replay-trading-desk.png" width="49%" alt="正式项目的历史行情盲测交易台">
-</p>
+正式项目使用本地通达信缓存。产品设置、匿名交易决策与两阶段复盘的界面素材集中展示在[在线介绍](https://dann-55.github.io/InvestFlow-Replay/#evidence)中，不包含个人交易记录。
 
 ## 快速开始
 
@@ -123,11 +118,9 @@ npm run build --prefix web
 - 离线 Demo 为合成数据，不能据此判断真实市场、证券或收益。
 - 浏览器 E2E 中有部分 API mock，用于固定前端交互契约；它们不冒充完整三层集成验证。
 
-## 反馈与版本记录
+## 反馈
 
 遇到无法继续或看不懂的步骤，请通过 [Issues](https://github.com/DaNN-55/InvestFlow-Replay/issues) 反馈，附系统、版本、操作步骤和错误文字。请勿上传个人账本或未脱敏日志。
-
-[Alpha 发布记录](docs/alpha-release.md) · [本地验收记录](docs/acceptance-2026-09-08.md)
 
 ## 许可证
 
