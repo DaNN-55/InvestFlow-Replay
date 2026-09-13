@@ -3,111 +3,215 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="隐藏标的身份与后续走势，逐步回放历史行情，记录模拟买卖和判断依据，再对照结果复盘。InvestFlow Replay 是一个本地运行的交易演练工具，目前处于早期试用阶段。"
-    />
-    <meta name="theme-color" content="#f4f8ff" />
+    <meta name="description" content="InvestFlow Replay 是本地运行的历史行情训练工具：在未知行情中留下模拟交易决策，经盲评冻结、揭晓与事后复盘，形成可追溯的训练档案。" />
+    <meta name="theme-color" content="#eef5ff" />
     <link rel="icon" href="/favicon.png" />
-    <title>InvestFlow Replay｜在未知行情中练习交易决策</title>
+    <title>InvestFlow Replay｜把交易判断留在未知行情里</title>
     <style>
       :root {
         color-scheme: light;
-        --ink: #10213d;
-        --body: #50617a;
-        --muted: #708198;
-        --line: #dbe7f5;
-        --blue: #1768e5;
-        --blue-dark: #0d4fb8;
-        --blue-soft: #eaf3ff;
-        --paper: #f7faff;
-        --white: #fff;
+        --text-primary: #10213d;
+        --text-secondary: #40536d;
+        --text-subtle: #52657e;
+        --text-inverse: #fff;
+        --text-inverse-subtle: #d4e0f1;
+        --border-subtle: #d6e3f4;
+        --border-strong: #a8c5e8;
+        --blue: #0f52ba;
+        --blue-dark: #0b3f93;
+        --blue-soft: #e8f1ff;
+        --surface-page: #f6faff;
+        --surface-raised: #fff;
+        --surface-inset: #eff6ff;
+        --surface-dark: #10284d;
+        --surface-footer: #091a33;
+        --focus-ring-on-light: #005fcc;
+        --focus-ring-on-dark: #b7d2ff;
         --shadow: 0 24px 70px rgba(29, 73, 129, 0.13);
+        --shadow-small: 0 12px 30px rgba(29, 73, 129, 0.08);
       }
 
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
-      body {
-        margin: 0;
-        color: var(--ink);
-        font-family: "SF Pro Text", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        line-height: 1.65;
-        background: var(--paper);
-        -webkit-font-smoothing: antialiased;
-      }
+      body { margin: 0; color: var(--text-primary); font-family: "SF Pro Text", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.65; background: var(--surface-page); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
       a { color: inherit; }
-      a:focus-visible, summary:focus-visible { outline: 3px solid rgba(23, 104, 229, 0.32); outline-offset: 3px; }
+      a:focus-visible, summary:focus-visible { outline: 3px solid var(--focus-ring-on-light); outline-offset: 3px; }
       img { display: block; max-width: 100%; }
       h1, h2, h3, p { margin-top: 0; }
-      h1, h2, h3 { line-height: 1.18; letter-spacing: -0.035em; }
-      h1 { max-width: 750px; margin-bottom: 24px; font-size: clamp(42px, 6vw, 76px); }
-      h2 { margin-bottom: 20px; font-size: clamp(30px, 4vw, 46px); }
+      h1, h2, h3 { line-height: 1.15; letter-spacing: -0.035em; }
+      h1 { max-width: 840px; margin-bottom: 24px; font-size: clamp(42px, 6vw, 76px); text-wrap: balance; }
+      h2 { max-width: 760px; margin-bottom: 18px; font-size: clamp(30px, 4vw, 46px); text-wrap: balance; }
       h3 { margin-bottom: 10px; font-size: 20px; }
+      section { padding: 96px 0; scroll-margin-top: 72px; }
 
-      .skip-link { position: fixed; top: 8px; left: 8px; z-index: 20; padding: 10px 14px; border-radius: 8px; background: var(--ink); color: white; transform: translateY(-150%); }
+      .skip-link { position: fixed; top: 8px; left: 8px; z-index: 20; padding: 10px 14px; border-radius: 8px; background: var(--surface-dark); color: var(--text-inverse); transform: translateY(-150%); }
       .skip-link:focus { transform: none; }
       .wrap { width: min(1120px, calc(100% - 40px)); margin-inline: auto; }
-      .site-header { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid rgba(219, 231, 245, 0.8); background: rgba(247, 250, 255, 0.9); backdrop-filter: blur(16px); }
+      .site-header { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid rgba(214, 227, 244, 0.9); background: rgba(246, 250, 255, 0.92); backdrop-filter: blur(16px); }
       .nav { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 24px; }
-      .brand { font-size: 17px; font-weight: 750; text-decoration: none; }
-      .nav-links { display: flex; align-items: center; gap: 26px; color: var(--body); font-size: 14px; }
-      .nav-links a { text-decoration: none; }
+      .brand { flex: 0 0 auto; font-size: 17px; font-weight: 750; text-decoration: none; }
+      .nav-links { display: flex; min-width: 0; align-items: center; gap: 22px; color: var(--text-secondary); font-size: 14px; white-space: nowrap; }
+      .nav-links a { padding-block: 8px; text-decoration: none; }
       .nav-links a:hover { color: var(--blue); }
+      .nav-install { color: var(--blue-dark); font-weight: 750; }
 
-      .hero { overflow: hidden; padding: 92px 0 78px; background: radial-gradient(circle at 82% 8%, rgba(63, 140, 255, 0.2), transparent 28%), linear-gradient(180deg, #eef6ff 0%, var(--paper) 82%); }
-      .eyebrow { display: inline-flex; margin-bottom: 22px; padding: 6px 11px; border: 1px solid #c9dffc; border-radius: 999px; color: var(--blue-dark); background: rgba(255, 255, 255, 0.7); font-size: 13px; font-weight: 700; letter-spacing: 0.04em; }
-      .lede { max-width: 720px; margin-bottom: 30px; color: var(--body); font-size: clamp(18px, 2vw, 21px); }
+      .hero { --reveal-x: 68%; position: relative; overflow: hidden; padding: 90px 0 82px; background: linear-gradient(180deg, #eaf4ff 0%, var(--surface-page) 88%); }
+      .hero .wrap { position: relative; z-index: 2; }
+      .hero-copy { max-width: 740px; }
+      .hero h1 { max-width: 840px; }
+      .eyebrow { display: inline-flex; margin-bottom: 20px; padding: 6px 11px; border: 1px solid #c2d9f8; border-radius: 999px; color: var(--blue-dark); background: rgba(255, 255, 255, 0.78); font-size: 13px; font-weight: 750; letter-spacing: 0.04em; }
+      .lede, .section-lead { color: var(--text-secondary); font-size: clamp(18px, 2vw, 21px); text-wrap: pretty; }
+      .lede { max-width: 740px; margin-bottom: 30px; }
+      .section-lead { max-width: 720px; margin-bottom: 42px; font-size: 18px; }
       .actions { display: flex; flex-wrap: wrap; gap: 12px; }
-      .button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; padding: 0 20px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--white); font-weight: 700; text-decoration: none; }
-      .button:hover { border-color: #b5cbe7; }
-      .button.primary { border-color: var(--blue); color: white; background: var(--blue); box-shadow: 0 10px 24px rgba(23, 104, 229, 0.2); }
-      .button.primary:hover { background: var(--blue-dark); }
-      .requirements { margin-top: 16px; color: var(--muted); font-size: 13px; }
-      .product-shot { margin-top: 58px; padding: 11px; border: 1px solid rgba(188, 210, 238, 0.85); border-radius: 22px; background: rgba(255, 255, 255, 0.76); box-shadow: var(--shadow); }
-      .product-shot img { width: 100%; border-radius: 13px; }
-      .product-shot figcaption { padding: 12px 6px 2px; color: var(--muted); font-size: 13px; }
+      .button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; padding: 0 20px; border: 1px solid var(--border-subtle); border-radius: 10px; color: var(--text-primary); background: var(--surface-raised); font-weight: 750; text-decoration: none; transition: background-color 150ms, border-color 150ms, color 150ms; }
+      .button:hover { border-color: var(--border-strong); background: var(--surface-inset); }
+      .button.primary { border-color: var(--blue); color: var(--text-inverse); background: var(--blue); box-shadow: 0 10px 24px rgba(15, 82, 186, 0.22); }
+      .button.primary:hover { border-color: var(--blue-dark); background: var(--blue-dark); }
+      .hero-market { position: absolute; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
+      .hero-market svg { display: block; width: 100%; height: 100%; }
+      .hero-market g[stroke="#17a883"] { stroke: #df5567; fill: #df5567; }
+      .hero-market g[stroke="#df6576"] { stroke: #15a67c; fill: #15a67c; }
+      .hero-market-mask { position: absolute; top: 0; right: 0; bottom: 0; left: var(--reveal-x); border-inline-start: 1px solid rgba(63, 96, 137, 0.4); background: linear-gradient(90deg, rgba(229, 237, 247, 0.97), rgba(241, 246, 252, 0.99) 42%, #f6faff 100%); box-shadow: -20px 0 45px rgba(92, 123, 160, 0.07); }
+      .hero-market-cursor { position: absolute; top: 78px; bottom: 92px; left: var(--reveal-x); width: 1px; background: rgba(38, 73, 116, 0.62); translate: -1px 0; }
+      .hero-market-cursor::before { position: absolute; top: 42%; left: 50%; width: 8px; height: 8px; border: 2px solid rgba(255, 255, 255, 0.92); border-radius: 50%; content: ""; background: #397bd1; box-shadow: 0 0 0 4px rgba(57, 123, 209, 0.12); translate: -50% -50%; }
+      .hero-market-vignette { position: absolute; inset: 0; background: radial-gradient(circle at 25% 46%, rgba(243, 248, 255, 0.82) 0 19%, rgba(243, 248, 255, 0.3) 42%, transparent 67%), linear-gradient(180deg, rgba(234, 244, 255, 0.78), transparent 24%, transparent 72%, rgba(246, 250, 255, 0.92)); }
+      .hero-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(920px, 100%); margin-top: 54px; border-top: 1px solid var(--border-subtle); }
+      .hero-meta div { padding: 18px 24px 0 0; }
+      .hero-meta div + div { padding-left: 24px; border-left: 1px solid var(--border-subtle); }
+      .hero-meta strong, .hero-meta span { display: block; }
+      .hero-meta strong { color: var(--blue-dark); font-size: 14px; }
+      .hero-meta span { margin-top: 3px; color: var(--text-secondary); font-size: 14px; }
 
-      section { padding: 92px 0; }
-      .intro { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: clamp(40px, 8vw, 110px); align-items: start; }
-      .intro p { color: var(--body); font-size: 18px; }
-      .section-lead { max-width: 640px; margin-bottom: 42px; color: var(--body); font-size: 18px; }
-      .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-      .card { padding: 28px; border: 1px solid var(--line); border-radius: 16px; background: var(--white); box-shadow: 0 10px 35px rgba(29, 73, 129, 0.05); }
-      .step { display: grid; width: 34px; height: 34px; margin-bottom: 22px; place-items: center; border-radius: 9px; color: var(--blue-dark); background: var(--blue-soft); font-weight: 800; }
-      .card p { margin-bottom: 0; color: var(--body); }
-      .practice { background: #eef5ff; }
-      .practice .card { background: rgba(255, 255, 255, 0.85); }
+      .path-grid, .boundary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .path-grid { gap: 18px; }
+      .path { display: flex; flex-direction: column; padding: 30px; border: 1px solid var(--border-subtle); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-small); }
+      .path::before { display: block; margin-bottom: 24px; color: var(--blue-dark); font-size: 12px; font-weight: 800; letter-spacing: 0.09em; }
+      .path.offline::before { content: "推荐 · 第一次使用"; }
+      .path.real::before { content: "进阶 · 准备真实行情"; }
+      .path p, .path li, .evidence-copy p, .archive-intro p, .archive-list p, .boundary-grid p, details p { color: var(--text-secondary); }
+      .path ul { margin: 22px 0; padding: 0; list-style: none; }
+      .path li { position: relative; padding: 8px 0 8px 20px; }
+      .path li::before { position: absolute; left: 0; content: "—"; color: var(--blue); font-weight: 800; }
+      .path-note { margin: 0 0 18px; padding: 12px 14px; border-left: 3px solid var(--blue); background: var(--surface-inset); font-size: 14px; }
+      .path > .button { align-self: flex-start; margin-top: auto; }
+      .quickstart { margin-top: 22px; overflow: hidden; border: 1px solid #34527a; border-radius: 18px; background: var(--surface-dark); box-shadow: var(--shadow-small); }
+      .quickstart summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: center; min-height: 96px; padding: 24px 30px; color: var(--text-inverse); list-style: none; }
+      .quickstart summary::-webkit-details-marker { display: none; }
+      .quickstart[open] summary { border-bottom: 1px solid #34527a; }
+      .quickstart summary:focus-visible { outline-color: var(--focus-ring-on-dark); outline-offset: -5px; }
+      .quickstart-summary-copy strong, .quickstart-summary-copy span { display: block; }
+      .quickstart-summary-copy strong { margin-bottom: 6px; font-size: 24px; line-height: 1.15; letter-spacing: -0.035em; }
+      .quickstart-summary-copy span { color: var(--text-inverse-subtle); font-size: 14px; font-weight: 400; }
+      .disclosure-icon { position: relative; width: 40px; height: 40px; }
+      .disclosure-icon::before, .disclosure-icon::after { position: absolute; top: 50%; left: 50%; width: 14px; height: 2px; border-radius: 999px; content: ""; background: currentColor; translate: -50% -50%; }
+      .disclosure-icon::after { rotate: 90deg; }
+      .quickstart[open] .disclosure-icon::after { opacity: 0; scale: 0.25; }
+      .quickstart-body { padding: 26px 30px 30px; }
+      .quickstart .quickstart-intro { margin: 0 0 24px; color: var(--text-inverse-subtle); }
+      .install-steps { display: grid; grid-template-columns: 1fr; gap: 1px; margin: 0; padding: 0; overflow: hidden; border: 1px solid #34527a; border-radius: 12px; background: #34527a; list-style: none; counter-reset: install-step; }
+      .install-steps li { min-width: 0; padding: 20px; background: #15325d; counter-increment: install-step; }
+      .install-steps strong { display: block; margin-bottom: 12px; color: var(--text-inverse); font-size: 15px; }
+      .install-steps strong::before { margin-right: 8px; color: #9ec5ff; content: "0" counter(install-step); font-size: 12px; }
+      .code-block { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-height: 60px; overflow: hidden; border: 1px solid #2d466b; border-radius: 12px; background: #061229; }
+      .copy-button { position: relative; display: grid; grid-column: 2; grid-row: 1; width: 40px; min-width: 40px; height: 40px; margin-inline-end: 10px; padding: 0; place-items: center; border: 1px solid #3d5579; border-radius: 8px; color: var(--text-inverse); background: #172641; cursor: pointer; }
+      .copy-button:hover { border-color: #9ec5ff; background: #1b4075; }
+      .copy-button:focus-visible { outline: 3px solid var(--focus-ring-on-dark); outline-offset: 2px; }
+      .copy-button svg { position: absolute; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+      .copy-success-icon { opacity: 0; scale: 0.25; filter: blur(4px); }
+      .copy-button.is-copied .copy-icon { opacity: 0; scale: 0.25; filter: blur(4px); }
+      .copy-button.is-copied .copy-success-icon { opacity: 1; scale: 1; filter: blur(0); }
+      .copy-button.is-error { border-color: #ffb7b7; color: #ffd4d4; }
+      pre { grid-column: 1; grid-row: 1; min-width: 0; max-width: 100%; margin: 0; overflow-x: auto; background: transparent; color: #20c7ff; }
+      pre:focus-visible { outline: 3px solid var(--focus-ring-on-dark); outline-offset: -3px; }
+      pre code { display: block; width: max-content; min-width: 100%; padding: 12px 14px; font-size: 13px; line-height: 1.65; }
+      .code-comment { color: #93a8c2; }
+      .quickstart-meta { display: grid; gap: 8px; margin: 18px 0 0; padding: 0; color: var(--text-inverse-subtle); font-size: 13px; list-style: none; }
+      .quickstart-meta li { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 10px; }
+      .quickstart-meta strong { color: var(--text-inverse); }
+      .quickstart-meta code { overflow-wrap: anywhere; }
+      .copy-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 
-      .scope { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 70px; padding: 42px; border: 1px solid var(--line); border-radius: 20px; background: var(--white); }
-      .scope p, .scope li { color: var(--body); }
-      .scope ul { margin: 0; padding-left: 22px; }
-      .scope li + li { margin-top: 12px; }
-      .faq { max-width: 820px; }
-      details { border-bottom: 1px solid var(--line); }
-      summary { padding: 22px 0; cursor: pointer; font-size: 18px; font-weight: 720; list-style-position: outside; }
-      details p { margin: -4px 0 24px; color: var(--body); }
+      .evidence { background: #edf5ff; }
+      .evidence-step { position: relative; padding-inline-start: 36px; border-inline-start: 1px solid #ccddf1; }
+      .evidence-step::before { position: absolute; top: 4px; inset-inline-start: -7px; width: 12px; height: 12px; border: 3px solid var(--blue); border-radius: 50%; content: ""; background: #edf5ff; }
+      .evidence-step + .evidence-step { margin-top: 88px; }
+      .evidence-index { display: inline-flex; margin-bottom: 16px; color: var(--blue-dark); font-size: 13px; font-weight: 800; letter-spacing: 0.08em; }
+      .evidence-copy { width: 100%; margin-bottom: 28px; }
+      .evidence-copy p { margin-bottom: 0; font-size: 17px; }
+      .evidence-gallery { display: grid; gap: 18px; align-items: start; }
+      .evidence-gallery.setup { grid-template-columns: minmax(0, 1.85fr) minmax(220px, 0.55fr); }
+      .evidence-gallery.results { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .evidence-figure { margin: 0; padding: 9px; border: 1px solid rgba(168, 197, 232, 0.9); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-small); }
+      .evidence-figure img { width: 100%; height: auto; border-radius: 10px; object-fit: contain; outline: 1px solid rgba(0, 0, 0, 0.1); }
+      .evidence-gallery.setup .evidence-figure:first-child img { aspect-ratio: 16 / 9; object-fit: cover; object-position: top; }
+      .evidence-gallery.setup .evidence-figure:last-child img { aspect-ratio: 4 / 5; object-fit: cover; object-position: top; }
+      .evidence-gallery.decision img { aspect-ratio: 16 / 10; object-fit: cover; object-position: top; }
+      .evidence-gallery.results .evidence-figure img { aspect-ratio: 4 / 5; object-fit: cover; object-position: top; }
+      .evidence-figure figcaption { padding: 12px 4px 2px; color: var(--text-subtle); font-size: 13px; }
 
-      .invite { padding: 62px 0; color: white; background: #11294e; }
-      .invite .wrap { display: grid; grid-template-columns: 1fr auto; gap: 36px; align-items: center; }
-      .invite h2 { color: white; }
-      .invite p { max-width: 690px; margin-bottom: 0; color: #c7d7ec; }
-      .invite .button:not(.primary) { border-color: #496183; color: white; background: transparent; }
-      footer { padding: 28px 0; color: var(--muted); background: #0b1d38; font-size: 13px; }
+      .archive-layout { display: grid; grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr); gap: clamp(42px, 8vw, 104px); align-items: start; }
+      .archive-intro p { font-size: 18px; }
+      .archive-list { margin: 0; padding: 0; border-top: 1px solid var(--border-subtle); list-style: none; }
+      .archive-list li { display: grid; grid-template-columns: 42px 1fr; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--border-subtle); }
+      .archive-list span { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; color: var(--blue-dark); background: var(--blue-soft); font-size: 13px; font-weight: 800; }
+      .archive-list strong { display: block; margin-bottom: 3px; font-size: 16px; }
+      .archive-list p { margin: 0; font-size: 15px; }
+
+      .boundary { background: var(--surface-inset); }
+      .boundary-grid { gap: 1px; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 18px; background: var(--border-subtle); }
+      .boundary-grid article { min-height: 220px; padding: 30px; background: var(--surface-raised); }
+      .boundary-grid p { margin-bottom: 0; }
+      .boundary-grid .boundary-label { margin-bottom: 14px; color: var(--blue-dark); font-size: 12px; font-weight: 800; letter-spacing: 0.09em; }
+      .version-strip { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-top: 32px; padding: 18px 20px; border: 1px solid #b9d2ef; border-radius: 12px; color: var(--text-secondary); background: rgba(255, 255, 255, 0.72); font-size: 14px; }
+      .version-strip strong { color: var(--text-primary); }
+
+      .faq { max-width: 860px; }
+      details { border-bottom: 1px solid var(--border-subtle); }
+      summary { padding: 21px 0; cursor: pointer; font-size: 18px; font-weight: 720; list-style-position: outside; }
+      details p { margin: -3px 0 24px; }
+      .invite { padding: 66px 0; color: var(--text-inverse); background: var(--surface-dark); }
+      .invite .wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 36px; align-items: center; }
+      .invite h2 { color: var(--text-inverse); }
+      .invite p { max-width: 650px; margin-bottom: 0; color: var(--text-inverse-subtle); }
+      .invite .button:not(.primary) { border-color: #567096; color: var(--text-inverse); background: transparent; }
+      .invite .button:not(.primary):hover { background: rgba(255, 255, 255, 0.08); }
+      .invite a:focus-visible { outline-color: var(--focus-ring-on-dark); }
+      footer { padding: 28px 0; color: var(--text-inverse-subtle); background: var(--surface-footer); font-size: 13px; }
 
       @media (max-width: 760px) {
         .wrap { width: min(100% - 28px, 1120px); }
-        .nav { min-height: 58px; }
-        .nav-links a:not(.nav-install) { display: none; }
-        .hero { padding: 62px 0 52px; }
-        h1 { font-size: clamp(38px, 12vw, 54px); }
+        .nav { gap: 16px; overflow: hidden; }
+        .nav-links { gap: 18px; overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
+        .hero { padding: 62px 0 54px; }
+        .hero h1 { font-size: clamp(38px, 12vw, 54px); }
+        .hero-market-cursor { top: 54px; bottom: 74px; }
         section { padding: 68px 0; }
-        .intro, .scope, .invite .wrap { grid-template-columns: 1fr; gap: 24px; }
-        .cards { grid-template-columns: 1fr; }
-        .scope { padding: 28px 22px; }
+        .hero-meta, .path-grid, .boundary-grid, .archive-layout, .invite .wrap { grid-template-columns: 1fr; }
+        .hero-meta { margin-top: 42px; }
+        .hero-meta div, .hero-meta div + div { padding: 14px 0 0; border-left: 0; }
+        .hero-meta div + div { border-top: 1px solid var(--border-subtle); }
+        .evidence-step { padding-inline-start: 28px; }
+        .evidence-step + .evidence-step { margin-top: 62px; }
+        .evidence-gallery.setup, .evidence-gallery.results { grid-template-columns: 1fr; }
+        .archive-layout, .invite .wrap { gap: 28px; }
+        .boundary-grid article { min-height: auto; }
+        .quickstart summary { gap: 14px; min-height: 88px; padding: 20px; }
+        .quickstart-summary-copy strong { font-size: 21px; }
+        .quickstart-body { padding: 20px; }
+        .install-steps li { padding: 16px; }
+        .quickstart-meta li { grid-template-columns: 1fr; gap: 1px; }
         .invite .actions { width: 100%; }
         .invite .button { flex: 1 1 150px; }
       }
 
+      @media (prefers-reduced-motion: no-preference) {
+        .hero-market-mask, .hero-market-cursor { transition-property: left; transition-duration: 320ms; transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+        .hero.is-tracking .hero-market-mask, .hero.is-tracking .hero-market-cursor { transition-duration: 70ms; transition-timing-function: linear; }
+        .copy-button svg { transition-property: opacity, scale, filter; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+        .disclosure-icon::after { transition-property: opacity, scale; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+        .copy-button:active { scale: 0.96; }
+      }
       @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
     </style>
   </head>
@@ -117,103 +221,208 @@
       <nav class="nav wrap" aria-label="主要导航">
         <a class="brand" href="#top">InvestFlow Replay</a>
         <div class="nav-links">
-          <a href="#workflow">演练流程</a>
-          <a href="#scope">试用范围</a>
-          <a href="#faq">常见问题</a>
+          <a href="#paths">训练路径</a><a href="#evidence">产品证据</a><a href="#archive">训练档案</a>
+          <a href="#boundaries">边界</a><a href="#faq">常见问题</a>
           <a class="nav-install" href="https://github.com/DaNN-55/InvestFlow-Replay#快速开始">安装试用</a>
         </div>
       </nav>
     </header>
-
     <main id="main">
       <section class="hero" id="top">
+        <div class="hero-market" aria-hidden="true">
+          <svg viewBox="0 0 1600 580" preserveAspectRatio="none">
+            <g fill="none" stroke="#8fb0d8" stroke-width="1" opacity="0.14">
+              <path d="M0 92H1600M0 184H1600M0 276H1600M0 368H1600M0 460H1600" />
+              <path d="M100 0V580M200 0V580M300 0V580M400 0V580M500 0V580M600 0V580M700 0V580M800 0V580M900 0V580M1000 0V580M1100 0V580M1200 0V580M1300 0V580M1400 0V580M1500 0V580" />
+            </g>
+            <path d="M0 382C80 368 118 401 174 353S278 330 335 342 430 287 505 315 596 263 664 281 760 220 832 247 932 209 1008 226 1114 177 1190 200 1292 142 1366 171 1490 109 1600 128" fill="none" stroke="#2a6fc7" stroke-width="5" opacity="0.16" />
+            <g stroke-width="4" opacity="0.28">
+              <g stroke="#17a883" fill="#17a883"><path d="M24 424V342"/><rect x="12" y="365" width="24" height="40" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M82 382V305"/><rect x="70" y="326" width="24" height="43" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M140 319V405"/><rect x="128" y="340" width="24" height="45" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M198 367V284"/><rect x="186" y="307" width="24" height="42" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M256 311V240"/><rect x="244" y="260" width="24" height="39" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M314 252V349"/><rect x="302" y="275" width="24" height="52" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M372 315V386"/><rect x="360" y="333" width="24" height="35" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M430 350V267"/><rect x="418" y="288" width="24" height="43" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M488 296V215"/><rect x="476" y="236" width="24" height="43" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M546 224V321"/><rect x="534" y="248" width="24" height="51" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M604 285V207"/><rect x="592" y="228" width="24" height="40" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M662 241V166"/><rect x="650" y="187" width="24" height="39" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M720 175V269"/><rect x="708" y="198" width="24" height="49" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M778 235V302"/><rect x="766" y="252" width="24" height="33" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M836 270V191"/><rect x="824" y="212" width="24" height="41" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M894 222V142"/><rect x="882" y="164" width="24" height="42" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M952 151V244"/><rect x="940" y="175" width="24" height="47" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M1010 213V136"/><rect x="998" y="157" width="24" height="39" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M1068 171V102"/><rect x="1056" y="121" width="24" height="36" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M1126 111V199"/><rect x="1114" y="133" width="24" height="44" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M1184 165V229"/><rect x="1172" y="181" width="24" height="31" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M1242 200V125"/><rect x="1230" y="145" width="24" height="39" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M1300 154V82"/><rect x="1288" y="102" width="24" height="37" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M1358 91V178"/><rect x="1346" y="113" width="24" height="43" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M1416 148V73"/><rect x="1404" y="94" width="24" height="38" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M1474 105V44"/><rect x="1462" y="61" width="24" height="32" rx="3"/></g>
+              <g stroke="#df6576" fill="#df6576"><path d="M1532 53V136"/><rect x="1520" y="74" width="24" height="41" rx="3"/></g>
+              <g stroke="#17a883" fill="#17a883"><path d="M1590 110V35"/><rect x="1578" y="55" width="24" height="39" rx="3"/></g>
+            </g>
+          </svg>
+          <div class="hero-market-vignette"></div>
+          <div class="hero-market-mask"></div>
+          <span class="hero-market-cursor"></span>
+        </div>
         <div class="wrap">
-          <span class="eyebrow">Alpha · 本地运行 · 模拟交易</span>
-          <h1>看不到下一根 K 线时，你会怎么交易？</h1>
-          <p class="lede">在隐藏标的身份和后续走势的历史行情中，练习入场、持仓与退出。记录当时的判断，再揭晓结果，看看哪些决定值得保留，哪些需要调整。</p>
-          <div class="actions">
-            <a class="button primary" href="https://github.com/DaNN-55/InvestFlow-Replay#快速开始">查看安装步骤</a>
-            <a class="button" href="#workflow">看看如何演练</a>
+          <div class="hero-copy">
+            <span class="eyebrow">v0.1.0-alpha.1 · 本地运行 · 模拟交易</span>
+            <h1>把交易判断留在未知行情里</h1>
+            <p class="lede">InvestFlow Replay 把一段历史行情冻结成你尚不知道结果的训练场。你在可见行情中做模拟决策，盲评先冻结，揭晓后再复盘；判断、订单与记录都留在本机。</p>
+            <div class="actions"><a class="button primary" href="#offline-demo">先看新手练习步骤</a><a class="button" href="#real-market">查看真实行情要求</a></div>
           </div>
-          <p class="requirements">需要在电脑上安装运行。当前需要 Python 3.10–3.13 与 Node.js 22+；真实行情首次使用需要准备本地缓存。</p>
-          <figure class="product-shot">
-            <img src="/replay-trading-desk.png" width="1920" height="1386" alt="InvestFlow Replay 交易演练界面，包含 K 线图、模拟账户和买卖操作区域" />
-            <figcaption>真实产品界面：匿名行情、模拟账户与决策记录在同一张交易台上完成。</figcaption>
-          </figure>
+          <div class="hero-meta" aria-label="产品边界摘要"><div><strong>未知行情训练</strong><span>不是回测结果展示</span></div><div><strong>可追溯产物</strong><span>决策、模拟订单、盲评与复盘</span></div><div><strong>本地边界</strong><span>不连接证券账户，不真实下单</span></div></div>
         </div>
       </section>
+      <section id="paths"><div class="wrap">
+        <span class="eyebrow">怎么开始</span><h2>第一次使用，先选左边</h2>
+        <p class="section-lead">先用系统自带的示例数据熟悉整个流程。等你确认会用了，再切换到真实历史行情。两种方式都在你的电脑上运行。</p>
+        <div class="path-grid">
+          <article class="path offline" id="offline-demo">
+            <h3>先用示例数据练一遍</h3>
+            <p>安装完成后运行 <code>./run-demo.sh</code>，就能直接开始练习，不需要另外准备行情数据。</p>
+            <ul><li>练习数据由系统生成，不代表真实市场。</li><li>启动后不会联网获取行情，练习记录单独保存在 <code>.demo-storage/</code>。</li><li>可以完整体验模拟买卖、逐步查看后续行情、先写判断再看结果，以及最后复盘。</li></ul>
+            <p class="path-note">安装项目时仍需联网下载依赖；开始练习后不连接行情服务。</p>
+            <a class="button" href="https://github.com/DaNN-55/InvestFlow-Replay#离线演示">查看新手练习步骤</a>
+          </article>
+          <article class="path real" id="real-market">
+            <h3>再用真实历史行情练习</h3>
+            <p>想用真实历史数据练习时，运行 <code>./run.sh</code>。程序会先在电脑上准备行情数据，再进入日线或 5 分钟练习。</p>
+            <ul><li>第一次使用需要联网准备和更新行情数据。</li><li>电脑需要安装 Python 3.10–3.13 和 Node.js 22+。</li><li>部分股票或时间段可能因为数据源暂时不可用而无法练习。</li></ul>
+            <p class="path-note">建议先完成一次示例数据练习，再使用真实历史行情。</p>
+            <a class="button" href="https://github.com/DaNN-55/InvestFlow-Replay#快速开始">查看真实行情安装说明</a>
+          </article>
+        </div>
+        <details class="quickstart">
+          <summary>
+            <span class="quickstart-summary-copy"><strong>安装并启动</strong><span>准备在本机使用时，展开查看三步命令。</span></span>
+            <span class="disclosure-icon" aria-hidden="true"></span>
+          </summary>
+          <div class="quickstart-body">
+            <p class="quickstart-intro">打开“终端”，依次完成下面三步。第一次使用建议先启动示例数据。</p>
+            <ol class="install-steps">
+              <li>
+                <strong>下载项目</strong>
+                <div class="code-block"><pre id="download-command" tabindex="0" aria-label="下载项目命令"><code>git clone https://github.com/DaNN-55/InvestFlow-Replay.git
+cd InvestFlow-Replay</code></pre><button class="copy-button" type="button" data-copy-target="download-command" aria-label="复制下载项目命令" title="复制"><svg class="copy-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><svg class="copy-success-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button></div>
+              </li>
+              <li>
+                <strong>安装依赖</strong>
+                <div class="code-block"><pre id="install-command" tabindex="0" aria-label="安装依赖命令"><code>./install.sh</code></pre><button class="copy-button" type="button" data-copy-target="install-command" aria-label="复制安装依赖命令" title="复制"><svg class="copy-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><svg class="copy-success-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button></div>
+              </li>
+              <li>
+                <strong>选择启动方式</strong>
+                <div class="code-block"><pre id="start-command" tabindex="0" aria-label="启动命令"><code><span class="code-comment"># 示例数据（推荐）</span>
+./run-demo.sh
 
-      <section>
-        <div class="wrap intro">
-          <div><span class="eyebrow">为什么练一次</span><h2>把当时的判断留下来</h2></div>
-          <div>
-            <p>看完一段走势，再解释哪里该买、哪里该卖，往往很容易。真正做决定时，你手里只有已经发生的行情。</p>
-            <p>InvestFlow Replay 让行情逐步展开。你可以先观察，记录买卖与判断依据，再对照结果复盘，让“当时为什么这么做”有据可查。</p>
+<span class="code-comment"># 真实历史行情</span>
+./run.sh</code></pre><button class="copy-button" type="button" data-copy-target="start-command" aria-label="复制启动命令" title="复制"><svg class="copy-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><svg class="copy-success-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button></div>
+              </li>
+            </ol>
+            <ul class="quickstart-meta">
+              <li><strong>示例练习地址</strong><code>http://127.0.0.1:5280/decision/market-replay</code></li>
+              <li><strong>真实行情地址</strong><code>http://127.0.0.1:5180/decision/market-replay</code></li>
+              <li><strong>停止服务</strong><span>示例数据运行 <code>./stop-demo.sh</code>；真实行情运行 <code>./stop.sh</code>。</span></li>
+            </ul>
+            <p class="copy-status" role="status" aria-live="polite"></p>
           </div>
-        </div>
-      </section>
-
-      <section id="workflow">
-        <div class="wrap">
-          <span class="eyebrow">演练流程</span>
-          <h2>一次演练怎么完成</h2>
-          <p class="section-lead">从匿名行情开始，到揭晓结果结束。每一步都围绕你当时能看到的信息。</p>
-          <div class="cards">
-            <article class="card"><span class="step">1</span><h3>选择这次怎么练</h3><p>选择日线演练或日内模拟，设置演练长度、初始资金和交易成本，开始一段匿名行情。</p></article>
-            <article class="card"><span class="step">2</span><h3>随行情推进做决定</h3><p>观察 K 线，决定继续等待、买入或卖出。模拟账户记录交易与资金变化，帮助你回看自己的执行过程。</p></article>
-            <article class="card"><span class="step">3</span><h3>先写判断，再看结果</h3><p>完成演练后先提交盲评，再揭晓标的与日期、对照走势补充复盘。历史记录保留这次练习，方便以后回看。</p></article>
-          </div>
-        </div>
-      </section>
-
-      <section class="practice">
-        <div class="wrap">
-          <span class="eyebrow">练习重点</span>
-          <h2>你可以用它练什么</h2>
-          <div class="cards">
-            <article class="card"><h3>入场有没有依据</h3><p>把“感觉可以买”写成具体条件，再回看自己是否按条件行动。</p></article>
-            <article class="card"><h3>退出有没有执行</h3><p>行情变化时，检查自己是否坚持原有计划，还是临时改变了判断。</p></article>
-            <article class="card"><h3>复盘能否指导下一次</h3><p>对照决策记录与结果，写下下一次要保留或调整的做法。</p></article>
-          </div>
-        </div>
-      </section>
-
-      <section id="scope">
-        <div class="wrap scope">
-          <div><span class="eyebrow">当前试用范围</span><h2>为愿意独立安装、认真反馈的学习者准备</h2><p>这是一个早期版本，适合了解基本 K 线和买卖概念的用户。</p></div>
-          <ul>
-            <li>支持日线演练与日内模拟。</li>
-            <li>应用账本和行情缓存保存在本机；行情获取需要网络连接。</li>
-            <li>当前以本地单人使用为主，没有账号云同步，也没有公开的多人在线体验服务。</li>
-            <li>真实行情的可用范围取决于数据源与本地缓存，部分证券和时段可能无法提供。</li>
-          </ul>
-        </div>
-      </section>
-
-      <section id="faq">
-        <div class="wrap faq">
-          <span class="eyebrow">常见问题</span>
-          <h2>开始之前，你可能想知道</h2>
-          <details><summary>会连接我的证券账户吗？</summary><p>不会。这里进行的是模拟演练，不执行真实证券交易。</p></details>
-          <details><summary>可以直接在网页里玩吗？</summary><p>当前需要下载项目并在本机运行。这个展示页介绍产品和安装方式。</p></details>
-          <details><summary>没有编程基础也能用吗？</summary><p>使用界面不需要写代码，但当前安装需要准备 Python、Node.js，并运行终端命令。如果卡在安装步骤，欢迎反馈具体报错。</p></details>
-          <details><summary>一次演练赚钱，是否说明规则有效？</summary><p>一次结果只能作为一次练习记录。模拟成交与真实交易有差异，本工具不证明策略有效，也不承诺真实收益。</p></details>
-          <details><summary>记录存在哪里？</summary><p>记录保存在项目的本地存储目录。清理或迁移项目之前，请先保留存储文件；具体备份方式以安装说明为准。</p></details>
-        </div>
-      </section>
-
-      <section class="invite">
-        <div class="wrap">
-          <div><h2>完成一次演练，告诉我哪里卡住了</h2><p>现在最希望听到三类反馈：哪里让你无法继续、哪里看不懂，以及你是否愿意再练一次。反馈时请说明操作步骤、预期结果和实际结果；有报错可以附上错误文字，截图前请遮住个人记录。</p></div>
-          <div class="actions">
-            <a class="button primary" href="https://github.com/DaNN-55/InvestFlow-Replay#快速开始">安装试用</a>
-            <a class="button" href="https://github.com/DaNN-55/InvestFlow-Replay/issues">反馈问题</a>
-            <a class="button" href="https://github.com/DaNN-55/InvestFlow-Replay">查看源代码</a>
-          </div>
-        </div>
-      </section>
+        </details>
+      </div></section>
+      <section class="evidence" id="evidence"><div class="wrap">
+        <span class="eyebrow">产品证据流</span><h2>从选择演练，到揭晓后复盘</h2><p class="section-lead">以下是正式产品的真实界面素材，用于说明训练过程与记录结构，不作为收益承诺，也不包含个人真实交易记录。</p>
+        <article class="evidence-step"><div class="evidence-copy"><span class="evidence-index">01 · 设置演练</span><h3>把训练条件与交易成本先设清楚</h3><p>先选择日线演练或日内模拟、演练长度和指数基准，再按需调整初始资金、佣金、税费与滑点。</p></div><div class="evidence-gallery setup"><figure class="evidence-figure"><img src="/landing-replay-setup.png" width="1920" height="968" alt="InvestFlow Replay 的演练设置界面，显示日线演练与日内模拟、20 至 120 个交易日长度、指数基准和开始按钮" /><figcaption>演练入口：选择模式、长度与指数基准。</figcaption></figure><figure class="evidence-figure"><img src="/landing-replay-settings.png" width="418" height="490" alt="InvestFlow Replay 的资金与成本设置面板，显示初始资金、佣金率、最低佣金、卖出印花税率、双向过户费率和滑点" /><figcaption>资金与成本：相关参数集中在开始演练之前设置。</figcaption></figure></div></article>
+        <article class="evidence-step"><div class="evidence-copy"><span class="evidence-index">02 · 匿名交易决策</span><h3>只依据此刻可见的行情</h3><p>交易台隐藏标的名称，只展示当前进度前可见的行情。你可以模拟买卖或继续推进，模拟订单与成交事件随会话一同保留。</p></div><div class="evidence-gallery decision"><figure class="evidence-figure"><img src="/landing-replay-decision.png" width="1920" height="1386" alt="InvestFlow Replay 的匿名日线盲测交易台，左侧显示 K 线与技术指标，右侧显示分时行情、模拟买卖和推进控制" /><figcaption>匿名交易决策：行情、指标、模拟账户与推进控制集中在同一张交易台。</figcaption></figure></div></article>
+        <article class="evidence-step"><div class="evidence-copy"><span class="evidence-index">03 · 结果与两阶段复盘</span><h3>把评分、成交与两次判断放在一起回看</h3><p>同一份演练档案并列保留本局评分、模拟成交、揭晓前盲评和揭晓后复盘。需要补充时追加修正，不覆盖当时的原始判断。</p></div><div class="evidence-gallery results"><figure class="evidence-figure"><img src="/landing-replay-review-score.png" width="417" height="518" alt="InvestFlow Replay 的本局评分面板，显示综合评分 76.95 以及执行纪律、风险控制、收益表现和复盘质量等分项结果" /><figcaption>本局评分：综合分与各项训练指标并排呈现。</figcaption></figure><figure class="evidence-figure"><img src="/landing-replay-review-blind.png" width="416" height="595" alt="InvestFlow Replay 的揭晓前盲评记录，显示已冻结的战法名称、判断信心、判断理由、交易计划和风险计划" /><figcaption>揭晓前盲评：原始判断锁定，可继续追加修正。</figcaption></figure><figure class="evidence-figure"><img src="/landing-replay-review-post.png" width="415" height="521" alt="InvestFlow Replay 的揭晓后复盘记录，显示已锁定的判断结果、执行纪律、执行复盘、错误不足和经验总结" /><figcaption>揭晓后复盘：事后总结锁定，后续补充不会覆盖原记录。</figcaption></figure></div></article>
+      </div></section>
+      <section id="archive"><div class="wrap archive-layout"><div class="archive-intro"><span class="eyebrow">训练档案</span><h2>一次演练留下什么</h2><p>它留下的是一次在有限信息下的训练记录，而不是对战法有效性的自动证明。</p></div><ol class="archive-list"><li><span>01</span><div><strong>当时的判断</strong><p>会话里的盲评记录你对行情、计划与风险的原始判断；可引用有明确版本号的战法版本。</p></div></li><li><span>02</span><div><strong>模拟订单与成交</strong><p>模拟买卖、订单事件和账户变化与本次会话关联，供你回看执行过程。</p></div></li><li><span>03</span><div><strong>冻结盲评</strong><p>揭晓前的盲评会冻结；后续补充以修正记录追加，不替换原始内容。</p></div></li><li><span>04</span><div><strong>事后复盘</strong><p>揭晓后基于完整结果保存事后复盘，与原始判断并列保留。</p></div></li><li><span>05</span><div><strong>历史演练记录</strong><p>已完成会话可在历史演练中回看，训练档案和行情缓存均保存在本机存储中。</p></div></li></ol></div></section>
+      <section class="boundary" id="boundaries"><div class="wrap"><span class="eyebrow">适用范围与边界</span><h2>适合认真练习，不替代真实交易</h2><div class="boundary-grid"><article><p class="boundary-label">适合谁</p><h3>愿意安装并复盘的个人学习者</h3><p>你了解基本 K 线与买卖概念，愿意在本机安装、完成一次训练闭环，并反馈哪里难以理解或无法继续。</p></article><article><p class="boundary-label">暂不适合谁</p><h3>期待免安装在线交易或收益结论的人</h3><p>这里没有公开的多人在线体验、账号云同步或证券账户连接；模拟结果不能代表真实收益，也不自动证明战法版本有效。</p></article><article><p class="boundary-label">本地数据</p><h3>账本与行情缓存各自留在电脑上</h3><p>正式运行时，<code>storage/app/</code> 保存演练、订单、复盘与战法账本，<code>storage/market/</code> 保存行情缓存；离线 Demo 使用独立的 <code>.demo-storage/</code>。</p></article><article><p class="boundary-label">数据与行为</p><h3>模拟训练，不触及证券账户</h3><p>不连接证券账户，不真实下单，不承诺收益。真实历史行情的覆盖与稳定性依赖外部数据源和本地缓存，部分证券或时段可能不可用。</p></article></div><div class="version-strip" aria-label="版本与平台信息"><span><strong>版本：</strong>v0.1.0-alpha.1</span><span><strong>平台：</strong>仅 macOS 已完成本地验收；其他系统待验证。</span><span><strong>许可：</strong>Apache-2.0</span></div></div></section>
+      <section id="faq"><div class="wrap faq"><span class="eyebrow">常见问题</span><h2>开始前的三个关键问题</h2><details><summary>这是免安装的在线体验吗？</summary><p>不是。展示页不调用行情 API；两条训练路径都需要下载项目并在本机安装运行。主入口先带你看离线 Demo 的实际步骤。</p></details><details><summary>“离线”是不是完全不需要网络？</summary><p>不是。安装依赖需要网络；离线指 <code>./run-demo.sh</code> 启动后的 Demo 不连接通达信行情服务，并使用确定性的合成数据。</p></details><details><summary>一次演练结果能证明战法版本有效吗？</summary><p>不能。一次演练只留下一个受限信息下的训练记录；模拟成交与真实交易有差异，本工具不承诺收益，也不自动证明战法版本有效。</p></details></div></section>
+      <section class="invite"><div class="wrap"><div><h2>先用示例数据练一遍</h2><p>从观察行情、模拟买卖，到先写判断、查看结果和保存复盘。完成后最希望知道：你在哪一步卡住、哪一处看不懂，以及是否愿意再练一次。</p></div><div class="actions"><a class="button primary" href="#offline-demo">先看新手练习步骤</a><a class="button" href="https://github.com/DaNN-55/InvestFlow-Replay/issues">反馈问题</a></div></div></section>
     </main>
-
     <footer><div class="wrap">InvestFlow Replay · 个人研究与模拟演练工具，不构成投资建议。</div></footer>
+    <script>
+      const hero = document.querySelector(".hero");
+      const canTrackHeroMarket = window.matchMedia("(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)");
+
+      function trackHeroMarket(event) {
+        if (!canTrackHeroMarket.matches) return;
+        const bounds = hero.getBoundingClientRect();
+        const pointerPosition = ((event.clientX - bounds.left) / bounds.width) * 100;
+        const revealPosition = Math.min(97, Math.max(3, pointerPosition));
+        hero.classList.add("is-tracking");
+        hero.style.setProperty("--reveal-x", `${revealPosition}%`);
+      }
+
+      function resetHeroMarket() {
+        hero.classList.remove("is-tracking");
+        hero.style.removeProperty("--reveal-x");
+      }
+
+      hero.addEventListener("pointermove", trackHeroMarket);
+      hero.addEventListener("pointerleave", resetHeroMarket);
+      canTrackHeroMarket.addEventListener("change", resetHeroMarket);
+
+      async function writeClipboardText(text) {
+        let clipboardError;
+        if (navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(text);
+            return;
+          } catch (error) {
+            clipboardError = error;
+          }
+        }
+
+        const fallback = document.createElement("textarea");
+        fallback.value = text;
+        fallback.setAttribute("readonly", "");
+        fallback.style.position = "fixed";
+        fallback.style.opacity = "0";
+        document.body.append(fallback);
+        fallback.select();
+        const copied = document.execCommand("copy");
+        fallback.remove();
+        if (!copied) throw clipboardError ?? new Error("copy failed");
+      }
+
+      async function copyCommand(button) {
+        const target = document.getElementById(button.dataset.copyTarget);
+        const status = button.closest(".quickstart").querySelector(".copy-status");
+        const label = target.getAttribute("aria-label");
+        const text = target.textContent.trim();
+
+        try {
+          await writeClipboardText(text);
+          button.classList.remove("is-error");
+          button.classList.add("is-copied");
+          button.setAttribute("aria-label", `已复制${label}`);
+          button.title = "已复制";
+          status.textContent = `已复制${label}`;
+        } catch (error) {
+          button.classList.remove("is-copied");
+          button.classList.add("is-error");
+          button.setAttribute("aria-label", `复制${label}失败，请重试`);
+          button.title = "复制失败，请重试";
+          status.textContent = "复制失败，请手动选择命令。";
+        }
+
+        window.setTimeout(() => {
+          button.classList.remove("is-copied", "is-error");
+          button.setAttribute("aria-label", `复制${label}`);
+          button.title = "复制";
+        }, 1600);
+      }
+
+      document.querySelectorAll(".copy-button").forEach((button) => {
+        button.addEventListener("click", () => copyCommand(button));
+      });
+    </script>
   </body>
 </html>
