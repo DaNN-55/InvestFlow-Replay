@@ -1,6 +1,14 @@
 name: Deploy product page
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - web/landing/**
+      - web/public/favicon.png
+      - web/public/landing-replay-*.png
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
