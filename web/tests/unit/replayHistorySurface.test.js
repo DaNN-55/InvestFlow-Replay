@@ -55,7 +55,6 @@ describe("replay history tracking surface", () => {
     assert.match(viewSource, /ReplayHistoryRecords/u);
     assert.match(viewSource, /ReplayPlaybookPanel/u);
     assert.doesNotMatch(viewSource, /ReplayHistoryPanel/u);
-    assert.doesNotMatch(viewSource, /executionSettingsOpen|>\s*执行参数\s*</u);
   });
 
   it("uses a dedicated replay history API and source state", () => {

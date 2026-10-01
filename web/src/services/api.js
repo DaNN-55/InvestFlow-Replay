@@ -82,10 +82,8 @@ export const api = {
   saveDecisionExecutionSettings: (payload = {}) => request("/api/quant/decision/execution-settings", json("PUT", payload)),
   issueTradeLicense: (id) => request(`${tradeRecordPath(id)}/license`, json("POST", {})),
   recordTradeEntry: (id, payload = {}) => request(`${tradeRecordPath(id)}/entry`, json("POST", payload)),
-  recordTradePriceObservation: (id, payload = {}) => request(`${tradeRecordPath(id)}/price-observation`, json("POST", payload)),
   recordTradeExecutionEvent: (id, payload = {}) => request(`${tradeRecordPath(id)}/execution-events`, json("POST", payload)),
   updateTradeExecutionEvent: (id, eventId, payload = {}) => request(`${tradeRecordPath(id)}/execution-events/${encodeURIComponent(eventId)}`, json("PATCH", payload)),
   deleteTradeExecutionEvent: (id, eventId) => request(`${tradeRecordPath(id)}/execution-events/${encodeURIComponent(eventId)}`, json("DELETE", {})),
-  recordTradeExit: (id, payload = {}) => request(`${tradeRecordPath(id)}/exit`, json("POST", payload)),
   cancelTradeRecord: (id) => request(`${tradeRecordPath(id)}/cancel`, json("POST", {})),
 };

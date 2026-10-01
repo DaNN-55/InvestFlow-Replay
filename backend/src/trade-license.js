@@ -40,8 +40,8 @@ export function calculateTradeLicense(input = {}) {
   if (minRewardRiskRatio == null || minRewardRiskRatio <= 0) {
     errors.push(error("INVALID_MIN_REWARD_RISK", "最低盈亏比必须大于 0。", ["minRewardRiskRatio"]));
   }
-  if (maxAccountRiskPct == null || maxAccountRiskPct <= 0) {
-    errors.push(error("INVALID_ACCOUNT_RISK", "单笔最大账户风险必须大于 0。", ["maxAccountRiskPct"]));
+  if (maxAccountRiskPct == null || maxAccountRiskPct <= 0 || maxAccountRiskPct > 100) {
+    errors.push(error("INVALID_ACCOUNT_RISK", "单笔风险预算必须大于 0 且不超过 100%。", ["maxAccountRiskPct"]));
   }
   if (maxPositionPct == null || maxPositionPct <= 0 || maxPositionPct > 100) {
     errors.push(error("INVALID_POSITION_CAP", "单票最大仓位必须大于 0 且不超过 100%。", ["maxPositionPct"]));

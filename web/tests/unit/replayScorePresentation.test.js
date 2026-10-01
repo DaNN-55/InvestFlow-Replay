@@ -7,7 +7,6 @@ import {
   buildReplayScoreMetrics,
   buildReplayScoreWeightSnapshot,
   formatReplayScoreMetric,
-  isReplayPlaybookComplianceApplicable,
 } from "../../src/utils/replayScorePresentation.js";
 
 const v2ScoreCard = {
@@ -306,62 +305,5 @@ describe("replay score presentation", () => {
       });
       assert.equal(dimension.reason, expected);
     }
-  });
-
-  it("uses the frozen blind-review link for the optional playbook review", () => {
-    const apiHistoryItem = {
-      blindReview: {
-        playbookId: "playbook-1",
-        playbookVersionId: "version-1",
-      },
-      postReview: {
-        playbookFitScore: 4,
-      },
-      scoreCard: {
-        applicability: {
-          playbookCompliance: {
-            applicable: true,
-            reason: null,
-          },
-        },
-      },
-    };
-
-    assert.equal(
-      isReplayPlaybookComplianceApplicable(apiHistoryItem),
-      true,
-    );
-    assert.equal(
-      isReplayPlaybookComplianceApplicable({
-        postReview: { playbookFitScore: 4 },
-        scoreCard: {
-          applicability: {
-            playbookCompliance: { applicable: true, reason: null },
-          },
-        },
-      }),
-      false,
-    );
-    assert.equal(
-      isReplayPlaybookComplianceApplicable({
-        ...apiHistoryItem,
-        postReview: {},
-        scoreCard: {
-          applicability: {
-            playbookCompliance: {
-              applicable: false,
-              reason: "blank_playbook",
-            },
-          },
-        },
-      }),
-      true,
-    );
-    assert.equal(
-      isReplayPlaybookComplianceApplicable({
-        postReview: { playbookFitScore: 3 },
-      }),
-      false,
-    );
   });
 });

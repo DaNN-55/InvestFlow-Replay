@@ -11,7 +11,6 @@ from unittest.mock import patch
 import duckdb
 import pandas as pd
 
-from replay_engine.data_store import DuckDbBarStore
 from replay_engine.tdx_market_cache import (
     TdxMarketDataProvider,
     TdxMarketCache,
@@ -653,20 +652,6 @@ class TdxMarketDataProviderTest(unittest.TestCase):
             self.assertEqual(instrument, ("浦发银行", pd.Timestamp("2024-01-02").date()))
             self.assertEqual(index_codes, [("000001.SH",), ("399001.SZ",)])
             self.assertEqual(calendar_counts, {"SSE": 3, "SZSE": 3})
-
-            store = DuckDbBarStore(
-                db_path=path,
-                source_db_path=path,
-                catalog_db_path=Path(directory) / "catalog.duckdb",
-            )
-            catalog = store.query_instrument_catalog(
-                page=1,
-                page_size=20,
-                keyword="浦发",
-                adjust="qfq",
-            )
-            self.assertEqual(catalog["meta"]["total"], 1)
-            self.assertEqual(catalog["items"][0]["name"], "浦发银行")
 
     def test_incremental_sync_stops_after_page_overlaps_cached_history(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

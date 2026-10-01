@@ -7,13 +7,6 @@ import {
 
 import { api } from "../services/api.js";
 
-export const REPLAY_REVIEW_DRAFT_STATUS_LABELS = Object.freeze({
-  unsaved: "未保存",
-  saving: "保存中",
-  saved: "已自动保存",
-  failed: "保存失败",
-});
-
 const STAGES = ["blind", "post"];
 
 function unwrapDraft(record) {

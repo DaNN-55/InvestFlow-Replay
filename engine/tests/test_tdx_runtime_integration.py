@@ -223,7 +223,6 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
             store = DuckDbBarStore(
                 db_path=path,
                 source_db_path=path,
-                catalog_db_path=Path(directory) / "catalog.duckdb",
             )
 
             self.assertEqual(store.source_mode(), "tdx-cache")
