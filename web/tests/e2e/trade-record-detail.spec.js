@@ -127,6 +127,27 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+for (const healthy of [true, false]) {
+  test(`损坏文件提示保留，${healthy ? "正常记录仍可查看" : "全部损坏时也显示说明"}`, async ({ page }) => {
+    await page.route(/\/api\/quant\/decision\/trade-records(?:\?.*)?$/, (route) => route.fulfill({
+      json: {
+        items: healthy ? [record] : [],
+        errors: [{ fileName: "damaged.json", message: "invalid JSON" }],
+      },
+    }));
+    await page.goto(`${baseUrl}/decision/trade-records`);
+    const alert = page.getByRole("alert").filter({ hasText: "部分记录未能读取" });
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText("damaged.json");
+    await expect(alert).toContainText("原文件已保留");
+    if (healthy) {
+      await expect(page.getByRole("heading", { name: /600519.*贵州茅台|贵州茅台.*600519/ })).toBeVisible();
+    } else {
+      await expect(page.getByText("暂无选中的交易追踪单。")).toBeVisible();
+    }
+  });
+}
+
 test("执行参数可保存并立即更新许可预览，刷新后可重新读取", async ({ page }) => {
   let settings = {
     simulatedAccountEquity: 2000000,

@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, before, describe, it } from "node:test";
 
 import request from "supertest";
@@ -78,9 +79,6 @@ function privateScenario(gameLength = 20, seed = null) {
       limitType: "Z",
       openTimes: 1,
     });
-  }
-  if (seed === 306) {
-    bars[250].open = null;
   }
   if (seed === 307) {
     bars[250].pctChange = 5;
@@ -645,6 +643,19 @@ describe("replay virtual account and next-open execution", () => {
         .expect(201);
       assert.equal(created.body.session.marketEvent, null);
       let session = created.body.session;
+      if (seed === 306) {
+        // Creation now rejects invalid prices. Keep the runtime guard exercised
+        // by simulating damaged/legacy persisted data after a valid creation.
+        const snapshot = privateScenario(20, seed);
+        snapshot.bars[250].open = null;
+        const database = new DatabaseSync(join(root, "workbench.sqlite"));
+        try {
+          database.prepare("UPDATE replay_sessions SET snapshot_json = ? WHERE id = ?")
+            .run(JSON.stringify(snapshot), session.id);
+        } finally {
+          database.close();
+        }
+      }
       for (let index = 0; index < advances; index += 1) {
         const advanced = await request(app)
           .post(`/api/quant/replay/sessions/${session.id}/advance`)

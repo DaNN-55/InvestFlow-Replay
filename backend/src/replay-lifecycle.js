@@ -13,6 +13,14 @@ function lifecycleError(message, status = 400) {
   return error;
 }
 
+function hasValidMarketPrices(bar) {
+  if (!bar || typeof bar !== "object") return false;
+  const prices = [bar.open, bar.high, bar.low, bar.close];
+  return prices.every((price) => Number.isFinite(price) && price > 0) &&
+    bar.high >= Math.max(bar.open, bar.close) &&
+    bar.low <= Math.min(bar.open, bar.close);
+}
+
 export function createReplayLifecycle({
   store,
   scenarioSource,
@@ -48,6 +56,15 @@ export function createReplayLifecycle({
       snapshot.bars.length >= 250 + Number(snapshot?.gameLength);
     if (!validSnapshot) {
       throw lifecycleError("行情演练场景数据不完整", 502);
+    }
+    if (
+      !snapshot.bars.every(hasValidMarketPrices) ||
+      (snapshot.benchmark != null && (
+        !Array.isArray(snapshot.benchmark.bars) ||
+        !snapshot.benchmark.bars.every(hasValidMarketPrices)
+      ))
+    ) {
+      throw lifecycleError("行情演练场景包含无效的 K 线价格", 502);
     }
 
     const timestamp = now();

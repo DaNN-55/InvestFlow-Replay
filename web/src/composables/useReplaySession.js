@@ -526,9 +526,15 @@ export function useReplaySession(options = {}) {
     clearMessages();
     try {
       await client.deleteReplaySession(retrainId);
+      // The delete is committed. Never restore its ID while the source loads.
+      setSession(null);
+      storeSessionId(storage, sourceSessionId);
+      statusMessage.value = "本次复练已取消，正在返回首次演练结果。";
       const restored = await refreshSession({ sessionId: sourceSessionId });
       if (restored) {
         statusMessage.value = "本次复练已取消，已返回首次演练结果。";
+      } else {
+        statusMessage.value = "本次复练已取消；来源演练尚未加载。";
       }
       return restored;
     } catch (error) {
