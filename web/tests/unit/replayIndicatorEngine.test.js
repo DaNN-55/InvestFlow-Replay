@@ -6,7 +6,6 @@ import {
   evaluateReplayAdvancedIndicator,
   evaluateReplayIndicator,
   parseReplayIndicatorExpression,
-  validateReplayIndicatorExpression,
 } from "../../src/utils/replayIndicatorEngine.js";
 
 const bars = [
@@ -58,10 +57,6 @@ describe("replay indicator expression engine", () => {
       "REF(close, 1.5)",
       "MA(close + 1)",
     ]) {
-      const validation = validateReplayIndicatorExpression(expression);
-      assert.equal(validation.valid, false, expression);
-      assert.ok(validation.error, expression);
-
       const result = evaluateReplayIndicator(expression, bars);
       assert.deepEqual(result.values, []);
       assert.ok(result.error, expression);

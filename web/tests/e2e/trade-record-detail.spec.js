@@ -127,10 +127,77 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("执行参数可保存并立即更新许可预览，刷新后可重新读取", async ({ page }) => {
+  let settings = {
+    simulatedAccountEquity: 2000000,
+    liveAccountEquity: 100000,
+    defaultMaxAccountRiskPct: 0.5,
+    defaultMinRewardRiskRatio: 2,
+    lotSize: 100,
+  };
+  let savedPayload;
+  await page.route("**/api/quant/decision/execution-settings", async (route) => {
+    if (route.request().method() === "PUT") {
+      savedPayload = route.request().postDataJSON();
+      settings = { ...settings, ...savedPayload };
+    }
+    await route.fulfill({ json: settings });
+  });
+  await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
+  await page.getByText("交易计划与风控（可选）", { exact: true }).click();
+  await expect(page.locator(".trade-license-metrics")).toContainText("0.5% / 10000");
+
+  await page.getByRole("button", { name: "执行参数", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "执行参数设置", exact: true });
+  await expect(drawer.getByLabel("模拟账户本金")).toHaveValue("2000000");
+  await drawer.getByLabel("模拟账户本金").fill("4000000");
+  await drawer.getByLabel("单笔最大账户风险%").fill("0.75");
+  await drawer.getByRole("button", { name: "保存执行参数" }).click();
+  await expect(drawer).toContainText("执行参数已保存");
+  expect(savedPayload).toEqual({
+    simulatedAccountEquity: 4000000,
+    liveAccountEquity: 100000,
+    defaultMinRewardRiskRatio: 2,
+    defaultMaxAccountRiskPct: 0.75,
+  });
+  await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await expect(page.locator(".trade-license-metrics")).toContainText("0.75% / 30000");
+  await expect(page).toHaveURL(new RegExp(`id=${recordId}`));
+
+  await page.reload();
+  await page.getByRole("button", { name: "执行参数", exact: true }).click();
+  await expect(drawer.getByLabel("模拟账户本金")).toHaveValue("4000000");
+  await expect(drawer.getByLabel("单笔最大账户风险%")).toHaveValue("0.75");
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+});
+
+test("执行参数保存失败时显示错误且不更新当前许可参数", async ({ page }) => {
+  await page.route("**/api/quant/decision/execution-settings", async (route) => {
+    if (route.request().method() !== "PUT") {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ status: 400, json: { error: { message: "执行参数未能保存" } } });
+  });
+  await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
+  await page.getByRole("button", { name: "执行参数", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "执行参数设置", exact: true });
+  await expect(drawer.getByLabel("单笔最大账户风险%")).toHaveValue("0.5");
+  await drawer.getByLabel("单笔最大账户风险%").fill("0.75");
+  await drawer.getByRole("button", { name: "保存执行参数" }).click();
+  await expect(drawer).toContainText("执行参数未能保存");
+  await expect(drawer.getByRole("button", { name: "保存执行参数" })).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await page.getByText("交易计划与风控（可选）", { exact: true }).click();
+  await expect(page.locator(".trade-record-form__label-title")).toContainText("执行参数默认：0.5%");
+});
+
 test("交易详情默认聚焦成交记录并按需展开交易计划", async ({ page }) => {
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
 
-  await expect(page.getByRole("button", { name: "执行参数", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "执行参数", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "基本信息" })).toBeVisible();
   await expect(page.getByText("交易追踪列表已刷新", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "成交与动作记录" })).toBeVisible();

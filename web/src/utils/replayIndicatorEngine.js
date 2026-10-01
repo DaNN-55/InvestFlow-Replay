@@ -345,24 +345,6 @@ export function parseReplayIndicatorExpression(expression, options = {}) {
   return new ExpressionParser(tokenize(expression), variables).parse();
 }
 
-export function validateReplayIndicatorExpression(expression) {
-  try {
-    parseReplayIndicatorExpression(expression);
-    return {
-      valid: true,
-      error: null,
-    };
-  } catch (error) {
-    return {
-      valid: false,
-      error:
-        error instanceof ReplayIndicatorExpressionError
-          ? error.message
-          : "指标表达式无法解析",
-    };
-  }
-}
-
 function toFiniteValue(value) {
   if (
     value === null ||

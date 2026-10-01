@@ -59,28 +59,6 @@ describe("replay market aggregation", () => {
     );
   });
 
-  it("keeps a zoomed historical viewport when one new bar is revealed", () => {
-    const viewport = replayMarket.resolveReplayViewportAfterBarsChange?.({
-      previousTotal: 266,
-      nextTotal: 267,
-      visibleStart: 100,
-      visibleCount: 48,
-    });
-
-    assert.deepEqual(viewport, { visibleStart: 100, visibleCount: 48 });
-  });
-
-  it("keeps the zoom level and follows the newest bar from the right edge", () => {
-    const viewport = replayMarket.resolveReplayViewportAfterBarsChange?.({
-      previousTotal: 266,
-      nextTotal: 267,
-      visibleStart: 218,
-      visibleCount: 48,
-    });
-
-    assert.deepEqual(viewport, { visibleStart: 219, visibleCount: 48 });
-  });
-
   it("aggregates only the revealed bars into anonymous week and month candles", () => {
     const weeks = aggregateReplayBars(revealedBars, "week");
     assert.deepEqual(weeks, [

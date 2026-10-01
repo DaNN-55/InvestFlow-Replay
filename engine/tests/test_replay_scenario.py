@@ -222,7 +222,6 @@ class ReplayScenarioTest(unittest.TestCase):
             connection.close()
         self.store = DuckDbBarStore(
             source_db_path=self.source_path,
-            catalog_db_path=root / "market.duckdb",
         )
 
     def tearDown(self) -> None:

@@ -54,6 +54,27 @@ cd InvestFlow-Replay
 ./stop.sh
 ```
 
+### 自定义运行参数
+
+启动脚本读取当前终端已导出的环境变量，不会自动加载根目录 `.env`。
+`.env.example` 是可用变量的参考清单；例如在同一终端中执行：
+
+```bash
+export INVESTFLOW_REPLAY_ENGINE_PORT=8776
+export INVESTFLOW_REPLAY_BACKEND_PORT=3111
+export INVESTFLOW_REPLAY_WEB_PORT=5181
+export INVESTFLOW_REPLAY_STORAGE_ROOT="$PWD/storage-local"
+./run.sh
+```
+
+此例的页面地址为 <http://127.0.0.1:5181/decision/market-replay>。未导出的参数使用默认值；
+自定义存储根同时影响行情缓存、应用账本和交易追踪文件。若同时设置
+`INVESTFLOW_REPLAY_MARKET_DB_PATH`，日线行情库使用该显式路径，其他存储仍使用存储根。
+同一套自定义存储参数也应在运行 `./install.sh` 初始化时使用。
+
+`./run-demo.sh` 会覆盖当前终端中的 provider、存储根、运行状态目录和三个端口，使用它自己的离线演示配置；
+演示配置优先于上述同名变量。停止正式服务用 `./stop.sh`，停止演示用 `./stop-demo.sh`。
+
 ## 离线演示
 
 安装依赖后，用这一条命令启动完全离线的日线演练：

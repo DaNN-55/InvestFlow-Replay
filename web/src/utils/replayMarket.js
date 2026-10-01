@@ -33,36 +33,6 @@ export function formatReplayBenchmarkLabel(benchmark = {}) {
   return `${identity} · ${startDate} 至 ${endDate}`;
 }
 
-export function resolveReplayViewportAfterBarsChange({
-  previousTotal,
-  nextTotal,
-  visibleStart,
-  visibleCount,
-}) {
-  const safePreviousTotal = Math.max(Number(previousTotal) || 0, 0);
-  const safeNextTotal = Math.max(Number(nextTotal) || 0, 0);
-  if (!safeNextTotal) {
-    return { visibleStart: 0, visibleCount: 1 };
-  }
-  if (!safePreviousTotal || Number(visibleCount) >= safePreviousTotal) {
-    return { visibleStart: 0, visibleCount: safeNextTotal };
-  }
-
-  const nextVisibleCount = Math.min(
-    Math.max(Number(visibleCount) || 1, 1),
-    safeNextTotal,
-  );
-  const wasAtRightEdge =
-    Number(visibleStart) + nextVisibleCount >= safePreviousTotal;
-  const maxStart = Math.max(safeNextTotal - nextVisibleCount, 0);
-  return {
-    visibleStart: wasAtRightEdge
-      ? maxStart
-      : Math.min(Math.max(Number(visibleStart) || 0, 0), maxStart),
-    visibleCount: nextVisibleCount,
-  };
-}
-
 function createAggregateBar(bar, period, periodIndex) {
   const sequence = Number(bar.sequence);
   const pctChange = bar.pctChange == null ? null : Number(bar.pctChange);

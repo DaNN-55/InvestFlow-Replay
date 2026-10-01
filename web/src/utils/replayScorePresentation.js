@@ -111,12 +111,6 @@ export function buildReplayScoreDimensions(scoreCard) {
   );
 }
 
-export function isReplayPlaybookComplianceApplicable(item) {
-  return Boolean(
-    item?.blindReview?.playbookId && item?.blindReview?.playbookVersionId,
-  );
-}
-
 const BENCHMARK_NAMES = {
   "000001.SH": "上证指数", "000016.SH": "上证50", "000300.SH": "沪深300",
   "000688.SH": "科创50", "000852.SH": "中证1000", "000905.SH": "中证500",
