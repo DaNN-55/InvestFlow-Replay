@@ -12,6 +12,7 @@ import TradeExecutionSettingsDrawer from "../components/TradeExecutionSettingsDr
 import TradeRecordCreateDrawer from "../components/TradeRecordCreateDrawer.vue";
 import TradeRecordList from "../components/TradeRecordList.vue";
 import UiActionMenu from "../components/ui/UiActionMenu.vue";
+import UiAlert from "../components/ui/UiAlert.vue";
 import UiButton from "../components/ui/UiButton.vue";
 import UiCard from "../components/ui/UiCard.vue";
 import UiInput from "../components/ui/UiInput.vue";
@@ -47,6 +48,7 @@ const detailLoading = tradeRecordArchive.detailLoading;
 const tradeAnalytics = tradeRecordArchive.analytics;
 const pagedTradeRecordListItems = tradeRecordArchive.pagedItems;
 const tradeRecordPageCount = tradeRecordArchive.pageCount;
+const archiveReadErrors = tradeRecordArchive.readErrors;
 
 const editableFields = [
   "stockName",
@@ -668,6 +670,10 @@ onMounted(() => {
     </nav>
 
     <template v-if="primaryTab === 'records'">
+      <UiAlert v-if="archiveReadErrors.length" variant="warning" role="alert" title="部分记录未能读取">
+        {{ archiveReadErrors.length }} 个文件无法读取，原文件已保留。当前列表和统计仅包含可读取的记录。
+        <p>{{ archiveReadErrors.map((item) => item.fileName).join("、") }}</p>
+      </UiAlert>
       <UiCard class="trade-record-analytics">
       <template #header>
         <div>

@@ -163,6 +163,7 @@ export function useTradeRecordArchive({ pageSize = 10, __test } = {}) {
   const loading = shallowRef(false);
   const detailLoading = shallowRef(false);
   const errorMessage = shallowRef("");
+  const readErrors = shallowRef([]);
   let detailRequestSequence = 0;
 
   function update(action) {
@@ -207,8 +208,10 @@ export function useTradeRecordArchive({ pageSize = 10, __test } = {}) {
   async function load({ preferredId = "" } = {}) {
     loading.value = true;
     errorMessage.value = "";
+    readErrors.value = [];
     try {
       const payload = await requests.listTradeRecords();
+      readErrors.value = Array.isArray(payload?.errors) ? payload.errors : [];
       update({
         type: "replace",
         records: extractItems(payload),
@@ -264,6 +267,7 @@ export function useTradeRecordArchive({ pageSize = 10, __test } = {}) {
     loading: readonly(loading),
     detailLoading: readonly(detailLoading),
     errorMessage: readonly(errorMessage),
+    readErrors: readonly(readErrors),
     pagedItems: computed(() => model.value.pagedItems),
     pageCount: computed(() => model.value.pageCount),
     analytics: computed(() => model.value.analytics),

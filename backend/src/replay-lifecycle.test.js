@@ -29,6 +29,7 @@ describe("replay lifecycle", () => {
     let prefetched;
     const bars = Array.from({ length: 270 }, (_, index) => ({
       tradeDate: `2026-08-${String(index + 1).padStart(2, "0")}`,
+      open: 10, high: 11, low: 9, close: 10,
     }));
     const lifecycle = createReplayLifecycle({
       store: {

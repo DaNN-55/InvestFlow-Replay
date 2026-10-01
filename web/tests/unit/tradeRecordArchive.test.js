@@ -64,6 +64,22 @@ function asyncArchive({ records, getTradeRecord, listTradeRecords }) {
 }
 
 describe("trade record archive", () => {
+  it("keeps healthy records usable and exposes file errors, clearing them after recovery", async () => {
+    const items = [record(1)];
+    let errors = [{ fileName: "damaged.json", message: "invalid JSON" }];
+    const { archive } = asyncArchive({
+      records: items,
+      listTradeRecords: async () => ({ items, errors }),
+    });
+    const result = await archive.load();
+    assert.equal(result.record.id, "record-1");
+    assert.equal(archive.errorMessage.value, "");
+    assert.deepEqual(archive.readErrors.value, errors);
+    errors = [];
+    await archive.load();
+    assert.deepEqual(archive.readErrors.value, []);
+  });
+
   it("loads, sorts, projects, paginates, and summarizes saved records", () => {
     const completed = record(1, {
       status: "reviewed",

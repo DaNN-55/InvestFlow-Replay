@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -459,7 +460,9 @@ function normalizeTradeExecutionEvents(value) {
   }
   assertCondition(Array.isArray(value), "executionEvents 必须是数组");
   assertCondition(value.length <= 200, "executionEvents 最多 200 条");
-  return value.map(normalizeTradeExecutionEvent);
+  const events = value.map(normalizeTradeExecutionEvent);
+  assertCondition(new Set(events.map((event) => event.id)).size === events.length, "executionEvents 包含重复的事件 id");
+  return events;
 }
 
 function normalizeDecisionExecutionSettings(body, current) {
@@ -869,16 +872,24 @@ export function createApp(options = {}) {
 
   function readTradeRecords() {
     ensureTradeRecordsRoot();
-    return listTradeRecordFiles(tradeRecordsRoot)
-      .map((fileName) => {
+    const items = [];
+    const errors = [];
+    for (const fileName of listTradeRecordFiles(tradeRecordsRoot)) {
+      let content;
+      try {
         const absolutePath = resolve(tradeRecordsRoot, fileName);
-        return parseTradeRecordJson(
-          fileName,
-          readFileSync(absolutePath, "utf8"),
-          beijingToday(clock()),
-        );
-      })
-      .sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || ""));
+        content = readFileSync(absolutePath, "utf8");
+        items.push(parseTradeRecordJson(fileName, content, beijingToday(clock())));
+      } catch (error) {
+        let recordId = null;
+        try {
+          recordId = sanitizeRecordId(JSON.parse(content)?.id) || null;
+        } catch { /* Truncated JSON may not contain a recoverable ID. */ }
+        errors.push({ fileName, recordId, message: error.message ?? "文件无法读取" });
+      }
+    }
+    items.sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || ""));
+    return { items, errors };
   }
 
   function findTradeRecordById(id) {
@@ -886,7 +897,14 @@ export function createApp(options = {}) {
     if (!normalizedId) {
       return null;
     }
-    return readTradeRecords().find((record) => record.id === normalizedId) ?? null;
+    const { items, errors } = readTradeRecords();
+    const damaged = errors.find((error) => {
+      const fileId = error.fileName.replace(/\.json$/iu, "");
+      return error.recordId === normalizedId || fileId === normalizedId ||
+        fileId.endsWith(`-trade-${normalizedId}`);
+    });
+    assertCondition(!damaged, `交易追踪单文件无法读取：${damaged?.fileName}`, 409);
+    return items.find((record) => record.id === normalizedId) ?? null;
   }
 
   function saveTradeRecordFile(body, previous = null) {
@@ -895,12 +913,21 @@ export function createApp(options = {}) {
     const fileName = previous?.fileName || buildTradeRecordFileName(record);
     const absolutePath = resolve(tradeRecordsRoot, fileName);
     assertCondition(dirname(absolutePath) === tradeRecordsRoot, "交易追踪单路径无效");
-    writeFileSync(absolutePath, serializeTradeRecordJson(record), "utf8");
-    return parseTradeRecordJson(
+    assertCondition(previous || !existsSync(absolutePath), "交易追踪单文件已存在，不能覆盖未读取的文件", 409);
+    const content = serializeTradeRecordJson(record);
+    const validated = parseTradeRecordJson(
       fileName,
-      readFileSync(absolutePath, "utf8"),
+      content,
       beijingToday(clock()),
     );
+    const temporaryPath = resolve(tradeRecordsRoot, `.trade-${randomUUID()}.tmp`);
+    try {
+      writeFileSync(temporaryPath, content, { encoding: "utf8", flag: "wx" });
+      renameSync(temporaryPath, absolutePath);
+    } finally {
+      rmSync(temporaryPath, { force: true });
+    }
+    return validated;
   }
 
   function accountEquityForRecord(record, settings) {
@@ -1050,6 +1077,11 @@ export function createApp(options = {}) {
   function recordTradeExecutionEvent(record, body) {
     const event = normalizeTradeExecutionEvent(normalizeBody(body));
     const events = normalizeTradeExecutionEvents(record.executionEvents);
+    const previousEvent = events.find((saved) => saved.id === event.id);
+    if (previousEvent) {
+      assertCondition(JSON.stringify(previousEvent) === JSON.stringify(event), "成交事件 id 已存在且内容不同", 409);
+      return record;
+    }
     const nextEvents = [...events, event];
     const hasPriorTrades = calculateTradeLedger(events).tradeEventCount > 0;
     const nextStatus = resolveTradeRecordStatus(nextEvents, hasPriorTrades ? "holding" : "entered");
@@ -1707,7 +1739,7 @@ export function createApp(options = {}) {
     try {
       res.json({
         rootPath: tradeRecordsRoot,
-        items: readTradeRecords(),
+        ...readTradeRecords(),
       });
     } catch (error) {
       next(error);
