@@ -11,6 +11,10 @@ from typing import Any
 
 import duckdb
 import pandas as pd
+from .replay_cache_policy import (
+    BOARDS, DAILY_BATCH_SIZE, board_for_code, latest_completed_date,
+    maintenance_key, market_now, reserve_targets,
+)
 
 
 TDX_PAGE_SIZE = 800
@@ -275,6 +279,8 @@ def build_index_history(
 class TdxMarketCache:
     def __init__(self, path: Path) -> None:
         self.path = Path(path).resolve()
+        self._quality_cache: dict[str, tuple[Any, int]] = {}
+        self._quality_lock = Lock()
 
     def _connect(self) -> duckdb.DuckDBPyConnection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -367,6 +373,14 @@ class TdxMarketCache:
                     dataset VARCHAR PRIMARY KEY,
                     last_success_at TIMESTAMP NOT NULL,
                     detail VARCHAR NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS tdx_resource_sync (
+                    instrument_code VARCHAR NOT NULL,
+                    resource_type VARCHAR NOT NULL,
+                    last_attempt_at TIMESTAMP NOT NULL,
+                    last_success_at TIMESTAMP,
+                    last_error VARCHAR NOT NULL DEFAULT '',
+                    PRIMARY KEY (instrument_code, resource_type)
                 )
                 """
             )
@@ -423,7 +437,8 @@ class TdxMarketCache:
                     bars.close,
                     bars.vol,
                     bars.amount,
-                    factors.adj_factor
+                    factors.adj_factor,
+                    bars.pre_close
                 FROM stock_daily_bars AS bars
                 INNER JOIN stock_adj_factors AS factors
                     ON factors.ts_code = bars.ts_code
@@ -439,7 +454,7 @@ class TdxMarketCache:
             rows,
             columns=[
                 "datetime", "open", "high", "low", "close", "vol", "amount",
-                "adjust_factor",
+                "adjust_factor", "pre_close",
             ],
         )
 
@@ -529,6 +544,9 @@ class TdxMarketCache:
                     ],
                 )
             connection.execute("COMMIT")
+            with self._quality_lock:
+                for code in {row["ts_code"] for row in [*stock_rows, *factor_rows]}:
+                    self._quality_cache.pop(code, None)
         except Exception:
             connection.execute("ROLLBACK")
             raise
@@ -598,32 +616,96 @@ class TdxMarketCache:
         finally:
             connection.close()
 
-    def mark_sync_success(self, detail: str) -> None:
+    def record_resource_sync(self, code: str, kind: str, *, error: str = "", now: datetime | None = None) -> None:
+        self.ensure_schema()
+        timestamp = now or market_now()
+        with self._connect() as connection:
+            connection.execute("""
+                INSERT INTO tdx_resource_sync VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (instrument_code, resource_type) DO UPDATE SET
+                    last_attempt_at = EXCLUDED.last_attempt_at,
+                    last_success_at = COALESCE(EXCLUDED.last_success_at, tdx_resource_sync.last_success_at),
+                    last_error = EXCLUDED.last_error
+            """, [code, kind, timestamp, timestamp if not error else None, error])
+
+    def failed_resource_count(self) -> int:
+        self.ensure_schema()
+        with self._connect() as connection:
+            return int(connection.execute("SELECT COUNT(*) FROM tdx_resource_sync WHERE last_error <> ''").fetchone()[0])
+
+    def completed_trade_date(self, now: datetime | None = None) -> date | None:
+        self.ensure_schema()
+        with self._connect() as connection:
+            dates = [row[0] for row in connection.execute("SELECT DISTINCT cal_date FROM trade_calendar WHERE is_open = 1").fetchall()]
+        return latest_completed_date(dates, now or market_now())
+
+    def sample_inventory(self, minimum_bars: int) -> list[dict[str, Any]]:
+        """Stock-only quality; benchmark/selected-length alignment is checked at creation."""
+        from .data_store import DuckDbBarStore
+        self.ensure_schema()
+        with self._quality_lock, self._connect() as connection:
+            calendar_key = tuple(connection.execute("SELECT COUNT(*), MAX(updated_at) FROM trade_calendar").fetchone())
+            rows = connection.execute("""
+                SELECT bars.ts_code, COUNT(*), MAX(bars.trade_date), MAX(bars.updated_at),
+                    COUNT(factors.trade_date), MAX(factors.updated_at), MAX(instruments.list_date), MAX(instruments.delist_date),
+                    MAX(sync.last_success_at), MAX(sync.last_error), MAX(sync.last_attempt_at)
+                FROM stock_daily_bars AS bars
+                LEFT JOIN stock_adj_factors AS factors ON factors.ts_code = bars.ts_code AND factors.trade_date = bars.trade_date
+                LEFT JOIN stock_instruments AS instruments ON instruments.ts_code = bars.ts_code
+                LEFT JOIN tdx_resource_sync AS sync ON sync.instrument_code = bars.ts_code AND sync.resource_type = 'stock-day'
+                GROUP BY bars.ts_code ORDER BY bars.ts_code
+            """).fetchall()
+            result = []
+            for row in rows:
+                code = str(row[0])
+                board = board_for_code(code)
+                if board is None:
+                    continue
+                key = (*row[:8], *calendar_key)
+                cached = self._quality_cache.get(code)
+                if cached is None or cached[0] != key:
+                    source = DuckDbBarStore._replay_valid_source_rows(connection, code, 'SSE' if code.endswith('.SH') else 'SZSE')
+                    longest = max((length for _, length in DuckDbBarStore._replay_stock_continuous_runs(source)), default=0)
+                    self._quality_cache[code] = (key, longest)
+                longest = self._quality_cache[code][1]
+                result.append({"code": code, "board": board, "barCount": int(row[1]), "eligible": longest >= minimum_bars,
+                    "continuousBars": longest, "latestDate": row[2].isoformat() if row[2] else None,
+                    "lastSuccessAt": row[8].isoformat() if row[8] else None, "error": str(row[9] or ""),
+                    "lastAttemptAt": row[10].isoformat() if row[10] else None})
+            cached_codes = {item['code'] for item in result}
+            for code, attempted, succeeded, error in connection.execute("SELECT instrument_code, last_attempt_at, last_success_at, last_error FROM tdx_resource_sync WHERE resource_type = 'stock-day' AND last_error <> ''").fetchall():
+                if code not in cached_codes and board_for_code(code):
+                    result.append({'code': code, 'board': board_for_code(code), 'barCount': 0, 'eligible': False,
+                        'continuousBars': 0, 'latestDate': None, 'lastSuccessAt': succeeded.isoformat() if succeeded else None,
+                        'error': error, 'lastAttemptAt': attempted.isoformat()})
+        return result
+
+    def mark_sync_success(self, detail: str, *, now: datetime | None = None) -> None:
         self.ensure_schema()
         connection = self._connect()
         try:
             connection.execute(
                 """
-                INSERT INTO tdx_cache_sync_state VALUES ('replay-market', CURRENT_TIMESTAMP, ?)
+                INSERT INTO tdx_cache_sync_state VALUES ('replay-market', ?, ?)
                 ON CONFLICT (dataset) DO UPDATE SET
                     last_success_at = EXCLUDED.last_success_at,
                     detail = EXCLUDED.detail
                 """,
-                [detail],
+                [now or market_now(), detail],
             )
         finally:
             connection.close()
 
-    def synced_today(self) -> bool:
+    def synced_today(self, now: datetime | None = None) -> bool:
         self.ensure_schema()
         connection = self._connect()
         try:
             row = connection.execute(
                 """
-                SELECT CAST(last_success_at AS DATE) = CURRENT_DATE
+                SELECT CAST(last_success_at AS DATE) = ?
                 FROM tdx_cache_sync_state
                 WHERE dataset = 'replay-market'
-                """
+                """, [(now or market_now()).date()],
             ).fetchone()
         finally:
             connection.close()
@@ -728,6 +810,7 @@ class TdxMarketDataProvider:
         initial_stock_count: int = 12,
         minimum_replay_bars: int = 370,
         benchmark_codes: tuple[str, ...] = DEFAULT_REPLAY_BENCHMARK_CODES,
+        now: Any = market_now,
     ) -> None:
         self.cache = cache
         self.hosts = hosts
@@ -735,6 +818,9 @@ class TdxMarketDataProvider:
         self.initial_stock_count = max(int(initial_stock_count), 1)
         self.minimum_replay_bars = int(minimum_replay_bars)
         self.benchmark_codes = tuple(str(code).upper() for code in benchmark_codes)
+        self.now = now
+        self._attempt_key: str | None = None
+        self._last_attempt_at: datetime | None = None
         self._status_lock = Lock()
         self._pool_lock = Lock()
         self._pool_status: dict[str, Any] = {
@@ -762,7 +848,40 @@ class TdxMarketDataProvider:
         return {
             "statistics": self.cache.statistics(),
             "storageBytes": storage_bytes,
+            "inventory": self.cache.sample_inventory(self.minimum_replay_bars),
+            "failedResourceCount": self.cache.failed_resource_count(),
         }
+
+    def completed_trade_date(self) -> date | None:
+        return self.cache.completed_trade_date(self.now())
+
+    def unseen_eligible_codes(self, excluded: tuple[str, ...]) -> list[str]:
+        seen = set(excluded)
+        return [item['code'] for item in self.cache.sample_inventory(self.minimum_replay_bars) if item['eligible'] and item['code'] not in seen]
+
+    def background_retry_due(self) -> bool:
+        from .replay_cache_policy import RETRY_SECONDS
+        return self.replay_cache_status()['state'] in {'partial', 'failed'} and (self._last_attempt_at is None or (self.now() - self._last_attempt_at).total_seconds() >= RETRY_SECONDS)
+
+    def _sync_stock(self, client: Any, code: str, metadata: dict[str, Any] | None, timestamp: datetime) -> None:
+        try:
+            latest = self.cache.latest_trade_date("stock_daily_bars", code)
+            bars = self._fetch_daily_pages(client, code, is_index=False, latest_cached_date=latest,
+                maximum_bars=TDX_PAGE_SIZE if latest is None else TDX_MAX_DAILY_BARS)
+            xdxr = client.get_xdxr_info(self._market_for_code(code), self._symbol(code))
+            stock_rows, factor_rows = build_stock_history(code, bars, xdxr, updated_at=timestamp)
+            self.cache.upsert_stock_history(stock_rows, factor_rows)
+            if metadata is not None:
+                item = {**metadata, "list_date": metadata.get("list_date") or stock_rows[0]["trade_date"], "updated_at": timestamp}
+                self.cache.upsert_instruments([item])
+            target = self.cache.completed_trade_date(timestamp)
+            latest = self.cache.latest_trade_date("stock_daily_bars", code)
+            if target is not None and (latest is None or latest < target):
+                raise ValueError("日线尚未覆盖基准已收盘数据日，待续更或核实停牌")
+            self.cache.record_resource_sync(code, "stock-day", now=timestamp)
+        except Exception as exc:
+            self.cache.record_resource_sync(code, "stock-day", error=str(exc), now=timestamp)
+            raise
 
     def load_hybrid_daily_history(
         self,
@@ -919,7 +1038,7 @@ class TdxMarketDataProvider:
         *,
         progress_callback: Any | None = None,
     ) -> dict[str, Any]:
-        updated_at = datetime.now().replace(microsecond=0)
+        updated_at = self.now().replace(microsecond=0)
         self.cache.ensure_schema()
         total = 1 + len(self.benchmark_codes) + self.initial_stock_count
         completed = 0
@@ -938,93 +1057,74 @@ class TdxMarketDataProvider:
                 )
 
         report("正在下载通达信证券名单")
-        instruments = self._fetch_instruments(client, updated_at)
-        if not instruments:
-            raise ValueError("通达信证券列表为空")
-        self.cache.upsert_instruments(instruments)
+        failures: list[str] = []
+        try:
+            instruments = self._fetch_instruments(client, updated_at)
+            if not instruments:
+                raise ValueError("通达信证券列表为空")
+            self.cache.upsert_instruments(instruments)
+            self.cache.record_resource_sync("instruments", "metadata", now=updated_at)
+        except Exception as exc:
+            failures.append(str(exc))
+            self.cache.record_resource_sync("instruments", "metadata", error=str(exc), now=updated_at)
+            with self.cache._connect() as connection:
+                rows = connection.execute("SELECT ts_code, symbol, name, market, list_date, list_status, updated_at, industry, area, delist_date FROM stock_instruments").fetchall()
+            instruments = [dict(zip(("ts_code", "symbol", "name", "market", "list_date", "list_status", "updated_at", "industry", "area", "delist_date"), row)) for row in rows]
         completed += 1
         report(f"证券名单已缓存，共 {len(instruments)} 只")
 
         for benchmark_code in self.benchmark_codes:
-            latest = self.cache.latest_trade_date("index_daily_bars", benchmark_code)
-            bootstrap = latest is None
-            bars = self._fetch_daily_pages(
-                client,
-                benchmark_code,
-                is_index=True,
-                latest_cached_date=latest,
-                maximum_bars=TDX_PAGE_SIZE if bootstrap else TDX_MAX_DAILY_BARS,
-            )
-            exchange = "SSE" if benchmark_code.endswith(".SH") else "SZSE"
-            index_rows, calendar_rows = build_index_history(
-                benchmark_code,
-                exchange,
-                bars,
-                updated_at=updated_at,
-            )
-            self.cache.replace_index_history(
-                benchmark_code,
-                exchange,
-                index_rows,
-                (
-                    calendar_rows
-                    if benchmark_code in {"000001.SH", "399001.SZ"}
-                    else None
-                ),
-            )
+            try:
+                latest = self.cache.latest_trade_date("index_daily_bars", benchmark_code)
+                bars = self._fetch_daily_pages(client, benchmark_code, is_index=True, latest_cached_date=latest,
+                    maximum_bars=TDX_PAGE_SIZE if latest is None else TDX_MAX_DAILY_BARS)
+                exchange = "SSE" if benchmark_code.endswith(".SH") else "SZSE"
+                index_rows, calendar_rows = build_index_history(benchmark_code, exchange, bars, updated_at=updated_at)
+                self.cache.replace_index_history(benchmark_code, exchange, index_rows,
+                    calendar_rows if benchmark_code in {"000001.SH", "399001.SZ"} else None)
+                self.cache.record_resource_sync(benchmark_code, "index-day", now=updated_at)
+            except Exception as exc:
+                failures.append(str(exc))
+                self.cache.record_resource_sync(benchmark_code, "index-day", error=str(exc), now=updated_at)
             completed += 1
-            report(f"指数 {benchmark_code} 已缓存")
+            report("正在续更指数与交易日历")
 
-        cached_codes: list[str] = []
-        connection = self.cache._connect()
-        try:
-            cached_codes = [
-                str(row[0])
-                for row in connection.execute(
-                    "SELECT DISTINCT ts_code FROM stock_daily_bars ORDER BY ts_code"
-                ).fetchall()
-            ]
-        finally:
-            connection.close()
-        available_codes = {str(row["ts_code"]): row for row in instruments}
-        selected_codes = [code for code in cached_codes if code in available_codes]
-        for item in self._balanced_instruments(list(available_codes.values())):
-            code = str(item["ts_code"])
-            if code not in selected_codes:
-                selected_codes.append(code)
-            if len(selected_codes) >= self.initial_stock_count:
-                break
-        selected_codes = selected_codes[: self.initial_stock_count]
-        total = 1 + len(self.benchmark_codes) + len(selected_codes)
+        # Pool expansion and daily stock refresh share one writer/download queue.
+        with self._pool_lock:
+            cached_codes: list[str] = []
+            connection = self.cache._connect()
+            try:
+                cached_codes = [
+                    str(row[0])
+                    for row in connection.execute(
+                        "SELECT DISTINCT ts_code FROM stock_daily_bars ORDER BY ts_code"
+                    ).fetchall()
+                ]
+            finally:
+                connection.close()
+            available_codes = {str(row["ts_code"]): row for row in instruments}
+            # All cached stocks participate, including those missing from today's instrument list.
+            selected_codes = [code for code in cached_codes if board_for_code(code)]
+            for item in self._balanced_instruments(list(available_codes.values())):
+                if len(selected_codes) >= self.initial_stock_count:
+                    break
+                code = str(item["ts_code"])
+                if code not in selected_codes:
+                    selected_codes.append(code)
+                if len(selected_codes) >= self.initial_stock_count:
+                    break
+            total = 1 + len(self.benchmark_codes) + len(selected_codes)
 
-        synced_codes: list[str] = []
-        for ts_code in selected_codes:
-            latest = self.cache.latest_trade_date("stock_daily_bars", ts_code)
-            bootstrap = latest is None
-            bars = self._fetch_daily_pages(
-                client,
-                ts_code,
-                is_index=False,
-                latest_cached_date=latest,
-                maximum_bars=TDX_PAGE_SIZE if bootstrap else TDX_MAX_DAILY_BARS,
-            )
-            xdxr = client.get_xdxr_info(
-                self._market_for_code(ts_code),
-                self._symbol(ts_code),
-            )
-            stock_rows, factor_rows = build_stock_history(
-                ts_code,
-                bars,
-                xdxr,
-                updated_at=updated_at,
-            )
-            self.cache.upsert_stock_history(stock_rows, factor_rows)
-            metadata = dict(available_codes[ts_code])
-            metadata["list_date"] = stock_rows[0]["trade_date"]
-            self.cache.upsert_instruments([metadata])
-            synced_codes.append(ts_code)
-            completed += 1
-            report(f"股票 {ts_code} 已缓存")
+            synced_codes: list[str] = []
+            for batch_start in range(0, len(selected_codes), DAILY_BATCH_SIZE):
+                for ts_code in selected_codes[batch_start:batch_start + DAILY_BATCH_SIZE]:
+                    try:
+                        self._sync_stock(client, ts_code, available_codes.get(ts_code), updated_at)
+                        synced_codes.append(ts_code)
+                    except Exception as exc:
+                        failures.append(str(exc))
+                    completed += 1
+                    report(f"日线分批续更 {completed - 1 - len(self.benchmark_codes)}/{len(selected_codes)} 只，失败 {len(failures)} 项")
 
         ready = self.cache.is_replay_ready(
             self.benchmark_codes,
@@ -1035,12 +1135,15 @@ class TdxMarketDataProvider:
         report("演练所需行情已就绪", ready=True)
 
         detail = f"stocks={len(synced_codes)},benchmarks={len(self.benchmark_codes)}"
-        self.cache.mark_sync_success(detail)
+        if not failures:
+            self.cache.mark_sync_success(detail, now=updated_at)
         return {
-            "mode": "tdx",
+            "mode": "cache" if not synced_codes and failures else "tdx",
+            "state": "partial" if failures else "ready",
+            "error": f"{len(failures)}项更新失败，将自动重试" if failures else "",
             "stockCount": len(synced_codes),
             "benchmarkCount": len(self.benchmark_codes),
-            "message": detail,
+            "message": f"日线续更完成 {len(synced_codes)}/{len(selected_codes)}只" + (f"，{len(failures)}项失败，保留原缓存" if failures else ""),
         }
 
     def _resolved_client_factory(self):
@@ -1065,7 +1168,7 @@ class TdxMarketDataProvider:
                 "mode": "cache",
                 "message": (
                     "通达信行情缓存今日已更新"
-                    if self.cache.synced_today()
+                    if self.cache.synced_today(self.now())
                     else "演练行情已就绪，行情更新由后台继续处理"
                 ),
             }
@@ -1080,6 +1183,8 @@ class TdxMarketDataProvider:
         if ready:
             return {
                 "mode": "cache",
+                "state": "partial",
+                "error": str(last_error),
                 "message": f"通达信连接失败，继续使用本地缓存：{last_error}",
             }
         raise TdxMarketUnavailableError(
@@ -1099,139 +1204,66 @@ class TdxMarketDataProvider:
         client: Any | None = None,
         target_count: int = 1,
     ) -> bool:
+        excluded = {str(code).strip().upper() for code in excluded_ts_codes}
+        desired = max(int(target_count), 1)
+        inventory = self.cache.sample_inventory(self.minimum_replay_bars)
+        # Foreground creation needs one valid unseen stock, not the completion of background reserves.
+        if desired == 1 and any(item["eligible"] and item["code"] not in excluded for item in inventory):
+            return True
         with self._pool_lock, ExitStack() as connections:
-            excluded = {str(code).strip().upper() for code in excluded_ts_codes}
-            desired = max(int(target_count), 1)
-            connection = self.cache._connect()
-            try:
-                all_cached_codes = {
-                    str(row[0])
-                    for row in connection.execute(
-                        "SELECT DISTINCT ts_code FROM stock_daily_bars"
-                    ).fetchall()
-                }
-                eligible_cached_codes = {
-                    str(row[0])
-                    for row in connection.execute(
-                        """
-                        SELECT ts_code
-                        FROM stock_daily_bars
-                        GROUP BY ts_code
-                        HAVING COUNT(DISTINCT trade_date) >= ?
-                        """,
-                        [self.minimum_replay_bars],
-                    ).fetchall()
-                }
-                unseen_count = len(eligible_cached_codes - excluded)
-                if unseen_count >= desired:
-                    self._pool_status = {
-                        "state": "ready",
-                        "completed": desired,
-                        "total": desired,
-                        "message": f"未训练标的储备已有 {unseen_count} 只",
-                        "error": "",
-                    }
-                    return True
-                candidates = self._balanced_instruments([
-                    {
-                        "ts_code": str(row[0]),
-                        "symbol": str(row[1]),
-                        "name": str(row[2] or ""),
-                        "market": str(row[3] or "主板"),
-                    }
-                    for row in connection.execute(
-                        """
-                        SELECT ts_code, symbol, name, market
-                        FROM stock_instruments
-                        WHERE list_status = 'L'
-                        ORDER BY
-                            CASE market
-                                WHEN '主板' THEN 0
-                                WHEN '创业板' THEN 1
-                                WHEN '科创板' THEN 2
-                                ELSE 3
-                            END,
-                            ts_code
-                        """
-                    ).fetchall()
-                    if str(row[0]) not in all_cached_codes
-                ])
-            finally:
-                connection.close()
-            if not candidates:
-                self._pool_status = {
-                    "state": "failed" if unseen_count == 0 else "ready",
-                    "completed": unseen_count,
-                    "total": desired,
-                    "message": "没有更多可预热的通达信股票",
-                    "error": "证券名单中没有满足条件的新标的" if unseen_count == 0 else "",
-                }
-                return unseen_count > 0
-
-            resolved_client = client or connections.enter_context(_FailoverTdxClient(
-                self._resolved_client_factory(),
-                self._connection_hosts(),
-            ))
-            updated_at = datetime.now().replace(microsecond=0)
-            initial_unseen_count = unseen_count
-            self._pool_status = {
-                "state": "running",
-                "completed": 0,
-                "total": max(desired - unseen_count, 0),
-                "message": "正在预热新的日线标的",
-                "error": "",
-            }
-            last_error: Exception | None = None
+            inventory = self.cache.sample_inventory(self.minimum_replay_bars)
+            eligible = {item["code"] for item in inventory if item["eligible"]}
+            counts = {board: sum(item["eligible"] and item["code"] not in excluded and item["board"] == board for item in inventory) for board in BOARDS}
+            targets = reserve_targets(desired)
+            if desired == 1 and sum(counts.values()):
+                return True
+            if all(counts[board] >= targets[board] for board in BOARDS):
+                self._pool_status = {"state": "ready", "completed": desired, "total": desired,
+                    "message": "各板块未见日线储备已充足", "error": "", "targets": targets}
+                return True
+            with self.cache._connect() as connection:
+                rows = connection.execute("SELECT ts_code, symbol, name, market, list_status, list_date, delist_date, industry, area, updated_at FROM stock_instruments WHERE list_status = 'L' ORDER BY ts_code").fetchall()
+            candidates = self._balanced_instruments([
+                dict(zip(("ts_code", "symbol", "name", "market", "list_status", "list_date", "delist_date", "industry", "area", "updated_at"), row))
+                for row in rows if str(row[0]) not in excluded and str(row[0]) not in eligible and board_for_code(str(row[0]))
+            ])
+            # Prefer untried candidates so short/failed histories cannot pin the reserve forever.
+            attempts_by_code = {item['code']: item.get('lastAttemptAt') or '' for item in inventory}
+            candidates.sort(key=lambda item: attempts_by_code.get(item['ts_code'], ''))
+            initial = sum(counts.values())
+            self._pool_status = {"state": "running", "completed": 0, "total": max(0, desired - initial),
+                "message": "正在按板块准备未见日线样本", "error": "", "targets": targets}
+            errors = []
+            attempts = 0
+            resolved_client = client
             for metadata in candidates:
-                ts_code = metadata["ts_code"]
-                try:
-                    bars = self._fetch_daily_pages(
-                        resolved_client,
-                        ts_code,
-                        is_index=False,
-                        latest_cached_date=None,
-                        maximum_bars=TDX_PAGE_SIZE,
-                    )
-                    xdxr = resolved_client.get_xdxr_info(
-                        self._market_for_code(ts_code),
-                        self._symbol(ts_code),
-                    )
-                    stock_rows, factor_rows = build_stock_history(
-                        ts_code,
-                        bars,
-                        xdxr,
-                        updated_at=updated_at,
-                    )
-                    if len(stock_rows) < self.minimum_replay_bars:
-                        continue
-                    self.cache.upsert_stock_history(stock_rows, factor_rows)
-                    metadata["list_status"] = "L"
-                    metadata["list_date"] = stock_rows[0]["trade_date"]
-                    metadata["updated_at"] = updated_at
-                    self.cache.upsert_instruments([metadata])
-                    unseen_count += 1
-                    self._pool_status = {
-                        **self._pool_status,
-                        "completed": unseen_count - initial_unseen_count,
-                        "message": f"已缓存新标的 {ts_code}",
-                    }
-                    if unseen_count >= desired:
-                        self._pool_status = {
-                            **self._pool_status,
-                            "state": "ready",
-                            "message": f"未训练标的储备已补足至 {desired} 只",
-                        }
-                        return True
-                except Exception as exc:
-                    last_error = exc
+                code = metadata["ts_code"]
+                board = board_for_code(code)
+                if desired > 1 and counts[board] >= targets[board]:
                     continue
-            self._pool_status = {
-                **self._pool_status,
-                "state": "ready" if unseen_count > 0 else "failed",
-                "message": "股票池预热部分完成" if unseen_count > 0 else "股票池预热失败",
-                "error": str(last_error or "通达信未返回可用的新标的") if unseen_count == 0 else "",
-            }
-            return unseen_count > 0
+                if attempts >= max(12, desired * 4):
+                    break
+                attempts += 1
+                try:
+                    if resolved_client is None:
+                        resolved_client = connections.enter_context(_FailoverTdxClient(self._resolved_client_factory(), self._connection_hosts()))
+                    self._sync_stock(resolved_client, code, metadata, self.now())
+                    item = next((item for item in self.cache.sample_inventory(self.minimum_replay_bars) if item["code"] == code), None)
+                    if not item or not item["eligible"]:
+                        errors.append("候选历史长度、交易日历或复权质量不足")
+                        continue
+                    counts[board] += 1
+                    self._pool_status = {**self._pool_status, "completed": sum(counts.values()) - initial}
+                    if (desired == 1 and sum(counts.values())) or all(counts[key] >= targets[key] for key in BOARDS):
+                        break
+                except Exception as exc:
+                    errors.append(str(exc))
+            fulfilled = all(counts[board] >= targets[board] for board in BOARDS) if desired > 1 else bool(sum(counts.values()))
+            self._pool_status = {**self._pool_status, "state": "ready" if fulfilled else "partial" if sum(counts.values()) else "failed",
+                "message": "各板块未见日线储备已补足" if fulfilled else "部分板块未见日线储备仍不足",
+                "error": "" if fulfilled else ("候选下载或历史质量检查未通过，将自动重试" if errors else "缺额板块没有更多符合条件的候选样本"),
+                "counts": counts, "targets": targets, "attempts": attempts}
+            return sum(counts.values()) > 0
 
     def pool_status(self) -> dict[str, Any]:
         return dict(self._pool_status)
@@ -1243,24 +1275,27 @@ class TdxMarketDataProvider:
     def replay_cache_status(self) -> dict[str, Any]:
         with self._status_lock:
             status = dict(self._sync_status)
-        if status["state"] == "idle" and self._cache_ready() and self.cache.synced_today():
+        if status["state"] == "idle" and self._cache_ready() and self.cache.synced_today(self.now()):
             return {
                 **status,
                 "state": "ready",
                 "ready": True,
                 "completed": status["total"],
-                "message": "通达信行情缓存今日已更新",
+                "message": "本地日线缓存可用，覆盖与更新状态见下方",
             }
         return status
 
     def prepare_replay_cache(self, *, retry_failed: bool = False) -> dict[str, Any]:
-        if self._cache_ready() and self.cache.synced_today():
+        key = maintenance_key(self.now())
+        if self._attempt_key == key and self._sync_status['state'] in {'ready', 'partial', 'failed'} and not retry_failed:
+            return self.replay_cache_status()
+        if self._attempt_key is None and self._cache_ready() and self.cache.synced_today(self.now()) and key.endswith(':open'):
             self._update_sync_status(
                 {
                     "state": "ready",
                     "ready": True,
                     "completed": self._sync_status["total"],
-                    "message": "通达信行情缓存今日已更新",
+                    "message": "本地日线缓存可用，覆盖与更新状态见下方",
                     "error": "",
                 }
             )
@@ -1269,8 +1304,8 @@ class TdxMarketDataProvider:
         with self._status_lock:
             if self._sync_thread is not None and self._sync_thread.is_alive():
                 return dict(self._sync_status)
-            if self._sync_status["state"] in {"failed", "ready"} and not retry_failed:
-                return dict(self._sync_status)
+            self._attempt_key = key
+            self._last_attempt_at = self.now()
             self._sync_status = {
                 **self._sync_status,
                 "state": "running",
@@ -1299,17 +1334,17 @@ class TdxMarketDataProvider:
                     "state": "failed",
                     "ready": self._cache_ready(),
                     "message": "通达信行情缓存初始化失败",
-                    "error": str(exc),
+                    "error": "行情下载失败，可重试或继续使用可用历史缓存",
                 }
             )
             return
         self._update_sync_status(
             {
-                "state": "ready",
-                "ready": True,
+                "state": result.get("state", "ready"),
+                "ready": self._cache_ready(),
                 "completed": self._sync_status["total"],
-                "message": result.get("message") or "通达信行情缓存已就绪",
-                "error": "",
+                "message": "通达信更新未完成，继续使用本地缓存" if result.get("mode") == "cache" else result.get("message") or "通达信行情缓存已就绪",
+                "error": "部分资源更新失败，将自动重试" if result.get("error") else "",
             }
         )
 

@@ -6,13 +6,16 @@ import { useReplayHistory } from "../../composables/useReplayHistory.js";
 import { api } from "../../services/api.js";
 import ConfirmDialog from "../ConfirmDialog.vue";
 import ReplayReviewCorrectionForm from "../replay/ReplayReviewCorrectionForm.vue";
-import UiCard from "../ui/UiCard.vue";
+import ReplayHistoryControls from "./ReplayHistoryControls.vue";
 import UiModal from "../ui/UiModal.vue";
 import { getLatestReplayReviewSnapshot } from "../../utils/replayReviewCorrections.js";
+import ReplayTrainingAnalytics from "./ReplayTrainingAnalytics.vue";
 import ReplayHistoryDetail from "./ReplayHistoryDetail.vue";
 import ReplayHistoryFilters from "./ReplayHistoryFilters.vue";
 import ReplayHistoryList from "./ReplayHistoryList.vue";
 
+const activeView = shallowRef("records");
+const analysisKind = computed(() => activeView.value === "retrain" ? "retrain" : "first");
 const router = useRouter();
 const {
   items,
@@ -63,6 +66,11 @@ const playbookFitApplicable = computed(
     Boolean(effectiveBlindReview.value?.playbookId) &&
     Boolean(effectiveBlindReview.value?.playbookVersionId),
 );
+
+async function openAnalysisRecord(sessionId) {
+  activeView.value = "records";
+  await applyFilters({ state: "all", attemptKind: "all", keyword: sessionId });
+}
 
 function createActionId() {
   return globalThis.crypto?.randomUUID?.() ??
@@ -243,17 +251,7 @@ async function addCandidate(item) {
 
 <template>
   <div class="replay-history-records">
-    <UiCard>
-      <template #header>
-        <div>
-          <h2 class="ql-text-base ql-font-semibold ql-text-slate-900">
-            历史演练
-          </h2>
-          <p class="ql-mt-1 ql-text-xs ql-text-slate-500">
-            统一查看未完成演练、两阶段复盘和评分结果；未揭晓记录保持匿名。
-          </p>
-        </div>
-      </template>
+    <ReplayHistoryControls v-if="activeView === 'records'" :active-view="activeView" @view-change="activeView = $event">
       <ReplayHistoryFilters
         :state="state"
         :attempt-kind="attemptKind"
@@ -261,10 +259,11 @@ async function addCandidate(item) {
         :loading="loading"
         @apply="applyFilters"
       />
-    </UiCard>
+    </ReplayHistoryControls>
 
+    <ReplayTrainingAnalytics v-if="activeView !== 'records'" :kind="analysisKind" @view-change="activeView = $event" @open-record="openAnalysisRecord" />
     <div
-      v-if="error"
+      v-else-if="error"
       class="replay-history-records__message replay-history-records__message--error"
     >
       <span>{{ error }}</span>
@@ -368,6 +367,8 @@ async function addCandidate(item) {
 </template>
 
 <style scoped>
+
+
 .replay-history-records {
   display: grid;
   gap: 1rem;

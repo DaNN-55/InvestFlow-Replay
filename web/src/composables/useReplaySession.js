@@ -172,7 +172,11 @@ export function useReplaySession(options = {}) {
         ...order,
       });
       setSession(payload.session);
-      statusMessage.value = session.value.interval === "hybrid"
+      statusMessage.value = order.orderType === "stop"
+        ? "持仓止损已设置；触发后持续退出，直到卖完或主动取消。"
+        : order.orderType === "limit"
+          ? "限价委托已提交，从下一根K线起等待到价；该交易日收盘取消未成交余量。"
+        : session.value.interval === "hybrid"
         ? `委托已提交，将在下一根${Number(session.value.stepMinutes ?? 1)}分钟K线开盘尝试成交。`
         : session.value.interval === "1m"
         ? "委托已提交，将在下一分钟开盘尝试成交。"
@@ -194,8 +198,6 @@ export function useReplaySession(options = {}) {
     if (!session.value || isBusy.value || isCompleted.value) {
       return null;
     }
-    const pendingBeforeAdvance = session.value.pendingOrders?.length ?? 0;
-    const executionsBeforeAdvance = session.value.executions?.length ?? 0;
     isAdvancing.value = true;
     clearMessages();
     try {
@@ -205,27 +207,9 @@ export function useReplaySession(options = {}) {
         mode,
       });
       setSession(payload.session);
-      const minuteReplay = ["1m", "hybrid"].includes(payload.session.interval);
-      const advancedWholeDay = payload.session.interval === "hybrid" && mode === "day";
       statusMessage.value = payload.session.status === "completed"
         ? "本局演练已完成，持仓按最后收盘价估值。"
-        : pendingBeforeAdvance > 0 ||
-            (payload.session.executions?.length ?? 0) >
-              executionsBeforeAdvance
-          ? advancedWholeDay
-            ? "已处理委托并推进到当日收盘。"
-            : minuteReplay
-            ? payload.session.interval === "hybrid"
-              ? `已处理委托并推进${Number(payload.session.stepMinutes ?? 1)}分钟。`
-              : "已处理委托并推进到下一分钟。"
-            : "已处理委托并推进到下一交易日。"
-          : advancedWholeDay
-            ? "已推进到当日收盘。"
-            : minuteReplay
-            ? payload.session.interval === "hybrid"
-              ? `已推进${Number(payload.session.stepMinutes ?? 1)}分钟。`
-              : "已推进到下一分钟。"
-            : "已推进到下一交易日。";
+        : "";
       return payload.session;
     } catch (error) {
       if (error?.status === 409) {
@@ -578,6 +562,23 @@ export function useReplaySession(options = {}) {
     statusMessage: readonly(statusMessage),
     createSession,
     submitOrder,
+    async cancelOrder(orderId) {
+      if (!session.value || isBusy.value || isCompleted.value) return null;
+      isSubmitting.value = true;
+      clearMessages();
+      try {
+        const payload = await client.cancelReplayOrder(session.value.id, orderId, {
+          actionId: createActionId(), expectedRevision: session.value.revision,
+        });
+        setSession(payload.session);
+        statusMessage.value = "未成交余量已取消，已有成交保留。";
+        return payload.session;
+      } catch (error) {
+        if (error?.status === 409) await refreshSession({ conflict: true });
+        else errorMessage.value = error?.message ?? "撤单失败";
+        return null;
+      } finally { isSubmitting.value = false; }
+    },
     advanceSession,
     finishSession,
     skipSessionAndRestart,

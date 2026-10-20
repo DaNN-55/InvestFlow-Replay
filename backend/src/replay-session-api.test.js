@@ -13,12 +13,13 @@ import { createDatabase } from "./db.js";
 import { createReplayLifecycle } from "./replay-lifecycle.js";
 import { createReplayLifecycleStore } from "./replay-lifecycle-store.js";
 
+const scenarioDate = (index) => new Date(Date.UTC(2024, 0, index + 1)).toISOString().slice(0, 10);
+
 function privateScenario(gameLength = 20, seed = null) {
   const bars = Array.from({ length: 250 + gameLength }, (_, index) => {
-    const day = String(index + 1).padStart(3, "0");
     return {
       sequence: index + 1,
-      tradeDate: `2024-01-${day}`,
+      tradeDate: scenarioDate(index),
       open: 10 + index,
       high: 11 + index,
       low: 9 + index,
@@ -139,7 +140,7 @@ function assertNoPrivateMarketData(payload) {
     "600000",
     "浦发银行",
     ...Array.from({ length: 270 }, (_, index) =>
-      `2024-01-${String(index + 1).padStart(3, "0")}`),
+      scenarioDate(index)),
   ]) {
     assert.equal(serialized.includes(value), false, value);
   }
@@ -243,7 +244,7 @@ describe("replay session API", () => {
     engineServer = createServer((req, res) => {
       const url = new URL(req.url, "http://127.0.0.1");
       res.setHeader("content-type", "application/json");
-      if (req.method === "GET" && url.pathname === "/internal/replay/cache/status") {
+      if (req.method === "POST" && url.pathname === "/internal/replay/cache/status") {
         res.end(JSON.stringify({
           state: "running",
           activeTask: { state: "running", completed: 3, total: 12, message: "正在预热新的日线标的" },
@@ -407,7 +408,7 @@ describe("replay session API", () => {
     assert.equal(storedSnapshot.tsCode, "600000.SH");
     assert.equal(storedSnapshot.name, "浦发银行");
     assert.equal(storedSnapshot.bars.length, 270);
-    assert.equal(storedSnapshot.bars[269].tradeDate, "2024-01-270");
+    assert.equal(storedSnapshot.bars[269].tradeDate, scenarioDate(269));
 
     const loaded = await request(app)
       .get(`/api/quant/replay/sessions/${created.body.session.id}`)
@@ -656,12 +657,12 @@ describe("replay session API", () => {
       symbol: "600000",
       exchange: "SSE",
       name: "浦发银行",
-      startDate: "2024-01-001",
-      endDate: "2024-01-270",
+      startDate: scenarioDate(0),
+      endDate: scenarioDate(269),
     });
     assert.equal(revealed.body.session.bars.length, 270);
-    assert.equal(revealed.body.session.bars[0].tradeDate, "2024-01-001");
-    assert.equal(revealed.body.session.bars.at(-1).tradeDate, "2024-01-270");
+    assert.equal(revealed.body.session.bars[0].tradeDate, scenarioDate(0));
+    assert.equal(revealed.body.session.bars.at(-1).tradeDate, scenarioDate(269));
     assert.equal(revealed.body.session.valuation.markPrice, 259.5);
     assert.notEqual(
       revealed.body.session.valuation.markPrice,
@@ -1513,7 +1514,7 @@ it("retries a whole-day action without advancing the session twice", () => {
     .prepare("SELECT COUNT(*) AS count FROM replay_events WHERE session_id = ?")
     .get(session.id).count;
   inspectionDb.close();
-  assert.equal(eventCount, 3);
+  assert.equal(eventCount, 6);
 
   database.close();
   rmSync(root, { recursive: true, force: true });

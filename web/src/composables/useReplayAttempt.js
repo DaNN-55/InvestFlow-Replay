@@ -119,6 +119,7 @@ export function useReplayAttempt(options = {}) {
       { pause: false },
     ),
     submitOrder,
+    cancelOrder: (orderId) => runWrite(() => sessionController.cancelOrder(orderId)),
     advance,
     finish,
     skipAndRestart,

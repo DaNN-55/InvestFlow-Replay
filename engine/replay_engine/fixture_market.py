@@ -137,7 +137,7 @@ class FixtureReplayMarketSupply:
             "initialization": initialization,
         }
 
-    def cache_status(self) -> dict[str, Any]:
+    def cache_status(self, excluded_ts_codes: tuple[str, ...] = (), *, benchmark_code: str = '') -> dict[str, Any]:
         instrument_count = len(self.manifest["instruments"])
         daily_bar_count = instrument_count * (
             OBSERVATION_BARS + max(SUPPORTED_GAME_LENGTHS)

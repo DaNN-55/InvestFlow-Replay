@@ -21,6 +21,9 @@ class ReadyMarketProvider:
     def ensure_ready(self):
         return {"mode": "cache", "message": "连接失败，继续使用本地缓存"}
 
+    def completed_trade_date(self):
+        return None
+
 
 class ReplayStoreStub:
     def create_replay_scenario(self, **_kwargs):

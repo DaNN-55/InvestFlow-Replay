@@ -117,7 +117,7 @@ export function buildReplayOrderSubmission(input = {}) {
   const reasonTags = Array.isArray(input.reasonTags)
     ? [...new Set(input.reasonTags.map(String))].slice(0, 8)
     : [];
-  const sizing = input.inputMode === "ratio"
+  const sizing = input.orderType === "stop" ? { positionRatio: 1 } : input.inputMode === "ratio"
     ? side === "buy"
       ? { cashRatio: Number(input.ratio) }
       : { positionRatio: Number(input.ratio) }
@@ -149,5 +149,10 @@ export function buildReplayOrderSubmission(input = {}) {
         exitType: String(input.exitType ?? ""),
         remainingPositionPlan: String(input.remainingPositionPlan ?? "").trim(),
       };
-  return { side, ...sizing, decision };
+  return { side, ...sizing, decision,
+    ...(input.orderType ? { orderType: input.orderType,
+      ...(input.orderType === "limit" ? { limitPrice: Number(input.limitPrice) } : {}),
+      ...(input.orderType === "stop" ? { stopPrice: Number(input.protectionPrice) } : {}),
+    } : {}),
+  };
 }
