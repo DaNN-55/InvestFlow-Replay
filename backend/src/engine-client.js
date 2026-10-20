@@ -63,8 +63,8 @@ export function createEngineClient(baseUrl = DEFAULT_ENGINE_URL) {
       return requestJson(`${baseUrl}/internal/replay/benchmarks${query}`);
     },
 
-    async getReplayCacheStatus() {
-      return requestJson(`${baseUrl}/internal/replay/cache/status`);
+    async getReplayCacheStatus({ excludedTsCodes = [], benchmarkCode = "" } = {}) {
+      return requestJson(`${baseUrl}/internal/replay/cache/status`, { method: "POST", body: JSON.stringify({ excludedTsCodes, benchmarkCode }) });
     },
 
     async createReplayScenario({

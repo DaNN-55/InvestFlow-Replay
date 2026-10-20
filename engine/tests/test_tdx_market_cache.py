@@ -405,6 +405,7 @@ class TdxMarketDataProviderTest(unittest.TestCase):
                     "600000": make_daily_frame("2020-01-02", 400, 10),
                     "000001": make_daily_frame("2020-01-02", 400, 20),
                     "000001-index": make_daily_frame("2020-01-02", 400, 3000),
+                    "399001": make_daily_frame("2020-01-02", 400, 9000),
                 }
             )
             client.bars_by_code["000001"] = make_daily_frame("2020-01-02", 400, 20)
@@ -412,7 +413,7 @@ class TdxMarketDataProviderTest(unittest.TestCase):
                 cache,
                 initial_stock_count=1,
                 minimum_replay_bars=3,
-                benchmark_codes=("000001.SH",),
+                benchmark_codes=("000001.SH", "399001.SZ"),
             )
             provider.sync_with_client(client)
 
@@ -714,7 +715,9 @@ class TdxMarketDataProviderTest(unittest.TestCase):
             cached = ready_provider.ensure_ready(force_refresh=True)
 
             self.assertEqual(cached["mode"], "cache")
-            self.assertIn("network down", cached["message"])
+            self.assertEqual(cached["state"], "partial")
+            self.assertIn("失败", cached["message"])
+            self.assertTrue(cached["error"])
 
             empty_provider = TdxMarketDataProvider(
                 TdxMarketCache(Path(directory) / "empty.duckdb"),
@@ -723,7 +726,7 @@ class TdxMarketDataProviderTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(
                 TdxMarketUnavailableError,
-                "本地缓存不足.*network down",
+                "本地缓存不足",
             ):
                 empty_provider.ensure_ready(force_refresh=True)
 

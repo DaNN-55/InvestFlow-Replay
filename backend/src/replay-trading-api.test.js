@@ -16,7 +16,7 @@ function privateScenario(gameLength = 20, seed = null) {
     const close = open + 0.5;
     return {
       sequence: index + 1,
-      tradeDate: `2024-02-${String(index + 1).padStart(3, "0")}`,
+      tradeDate: new Date(Date.UTC(2024, 0, index + 1)).toISOString().slice(0, 10),
       open,
       high: open + 1,
       low: open - 1,
@@ -70,12 +70,12 @@ function privateScenario(gameLength = 20, seed = null) {
   }
   if (seed === 305) {
     Object.assign(bars[250], {
-      open: 272.475,
-      high: 272.475,
-      low: 272.475,
-      close: 272.475,
+      open: 275.07,
+      high: 275.07,
+      low: 275.07,
+      close: 275.07,
       preClose: 259.5,
-      pctChange: 5,
+      pctChange: 6,
       limitType: "Z",
       openTimes: 1,
     });
@@ -238,7 +238,7 @@ describe("replay virtual account and next-open execution", () => {
         actionId: "buy-100",
         expectedRevision: 0,
         side: "buy",
-        quantity: 150,
+        quantity: 100,
       })
       .expect(201);
     assert.equal(submitted.body.session.revision, 1);

@@ -4,7 +4,7 @@ import math
 import random
 from collections import defaultdict
 from contextlib import contextmanager, nullcontext
-from datetime import date, datetime
+from datetime import date, datetime, time
 from pathlib import Path
 from threading import Condition, RLock
 from typing import Any, Iterable
@@ -12,6 +12,7 @@ from typing import Any, Iterable
 import duckdb
 
 from .tdx_market_cache import TDX_HOSTS, _FailoverTdxClient
+from .replay_cache_policy import market_now
 
 
 MINUTE_OBSERVATION_BARS = 250
@@ -54,6 +55,9 @@ def _normalize_rows(rows: Iterable[Any]) -> dict[datetime, dict[str, Any]]:
                 or 1
             ),
         }
+        pre_close = _row_value(row, "pre_close")
+        if pre_close is not None and math.isfinite(float(pre_close)) and float(pre_close) > 0:
+            values["raw_daily_pre_close"] = float(pre_close)
         if not all(
             math.isfinite(values[field]) and values[field] > 0
             for field in ("open", "high", "low", "close")
@@ -78,7 +82,9 @@ def _apply_daily_adjustment(
             continue
         multiplier = factor / anchor_factor
         for field in ("open", "high", "low", "close"):
+            row[f"raw_{field}"] = row[field]
             row[field] *= multiplier
+        row["adjustment_multiplier"] = multiplier
         row["adjusted_amount"] = row["amount"] * multiplier
 
 
@@ -98,6 +104,12 @@ def _public_bar(row: dict[str, Any], sequence: int, previous_close: float | None
         "pctChange": pct_change,
         "volume": row["volume"],
         "amount": row["amount"],
+        **{public: row[private] for private, public in (
+            ("raw_open", "rawOpen"), ("raw_high", "rawHigh"),
+            ("raw_low", "rawLow"), ("raw_close", "rawClose"),
+            ("raw_daily_pre_close", "rawDailyPreClose"),
+            ("adjustment_multiplier", "adjustmentMultiplier"),
+        ) if private in row},
         **(
             {"adjustedAmount": row["adjusted_amount"]}
             if "adjusted_amount" in row
@@ -250,6 +262,23 @@ def build_hybrid_replay_scenario(
     _apply_daily_adjustment(stock_daily, factors_by_day, anchor_factor)
     _apply_daily_adjustment(stock_minute, factors_by_day, anchor_factor)
 
+    # Use the exchange's daily reference, never the previous five-minute close.
+    # These inputs contain only the day's pre-close and the preceding daily close.
+    previous_daily = None
+    day_references = {}
+    for timestamp in sorted(stock_daily):
+        row = stock_daily[timestamp]
+        reference = row.get("raw_daily_pre_close")
+        if reference is None and previous_daily is not None:
+            reference = previous_daily["raw_close"] * previous_daily["adjust_factor"] / row["adjust_factor"]
+        if reference is not None:
+            day_references[timestamp.date().isoformat()] = reference
+        previous_daily = row
+    for timestamp, row in stock_minute.items():
+        reference = day_references.get(timestamp.date().isoformat())
+        if reference is not None:
+            row["raw_daily_pre_close"] = reference
+
     bars: list[dict[str, Any]] = []
     previous_stock_close: float | None = None
     for sequence, timestamp in enumerate(daily_context_times, start=1):
@@ -317,6 +346,70 @@ class MinuteReplayStore:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _refresh_schema(connection) -> None:
+        connection.execute("""CREATE TABLE IF NOT EXISTS minute_refresh_state (
+            instrument_code VARCHAR NOT NULL, instrument_type VARCHAR NOT NULL,
+            last_attempt_at TIMESTAMP NOT NULL, last_success_at TIMESTAMP, last_error VARCHAR NOT NULL DEFAULT '',
+            resume_from TIMESTAMP,
+            PRIMARY KEY (instrument_code, instrument_type))""")
+        connection.execute("ALTER TABLE minute_refresh_state ADD COLUMN IF NOT EXISTS resume_from TIMESTAMP")
+
+    def refresh_boundary(self, code: str, kind: str, latest: datetime | None) -> datetime | None:
+        """Keep the pre-refresh boundary across interruptions, even after newer pages were saved."""
+        with duckdb.connect(str(self.path)) as connection:
+            self._refresh_schema(connection)
+            row = connection.execute("SELECT resume_from FROM minute_refresh_state WHERE instrument_code = ? AND instrument_type = ?", [code, kind]).fetchone()
+            if row and row[0] is not None:
+                return row[0]
+            if latest is not None:
+                connection.execute("""INSERT INTO minute_refresh_state (instrument_code, instrument_type, last_attempt_at, resume_from)
+                    VALUES (?, ?, ?, ?) ON CONFLICT (instrument_code, instrument_type) DO UPDATE SET
+                    resume_from = EXCLUDED.resume_from""", [code, kind, market_now(), latest])
+            return latest
+
+    def record_refresh(self, code: str, kind: str, *, error: str = "") -> None:
+        with duckdb.connect(str(self.path)) as connection:
+            self._refresh_schema(connection)
+            timestamp = market_now()
+            connection.execute("""INSERT INTO minute_refresh_state (instrument_code, instrument_type, last_attempt_at, last_success_at, last_error) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (instrument_code, instrument_type) DO UPDATE SET
+                last_attempt_at = EXCLUDED.last_attempt_at,
+                last_success_at = COALESCE(EXCLUDED.last_success_at, minute_refresh_state.last_success_at),
+                last_error = EXCLUDED.last_error,
+                resume_from = CASE WHEN EXCLUDED.last_error = '' THEN NULL ELSE minute_refresh_state.resume_from END""", [code, kind, timestamp, timestamp if not error else None, error])
+
+    def history_inventory(self) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        with duckdb.connect(str(self.path)) as connection:
+            tables = {row[0] for row in connection.execute("SELECT table_name FROM information_schema.tables").fetchall()}
+            histories = {tuple(row[:2]): row[2] for row in connection.execute("SELECT instrument_code, instrument_type, synced_at FROM minute_history_sync").fetchall()} if 'minute_history_sync' in tables else {}
+            refresh = {tuple(row[:2]): row[2:] for row in connection.execute("SELECT instrument_code, instrument_type, last_attempt_at, last_success_at, last_error FROM minute_refresh_state").fetchall()} if 'minute_refresh_state' in tables else {}
+            rows = connection.execute("SELECT instrument_code, instrument_type, COUNT(*), MAX(bar_time) FROM minute_bars GROUP BY instrument_code, instrument_type").fetchall() if 'minute_bars' in tables else []
+        result = []
+        for code, kind, count, latest in rows:
+            attempted, succeeded, error = refresh.get((code, kind), (None, histories.get((code, kind)), ''))
+            result.append({"code": code, "kind": kind, "barCount": int(count), "latestTime": latest,
+                "full": (code, kind) in histories, "lastAttemptAt": attempted, "lastSuccessAt": succeeded, "error": error})
+        present = {(item['code'], item['kind']) for item in result}
+        for (code, kind), (attempted, succeeded, error) in refresh.items():
+            if (code, kind) not in present:
+                result.append({'code': code, 'kind': kind, 'barCount': 0, 'latestTime': None,
+                    'full': False, 'lastAttemptAt': attempted, 'lastSuccessAt': succeeded, 'error': error})
+        return result
+
+    def history_current(self, code: str, kind: str, target_date: date | None = None) -> bool:
+        item = next((item for item in self.history_inventory() if item['code'] == code and item['kind'] == kind), None)
+        return self.item_current(item, target_date)
+
+    @staticmethod
+    def item_current(item: dict[str, Any] | None, target_date: date | None = None) -> bool:
+        if not item or not item['full'] or item['error'] or item['latestTime'] is None:
+            return False
+        latest = item['latestTime']
+        return target_date is None or latest.date() > target_date or (latest.date() == target_date and latest.time() >= time(14, 55))
 
     def save(self, instrument_code: str, instrument_type: str, rows: Iterable[Any]) -> None:
         normalized = _normalize_rows(rows)
@@ -486,11 +579,11 @@ class MinuteReplayStore:
             connection.execute(
                 """
                 INSERT INTO minute_history_sync (instrument_code, instrument_type, synced_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?)
                 ON CONFLICT (instrument_code, instrument_type)
                 DO UPDATE SET synced_at = EXCLUDED.synced_at
                 """,
-                [instrument_code, instrument_type],
+                [instrument_code, instrument_type, market_now()],
             )
         finally:
             connection.close()
@@ -579,6 +672,7 @@ class TdxMinuteReplayProvider:
         self._priority = Condition()
         self._foreground = 0
         self._io = RLock()
+        self.required_trade_date: date | None = None
 
     @contextmanager
     def _background_slot(self):
@@ -613,16 +707,52 @@ class TdxMinuteReplayProvider:
         with nullcontext(client) if client is not None else self.download_client() as client:
             for code, kind in [(ts_code, "stock-5m"), (benchmark_code, "index-5m")]:
                 with self._background_slot():
+                    current = self.store.history_current(code, kind, self.required_trade_date)
                     complete = self.store.has_full_history(code, kind)
-                if not complete:
+                if not current:
                     self._fetch(client, code, kind, category=KlineCategory.MIN_5,
-                                maximum_bars=TDX_5MIN_MAX_BARS, bar_time="start", background=True)
+                                maximum_bars=TDX_5MIN_MAX_BARS, bar_time="start", background=True, incremental=complete)
+                    with self._background_slot():
+                        current = self.store.history_current(code, kind, self.required_trade_date)
+                    if not current:
+                        message = "五分钟缓存尚未覆盖基准的已收盘数据日"
+                        with self._background_slot():
+                            self.store.record_refresh(code, kind, error=message)
+                        raise ValueError(message)
 
     def prefetched_codes(self, benchmark_code: str) -> set[str]:
         with self._background_slot():
-            if not self.store.has_full_history(benchmark_code, "index-5m"):
+            inventory = self.store.history_inventory()
+            benchmark = next((item for item in inventory if item['code'] == benchmark_code and item['kind'] == 'index-5m'), None)
+            if not self.store.item_current(benchmark, self.required_trade_date):
                 return set()
-            return self.store.full_history_codes("stock-5m")
+            return {item['code'] for item in inventory if item['kind'] == 'stock-5m' and self.store.item_current(item, self.required_trade_date)}
+
+    def refresh_cached(self) -> dict[str, Any]:
+        from .tdx_api import KlineCategory
+        with self._background_slot():
+            inventory = self.store.history_inventory()
+        stale = [item for item in inventory if item['kind'].endswith('-5m') and not self.store.item_current(item, self.required_trade_date)]
+        if not stale:
+            return {'state': 'ready', 'completed': 0, 'total': 0, 'message': '已有五分钟缓存无需续更', 'error': ''}
+        completed = 0
+        errors = []
+        with self.download_client() as client:
+            for item in stale:
+                try:
+                    self._fetch(client, item['code'], item['kind'], category=KlineCategory.MIN_5,
+                        maximum_bars=TDX_5MIN_MAX_BARS, bar_time='start', background=True, incremental=item['full'])
+                    with self._background_slot():
+                        current = self.store.history_current(item['code'], item['kind'], self.required_trade_date)
+                    if not current:
+                        raise ValueError('五分钟缓存尚未覆盖基准的已收盘数据日')
+                    completed += 1
+                except Exception as exc:
+                    with self._background_slot():
+                        self.store.record_refresh(item['code'], item['kind'], error=str(exc))
+                    errors.append(str(exc))
+        return {'state': 'partial' if errors else 'ready', 'completed': completed, 'total': len(stale),
+            'message': f'五分钟续更完成 {completed}/{len(stale)} 项', 'error': '部分五分钟资源更新失败，将自动重试' if errors else ''}
 
     def cache_snapshot(self) -> dict[str, Any]:
         try:
@@ -632,6 +762,7 @@ class TdxMinuteReplayProvider:
         return {
             "statistics": self.store.statistics(),
             "storageBytes": storage_bytes,
+            "inventory": self.store.history_inventory(),
         }
 
     @staticmethod
@@ -654,11 +785,17 @@ class TdxMinuteReplayProvider:
         maximum_bars: int,
         bar_time: str = "end",
         background: bool = False,
+        incremental: bool = False,
     ) -> list[dict[str, Any]]:
         market = self._market_for_code(ts_code)
         symbol = self._symbol(ts_code)
         frames = []
         complete = True
+        with self._background_slot() if background else self._io:
+            cached = self.store.load(ts_code, instrument_type) if incremental else []
+            latest_cached = max((row['datetime'] for row in cached), default=None)
+            if incremental:
+                latest_cached = self.store.refresh_boundary(ts_code, instrument_type, latest_cached)
         for start in range(0, maximum_bars, TDX_PAGE_SIZE):
             try:
                 with self._background_slot() if background else self._io:
@@ -668,19 +805,26 @@ class TdxMinuteReplayProvider:
                 if frames:
                     complete = False
                     break
+                with self._background_slot() if background else self._io:
+                    self.store.record_refresh(ts_code, instrument_type, error="五分钟行情下载失败")
                 raise
             if frame is None or frame.empty:
-                complete = False
+                complete = bool(frames)
                 break
             frames.extend(frame.to_dict("records"))
+            if latest_cached is not None and min(_normalize_rows(frame.to_dict('records')), default=datetime.max) <= latest_cached:
+                break
             if len(frame) < TDX_PAGE_SIZE:
                 break
         if not frames:
+            with self._background_slot() if background else self._io:
+                self.store.record_refresh(ts_code, instrument_type, error="通达信未返回分钟行情")
             raise ValueError(f"通达信未返回 {ts_code} 的行情")
         with self._background_slot() if background else self._io:
             self.store.merge(ts_code, instrument_type, frames)
             if complete and instrument_type.endswith("-5m") and maximum_bars >= TDX_5MIN_MAX_BARS:
                 self.store.mark_full_history(ts_code, instrument_type)
+            self.store.record_refresh(ts_code, instrument_type, error="分钟行情下载中断，已保存部分缓存" if not complete else '')
         if not complete:
             raise ValueError(f"{ts_code} 行情下载中断，已保存部分缓存，下次继续补齐")
         with self._io:
@@ -752,6 +896,7 @@ class TdxMinuteReplayProvider:
             else self.store.load(benchmark_code, "index-day")
         )
         cache_error: Exception | None = None
+        cached_scenario = None
         hybrid_cache_complete = (
             self.store.has_full_history(ts_code, stock_type)
             and self.store.has_full_history(benchmark_code, benchmark_type)
@@ -760,7 +905,7 @@ class TdxMinuteReplayProvider:
             if hybrid and not hybrid_cache_complete:
                 raise ValueError("五分钟缓存尚未回填到近两年")
             if hybrid:
-                return self._build_hybrid(
+                cached_scenario = self._build_hybrid(
                     stock_daily_rows=local_stock_daily,
                     benchmark_daily_rows=local_benchmark_daily,
                     stock_rows=stock_rows,
@@ -773,6 +918,9 @@ class TdxMinuteReplayProvider:
                     source_data_version=f"tdx-hybrid-cache:{self.store.path}",
                     recent_window_end_dates=recent_window_end_dates,
                 )
+                if self.store.history_current(ts_code, stock_type, self.required_trade_date) and self.store.history_current(benchmark_code, benchmark_type, self.required_trade_date):
+                    return cached_scenario
+                raise ValueError('五分钟完整历史已过期，尝试增量续更')
             return build_minute_replay_scenario(
                 stock_rows=stock_rows,
                 benchmark_rows=benchmark_rows,
@@ -799,12 +947,12 @@ class TdxMinuteReplayProvider:
         try:
             required_minute_rows = MINUTE_OBSERVATION_BARS + int(game_length)
             stock_needs_download = (
-                not self.store.has_full_history(ts_code, stock_type)
+                not self.store.history_current(ts_code, stock_type, self.required_trade_date)
                 if hybrid
                 else len(stock_rows) < required_minute_rows
             )
             benchmark_needs_download = (
-                not self.store.has_full_history(benchmark_code, benchmark_type)
+                not self.store.history_current(benchmark_code, benchmark_type, self.required_trade_date)
                 if hybrid
                 else len(benchmark_rows) < required_minute_rows
             )
@@ -823,6 +971,7 @@ class TdxMinuteReplayProvider:
                         else self._minute_download_limit(game_length)
                     ),
                     bar_time="start" if hybrid else "end",
+                    incremental=hybrid and cached_scenario is not None and self.store.has_full_history(ts_code, stock_type),
                 )
             if benchmark_needs_download:
                 benchmark_rows = self._fetch(
@@ -836,6 +985,7 @@ class TdxMinuteReplayProvider:
                         else self._minute_download_limit(game_length)
                     ),
                     bar_time="start" if hybrid else "end",
+                    incremental=hybrid and cached_scenario is not None and self.store.has_full_history(benchmark_code, benchmark_type),
                 )
             if hybrid:
                 if not local_stock_daily:
@@ -860,13 +1010,22 @@ class TdxMinuteReplayProvider:
             client.close()
 
         if last_error is not None:
+            if cached_scenario is not None:
+                return {**cached_scenario, 'cacheFreshness': {'state': 'stale', 'message': '分钟续更失败，本次使用已验证的本地历史窗口'}}
             raise ValueError(
                 "分钟行情下载失败且本地缓存不足："
                 f"通达信错误={last_error}；"
                 f"缓存错误={cache_error or '缓存数据不足'}"
             ) from last_error
         if hybrid:
-            return self._build_hybrid(
+            stale = not self.store.history_current(ts_code, stock_type, self.required_trade_date) or not self.store.history_current(benchmark_code, benchmark_type, self.required_trade_date)
+            if stale:
+                for code, kind in [(ts_code, stock_type), (benchmark_code, benchmark_type)]:
+                    if not self.store.history_current(code, kind, self.required_trade_date):
+                        self.store.record_refresh(code, kind, error='五分钟缓存尚未覆盖基准的已收盘数据日')
+                if cached_scenario is not None:
+                    return {**cached_scenario, 'cacheFreshness': {'state': 'stale', 'message': '上游尚未返回新数据，本次使用本地历史窗口'}}
+            scenario = self._build_hybrid(
                 stock_daily_rows=local_stock_daily,
                 benchmark_daily_rows=local_benchmark_daily,
                 stock_rows=stock_rows,
@@ -879,6 +1038,9 @@ class TdxMinuteReplayProvider:
                 source_data_version=f"tdx-hybrid-5m:{self.store.path}",
                 recent_window_end_dates=recent_window_end_dates,
             )
+            if stale:
+                scenario['cacheFreshness'] = {'state': 'stale', 'message': '上游尚未返回新数据，本次使用已验证的本地历史窗口'}
+            return scenario
         return build_minute_replay_scenario(
             stock_rows=stock_rows,
             benchmark_rows=benchmark_rows,

@@ -130,7 +130,7 @@ export function mapReplayExecutionsToTrades(executions, bars, options = {}) {
         return null;
       }
       return {
-        id: execution.orderId,
+        id: execution.executionId ?? execution.orderId,
         datetime: bar.datetime,
         direction: execution.side,
         price: Number(execution.price),

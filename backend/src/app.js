@@ -27,6 +27,7 @@ export function publicErrorCode(error) {
     "MARKET_CACHE_INSUFFICIENT",
     "RUNTIME_SYNC_FAILED",
     "CONFIG_PERSIST_FAILED",
+    "REPLAY_COMPARISON_NOT_READY",
     "INTERNAL_ERROR",
   ].includes(error?.code)
     ? error.code
@@ -1321,7 +1322,14 @@ export function createApp(options = {}) {
 
   app.get("/api/quant/replay/benchmarks", async (req, res, next) => {
     try {
-      res.json(await engine.getReplayBenchmarks({ retry: req.query.retry === "true" }));
+      const payload = await engine.getReplayBenchmarks({ retry: req.query.retry === "true" });
+      if (payload.items?.length && payload.initialization?.ready !== false && typeof engine.prefetchReplayStocks === "function") {
+        const usage = database.getReplayScenarioUsage();
+        void Promise.resolve().then(() => engine.prefetchReplayStocks({ excludedTsCodes: usage.usedTsCodes,
+          targetReserve: 12, interval: usage.cacheContext?.interval ?? "1d",
+          benchmarkCode: usage.cacheContext?.benchmarkCode || payload.items[0].code })).catch(() => {});
+      }
+      res.json(payload);
     } catch (error) {
       next(error);
     }
@@ -1329,7 +1337,8 @@ export function createApp(options = {}) {
 
   app.get("/api/quant/replay/cache/status", async (_req, res, next) => {
     try {
-      res.json(await engine.getReplayCacheStatus());
+      const usage = database.getReplayScenarioUsage();
+      res.json(await engine.getReplayCacheStatus({ excludedTsCodes: usage.usedTsCodes, benchmarkCode: usage.cacheContext?.benchmarkCode ?? "" }));
     } catch (error) {
       next(error);
     }
@@ -1524,9 +1533,25 @@ export function createApp(options = {}) {
     }
   });
 
+  app.get("/api/quant/replay/analytics", (req, res, next) => {
+    try {
+      res.json(replayInteraction.analytics(req.query ?? {}));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/api/quant/replay/sessions/:sessionId", (req, res, next) => {
     try {
       res.json(replayInteraction.get(String(req.params.sessionId ?? "")));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/quant/replay/sessions/:sessionId/comparison", (req, res, next) => {
+    try {
+      res.json(replayInteraction.comparison(String(req.params.sessionId ?? "")));
     } catch (error) {
       next(error);
     }
@@ -1563,6 +1588,12 @@ export function createApp(options = {}) {
     } catch (error) {
       next(error);
     }
+  });
+
+  app.post("/api/quant/replay/sessions/:sessionId/orders/:orderId/cancel", (req, res, next) => {
+    try {
+      res.json(replayInteraction.cancelOrder(String(req.params.sessionId), String(req.params.orderId), normalizeBody(req.body)));
+    } catch (error) { next(error); }
   });
 
   app.post(

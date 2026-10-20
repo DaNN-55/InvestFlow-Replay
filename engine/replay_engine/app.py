@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from datetime import date
+from contextlib import asynccontextmanager
 
 from pydantic import BaseModel, Field
 
@@ -28,7 +29,19 @@ class ReplayStockPrefetchRequest(BaseModel):
 
 
 market_supply = create_market_supply()
-app = FastAPI(title="InvestFlow Replay Engine")
+
+@asynccontextmanager
+async def lifespan(_app):
+    # Offline fixture supplies deliberately have no maintenance worker.
+    if market_supply.provider_name == 'tdx':
+        market_supply.start_maintenance()
+    try:
+        yield
+    finally:
+        if market_supply.provider_name == 'tdx':
+            market_supply.stop_maintenance()
+
+app = FastAPI(title="InvestFlow Replay Engine", lifespan=lifespan)
 
 
 @app.exception_handler(QuantWorkbenchError)
@@ -67,6 +80,16 @@ def benchmarks(retry: bool = False):
 @app.get("/internal/replay/cache/status")
 def cache_status():
     return market_supply.cache_status()
+
+
+class ReplayCacheStatusRequest(BaseModel):
+    excludedTsCodes: list[str] = Field(default_factory=list)
+    benchmarkCode: str = ""
+
+
+@app.post("/internal/replay/cache/status")
+def cache_status_with_usage(request: ReplayCacheStatusRequest):
+    return market_supply.cache_status(tuple(request.excludedTsCodes), benchmark_code=request.benchmarkCode)
 
 
 @app.get("/internal/instruments/search")

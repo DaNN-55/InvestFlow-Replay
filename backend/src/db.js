@@ -3,6 +3,9 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { BAR_ORDER_MODEL, LEGACY_ORDER_MODEL, isBarOrderModel, newOrderState, isOpenOrder, closeOrder, executeReplayOrders } from "./replay-order-execution.js";
+import { BOARD_ORDER_MODEL, isSyntheticReplay, replayBoardRules, quantityError } from "./replay-board-rules.js";
+import { detectTrainingConditionEvents } from "./replay-training-events.js";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -279,6 +282,7 @@ function rowToReplaySession(row) {
       rowId: row.id,
       strict: true,
     }),
+    executionModelVersion: row.execution_model_version ?? LEGACY_ORDER_MODEL,
     trainingConfig: parseJson(
       row.training_config_json,
       { mode: "free" },
@@ -1759,6 +1763,27 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
   );
   ensureColumn(db, "replay_review_drafts", "deleted_at", "TEXT");
   ensureColumn(db, "replay_orders", "decision_json", "TEXT");
+  ensureColumn(db, "replay_sessions", "execution_model_version", "TEXT NOT NULL DEFAULT 'legacy-next-open'");
+  ensureColumn(db, "replay_orders", "execution_json", "TEXT");
+  // Preserve old fills while allowing multiple executions of one order.
+  const fillSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'replay_fills'").get()?.sql ?? "";
+  if (/order_id\s+TEXT\s+NOT NULL\s+UNIQUE/i.test(fillSchema)) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.exec(`
+        ALTER TABLE replay_fills RENAME TO replay_fills_single;
+        ${fillSchema.replace(/CREATE TABLE(?: IF NOT EXISTS)? replay_fills/i, "CREATE TABLE replay_fills").replace(/order_id\s+TEXT\s+NOT NULL\s+UNIQUE/i, "order_id TEXT NOT NULL")};
+        INSERT INTO replay_fills SELECT * FROM replay_fills_single;
+        DROP TABLE replay_fills_single;
+        CREATE INDEX IF NOT EXISTS idx_replay_fills_order ON replay_fills(order_id, sequence);
+      `);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_replay_fills_session_sequence ON replay_fills(session_id, sequence)");
   db.prepare(
     `
     UPDATE replay_review_drafts
@@ -1938,6 +1963,97 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
     );
   }
 
+  function recordTrainingConditionEvents(sessionId, session, throughSequence, createdAt) {
+    const events = detectTrainingConditionEvents({
+      session,
+      orders: [...(session?.pendingOrders ?? []), ...(session?.executions ?? [])],
+      throughSequence,
+    });
+    if (!events.length) return;
+    const existingKeys = new Set(
+      db.prepare(
+        "SELECT payload_json FROM replay_events WHERE session_id = ? AND event_type = 'training_condition_triggered'",
+      ).all(sessionId).map((row) => {
+        try { return JSON.parse(row.payload_json)?.dedupeKey ?? null; } catch { return null; }
+      }).filter(Boolean),
+    );
+    for (const event of events) {
+      if (existingKeys.has(event.key)) continue;
+      insertReplayEvent({
+        sessionId,
+        actionId: `training-condition:${event.key}`,
+        eventType: "training_condition_triggered",
+        sequence: event.sequence,
+        payload: {
+          schemaVersion: 1,
+          dedupeKey: event.key,
+          ruleKey: event.kind,
+          rule: event,
+        },
+        createdAt,
+      });
+      existingKeys.add(event.key);
+    }
+  }
+
+  function recordTrainingExecutionObserved(sessionId, session, sequence, createdAt) {
+    const existing = db.prepare(
+      "SELECT 1 FROM replay_events WHERE session_id = ? AND event_type = 'training_execution_observed' AND sequence = ? LIMIT 1",
+    ).get(sessionId, sequence);
+    if (existing) return;
+    const rows = db.prepare(
+      `SELECT orders.id, orders.side, orders.decision_json, orders.execution_json,
+              fills.quantity AS fill_quantity, fills.sequence AS fill_sequence,
+              rejections.reason_code, rejections.reason_message
+       FROM replay_orders AS orders
+       LEFT JOIN replay_fills AS fills
+         ON fills.order_id = orders.id AND fills.sequence = ?
+       LEFT JOIN replay_order_rejections AS rejections
+         ON rejections.order_id = orders.id AND rejections.sequence = ?
+       WHERE orders.session_id = ?
+       ORDER BY orders.created_revision ASC, orders.rowid ASC`,
+    ).all(sequence, sequence, sessionId);
+    const observations = rows.map((row) => {
+      let decision = {};
+      let state = {};
+      try { decision = row.decision_json ? JSON.parse(row.decision_json) : {}; } catch { decision = {}; }
+      try { state = row.execution_json ? JSON.parse(row.execution_json) : {}; } catch { state = {}; }
+      const filledThisStep = Number(row.fill_quantity ?? 0);
+      const targetQuantity = Number(state.targetQuantity ?? 0);
+      const filledQuantity = Number(state.filledQuantity ?? 0);
+      const remainingQuantity = targetQuantity > 0 ? Math.max(0, targetQuantity - filledQuantity) : 0;
+      const reasonCode = row.reason_code ?? state.reasonCode ?? (remainingQuantity > 0 && filledThisStep > 0 ? "partially_filled" : null);
+      const status = row.reason_code ? "rejected" : state.status ?? (filledThisStep > 0 ? "filled" : "pending");
+      return {
+        orderId: row.id,
+        side: row.side,
+        orderType: state.orderType ?? null,
+        status,
+        reasonCode,
+        reasonMessage: row.reason_message ?? state.reasonMessage ?? null,
+        targetQuantity: Number.isFinite(targetQuantity) ? targetQuantity : 0,
+        filledQuantity: Number.isFinite(filledQuantity) ? filledQuantity : filledThisStep,
+        remainingQuantity: Number.isFinite(remainingQuantity) ? remainingQuantity : 0,
+        filledThisStep: Number.isFinite(filledThisStep) ? filledThisStep : 0,
+        restricted: filledThisStep > 0 && remainingQuantity > 0,
+        hasStopCondition: Boolean(decision.stopLossPrice || decision.invalidationRule),
+      };
+    });
+    insertReplayEvent({
+      sessionId,
+      actionId: `training-execution:${sequence}`,
+      eventType: "training_execution_observed",
+      sequence,
+      payload: {
+        schemaVersion: 1,
+        sequence,
+        accountAvailableQuantity: Number.isFinite(Number(session?.account?.availableQuantity)) ? Number(session.account.availableQuantity) : 0,
+        observations,
+      },
+      createdAt,
+    });
+  }
+
   function readReplayOrders(sessionId) {
     const orders = db
       .prepare(
@@ -1993,6 +2109,25 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         submittedSequence: Number(order.submitted_sequence),
         scheduledSequence: Number(order.scheduled_sequence),
       };
+      if (order.execution_json) {
+        const state = parseJson(order.execution_json, null, { fieldName: "replay_orders.execution_json", rowId: order.id, strict: true });
+        const metadata = {
+          ...common, orderType: state.orderType, limitPrice: state.limitPrice, stopPrice: state.stopPrice,
+          status: state.status, targetQuantity: state.targetQuantity, filledQuantity: state.filledQuantity,
+          remainingQuantity: state.targetQuantity == null ? null : Math.max(0, state.targetQuantity - state.filledQuantity),
+          triggeredSequence: state.triggeredSequence, triggerPrice: state.triggerPrice,
+          reasonCode: state.reasonCode, reasonMessage: state.reasonMessage,
+        };
+        for (const part of fills.filter((item) => item.order_id === order.id)) {
+          executions.push({ ...metadata, executionId: part.id, status: "filled", sequence: Number(part.sequence),
+            quantity: Number(part.quantity), referencePrice: Number(part.reference_price), price: Number(part.price),
+            slippageBps: Number(part.slippage_bps), notional: Number(part.notional), commission: Number(part.commission),
+            stampTax: Number(part.stamp_tax), transferFee: Number(part.transfer_fee), totalFee: Number(part.total_fee) });
+        }
+        if (isOpenOrder(state)) pendingOrders.push(metadata);
+        else if (state.status !== "filled") executions.push({ ...metadata, executionId: `${order.id}:closed`, sequence: state.closedSequence });
+        continue;
+      }
       const fill = fillsByOrderId.get(order.id);
       if (fill) {
         executions.push({
@@ -2029,7 +2164,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
     }
     return {
       pendingOrders,
-      executions,
+      executions: executions.sort((left, right) => left.sequence - right.sequence),
     };
   }
 
@@ -2292,9 +2427,13 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       ).all();
       const usedTsCodes = new Set();
       const recentWindowEndDates = [];
+      let cacheContext = null;
       for (const row of rows) {
         try {
           const snapshot = JSON.parse(row.snapshot_json || "{}");
+          if (cacheContext == null && !isSyntheticReplay(snapshot)) {
+            cacheContext = { interval: snapshot.interval === "hybrid" ? "hybrid" : "1d", benchmarkCode: String(snapshot.benchmark?.code ?? snapshot.benchmarkCode ?? "") };
+          }
           const tsCode = String(snapshot.tsCode || "").trim().toUpperCase();
           if (tsCode) usedTsCodes.add(tsCode);
           const bars = Array.isArray(snapshot.bars) ? snapshot.bars : [];
@@ -2309,10 +2448,15 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       return {
         usedTsCodes: [...usedTsCodes],
         recentWindowEndDates,
+        cacheContext,
       };
     },
 
     createReplaySession(session) {
+      const executionModel = session.executionModelVersion ?? (session.snapshot?.interval === "1m" || isSyntheticReplay(session.snapshot) ? BAR_ORDER_MODEL : BOARD_ORDER_MODEL);
+      if (executionModel === BOARD_ORDER_MODEL && !replayBoardRules(session.snapshot)) {
+        throw createReplayStateError("仅支持沪深主板、创业板和科创板A股", 400);
+      }
       const scenarioIdentity = createReplayScenarioIdentity({
         snapshot: session.snapshot,
         observationBars: session.observationBars,
@@ -2375,6 +2519,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         session.createdAt,
         session.updatedAt,
         );
+        db.prepare("UPDATE replay_sessions SET execution_model_version = ? WHERE id = ?").run(executionModel, session.id);
         const created = readReplaySession(session.id);
         db.exec("COMMIT");
         return created;
@@ -2463,6 +2608,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           createdAt,
           createdAt,
         );
+        db.prepare("UPDATE replay_sessions SET execution_model_version = ? WHERE id = ?").run(source.executionModelVersion, id);
         const created = readReplaySession(id);
         db.exec("COMMIT");
         return created;
@@ -2474,6 +2620,71 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
 
     getReplaySession(sessionId) {
       return readReplaySession(sessionId);
+    },
+
+    getReplayComparisonSessions(sessionId) {
+      const selectedRow = db
+        .prepare("SELECT * FROM replay_sessions WHERE id = ? AND deleted_at IS NULL")
+        .get(sessionId);
+      if (!selectedRow) return null;
+      const fingerprint = selectedRow.scenario_fingerprint;
+      const rows = fingerprint
+        ? db.prepare(
+          `
+          SELECT *
+          FROM replay_sessions
+          WHERE scenario_fingerprint = ? AND deleted_at IS NULL
+          ORDER BY attempt_number ASC, created_at ASC, id ASC
+          `,
+        ).all(fingerprint)
+        : [selectedRow];
+      const deletedFirst = fingerprint
+        ? Number(db.prepare(
+          `
+          SELECT COUNT(*) AS count
+          FROM replay_sessions
+          WHERE scenario_fingerprint = ?
+            AND attempt_kind = 'first'
+            AND deleted_at IS NOT NULL
+          `,
+        ).get(fingerprint)?.count ?? 0)
+        : 0;
+      return {
+        selected: readReplaySession(sessionId),
+        attempts: rows.map((row) => readReplaySession(row.id)),
+        firstUnavailable: rows.some((row) => row.attempt_kind === "first")
+          ? null
+          : deletedFirst > 0 ? "deleted" : "missing",
+      };
+    },
+
+    getReplayTrainingAnalyticsData() {
+      const rows = db.prepare(
+        "SELECT id FROM replay_sessions WHERE deleted_at IS NULL ORDER BY created_at ASC, id ASC",
+      ).all();
+      const sessions = rows.map((row) => readReplaySession(row.id)).filter(Boolean);
+      const eventsBySession = new Map();
+      const eventRows = db.prepare(
+        `SELECT session_id, event_type, sequence, payload_json, created_at
+         FROM replay_events
+         WHERE session_id IN (SELECT id FROM replay_sessions WHERE deleted_at IS NULL)
+         ORDER BY sequence ASC, created_at ASC, rowid ASC`,
+      ).all();
+      for (const row of eventRows) {
+        const events = eventsBySession.get(row.session_id) ?? [];
+        events.push({
+          eventType: row.event_type,
+          sequence: Number(row.sequence),
+          payload: parseJson(row.payload_json, {}, {
+            fieldName: "replay_events.payload_json",
+            rowId: row.session_id,
+            strict: true,
+          }),
+          createdAt: row.created_at,
+        });
+        eventsBySession.set(row.session_id, events);
+      }
+      return { sessions, eventsBySession };
     },
 
     getReplaySessionContext(sessionId) {
@@ -3503,6 +3714,36 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         ) {
           throw createReplayStateError("行情演练已结束，不能继续下单", 409);
         }
+        if (!isBarOrderModel(current.executionModelVersion) && order.orderType !== "market") {
+          throw createReplayStateError("旧会话保留原撮合规则，请创建新会话使用限价或止损", 409);
+        }
+        const protectionPrice = order.side === "buy" ? order.decision?.stopLossPrice : null;
+        if (isBarOrderModel(current.executionModelVersion) && protectionPrice != null &&
+          Math.abs(protectionPrice * 100 - Math.round(protectionPrice * 100)) >= 1e-7) {
+          throw createReplayStateError("持仓止损价格精度为0.01元", 400);
+        }
+        if (current.executionModelVersion === BOARD_ORDER_MODEL) {
+          // A new declaration first participates on the next bar, including rule-change dates.
+          const rules = replayBoardRules(current.snapshot, current.observationBars + current.revealedFutureBars + 1);
+          if (!rules) throw createReplayStateError("仅支持沪深主板、创业板和科创板A股", 400);
+          if (order.quantityType === "shares") {
+            const error = quantityError(rules, order.side, order.requestedQuantity, current.account.positionQuantity, order.orderType, current.account.availableQuantity);
+            if (error) throw createReplayStateError(error, 400);
+          }
+        } else if (order.quantityType === "shares" && order.requestedQuantity < 100) {
+          throw createReplayStateError("旧会话委托股数至少100股", 400);
+        }
+        if (order.orderType === "stop" && current.account.positionQuantity <= 0) {
+          throw createReplayStateError("没有持仓，不能设置持仓止损", 409);
+        }
+        const activeOrders = db.prepare("SELECT execution_json FROM replay_orders WHERE session_id = ? AND execution_json IS NOT NULL").all(sessionId)
+          .map((row) => JSON.parse(row.execution_json)).filter(isOpenOrder);
+        if (order.orderType === "stop" && activeOrders.some((state) => state.orderType === "stop")) {
+          throw createReplayStateError("已有持仓止损，请先取消再重新设置", 409);
+        }
+        if (order.side === "buy" && activeOrders.some((state) => state.orderType === "stop" && state.triggeredSequence != null)) {
+          throw createReplayStateError("止损退出进行中，请先取消退出再决定是否买入", 409);
+        }
         const submittedSequence =
           current.observationBars + current.revealedFutureBars;
         const orderId = randomUUID();
@@ -3538,6 +3779,9 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           nextRevision,
           updatedAt,
         );
+        if (isBarOrderModel(current.executionModelVersion)) {
+          db.prepare("UPDATE replay_orders SET execution_json = ? WHERE id = ?").run(JSON.stringify(newOrderState(order)), orderId);
+        }
         db.prepare(
           `
           UPDATE replay_sessions
@@ -3569,6 +3813,50 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         db.exec("ROLLBACK");
         throw error;
       }
+    },
+
+    cancelReplayOrder({ sessionId, orderId, actionId, expectedRevision, requestPayload, updatedAt }) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const current = readReplaySession(sessionId);
+        if (!current) { db.exec("COMMIT"); return null; }
+        const previous = readReplayAction(sessionId, actionId);
+        if (previous) {
+          assertReplayActionMatches(previous, "order_cancelled", requestPayload);
+          db.exec("COMMIT");
+          return { cancelled: true, idempotent: true, session: current };
+        }
+        if (current.revision !== expectedRevision) throw createReplayStateError(`会话版本冲突，当前 revision 为 ${current.revision}`, 409);
+        if (current.status !== "active") throw createReplayStateError("演练已经结束，不能撤单", 409);
+        const row = db.prepare("SELECT * FROM replay_orders WHERE id = ? AND session_id = ?").get(orderId, sessionId);
+        if (!row) throw createReplayStateError("找不到该会话的委托", 404);
+        const sequence = current.observationBars + current.revealedFutureBars;
+        if (row.execution_json) {
+          const state = JSON.parse(row.execution_json);
+          if (!isOpenOrder(state)) throw createReplayStateError("委托已经结束，不能撤销", 409);
+          closeOrder({ state }, "cancelled", "cancelled_by_user", "已主动取消未成交余量；已有成交保留", sequence);
+          db.prepare("UPDATE replay_orders SET execution_json = ? WHERE id = ?").run(JSON.stringify(state), orderId);
+          if (state.sourceOrderId) {
+            const parent = db.prepare("SELECT execution_json FROM replay_orders WHERE id = ? AND session_id = ?").get(state.sourceOrderId, sessionId);
+            if (parent?.execution_json) {
+              const parentState = JSON.parse(parent.execution_json);
+              parentState.protectionSuppressed = true;
+              db.prepare("UPDATE replay_orders SET execution_json = ? WHERE id = ?").run(JSON.stringify(parentState), state.sourceOrderId);
+            }
+          }
+        } else {
+          const ended = db.prepare(`SELECT 1 FROM replay_fills WHERE order_id = ? UNION ALL
+            SELECT 1 FROM replay_order_rejections WHERE order_id = ?`).get(orderId, orderId);
+          if (ended) throw createReplayStateError("委托已经结束，不能撤销", 409);
+          rejectReplayOrder(row, sequence, "cancelled_by_user", "已主动撤单", updatedAt);
+        }
+        db.prepare("UPDATE replay_sessions SET revision = revision + 1, updated_at = ? WHERE id = ?").run(updatedAt, sessionId);
+        insertReplayEvent({ sessionId, actionId, eventType: "order_cancelled", sequence,
+          payload: { request: requestPayload, orderId }, createdAt: updatedAt });
+        const session = readReplaySession(sessionId);
+        db.exec("COMMIT");
+        return { cancelled: true, idempotent: false, session };
+      } catch (error) { db.exec("ROLLBACK"); throw error; }
     },
 
     finishReplaySession({
@@ -3614,6 +3902,14 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
 
         const currentSequence =
           current.observationBars + current.revealedFutureBars;
+        if (isBarOrderModel(current.executionModelVersion)) {
+          for (const row of db.prepare("SELECT id, execution_json FROM replay_orders WHERE session_id = ?").all(sessionId)) {
+            const state = row.execution_json ? JSON.parse(row.execution_json) : null;
+            if (!isOpenOrder(state)) continue;
+            closeOrder({ state }, "cancelled", "session_finished_early", "提前交卷，未成交余量及止损保护已停止", currentSequence);
+            db.prepare("UPDATE replay_orders SET execution_json = ? WHERE id = ?").run(JSON.stringify(state), row.id);
+          }
+        } else {
         const pendingOrders = db
           .prepare(
             `
@@ -3644,6 +3940,8 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           );
         }
 
+        }
+
         const nextRevision = current.revision + 1;
         db.prepare(
           `
@@ -3663,7 +3961,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           sequence: currentSequence,
           payload: {
             request: requestPayload,
-            cancelledOrderCount: pendingOrders.length,
+            cancelledOrderCount: readReplayOrders(sessionId).executions.filter((item) => item.reasonCode === "session_finished_early").length,
           },
           createdAt: updatedAt,
         });
@@ -4366,6 +4664,33 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           realizedPnl: Number(current.account.realizedPnl ?? 0),
           totalFees: Number(current.account.totalFees),
         };
+        if (isBarOrderModel(current.executionModelVersion)) {
+          const rows = db.prepare("SELECT * FROM replay_orders WHERE session_id = ? ORDER BY created_revision ASC, rowid ASC").all(sessionId);
+          const orders = rows.filter((row) => row.execution_json).map((row) => ({ ...row,
+            decision: row.decision_json ? JSON.parse(row.decision_json) : null, state: JSON.parse(row.execution_json) }));
+          const result = executeReplayOrders({ orders, account, bars: current.snapshot.bars, sequence: targetSequence,
+            sessionEnding: status === "completed", costConfig: current.costConfig, calculateFees: calculateReplayFees,
+            resolveQuantity: replayOrderQuantity, roundPrice: roundReplayExecutionPrice, createId: randomUUID,
+            boardRules: current.executionModelVersion === BOARD_ORDER_MODEL ? replayBoardRules(current.snapshot, targetSequence) : null,
+            snapshot: current.snapshot });
+          Object.assign(account, result.account);
+          for (const order of result.orders) {
+            if (order.created) {
+              db.prepare(`INSERT INTO replay_orders (id, session_id, action_id, side, quantity_type, requested_quantity, ratio,
+                decision_json, submitted_sequence, scheduled_sequence, created_revision, created_at, execution_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(order.id, sessionId, order.action_id, order.side,
+                  order.quantity_type, order.requested_quantity, order.ratio, JSON.stringify(order.decision), order.submitted_sequence,
+                  order.scheduled_sequence, nextRevision, updatedAt, JSON.stringify(order.state));
+            } else db.prepare("UPDATE replay_orders SET execution_json = ? WHERE id = ?").run(JSON.stringify(order.state), order.id);
+          }
+          for (const fill of result.fills) {
+            db.prepare(`INSERT INTO replay_fills (id, session_id, order_id, sequence, side, quantity, reference_price, price,
+              slippage_bps, notional, commission, stamp_tax, transfer_fee, total_fee, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(randomUUID(), sessionId, fill.orderId,
+                fill.sequence, fill.side, fill.quantity, fill.referencePrice, fill.price, current.costConfig.slippageBps,
+                fill.notional, fill.commission, fill.stampTax, fill.transferFee, fill.totalFee, updatedAt);
+          }
+        } else {
         const pendingOrders = db
           .prepare(
             `
@@ -4622,6 +4947,8 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           );
         }
 
+        }
+
         db.prepare(
           `
           UPDATE replay_sessions
@@ -4662,6 +4989,22 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
                 )
                 .get(sessionId),
             );
+        // Persist objective trigger observations in the same transaction as
+        // the advance. The detector only sees frozen bars and execution/order
+        // facts; retries are deduped by its stable rule key.
+        const hydratedSession = readReplaySession(sessionId);
+        recordTrainingConditionEvents(
+          sessionId,
+          hydratedSession,
+          targetSequence,
+          updatedAt,
+        );
+        recordTrainingExecutionObserved(
+          sessionId,
+          hydratedSession,
+          targetSequence,
+          updatedAt,
+        );
         if (manageTransaction) {
           db.exec("COMMIT");
         }

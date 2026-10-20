@@ -1,3 +1,5 @@
+import { isReplayBarOrderModel } from "./replayOrderRules.js";
+
 export const REPLAY_AUTOPLAY_SPEEDS = Object.freeze([
   { value: "slow", label: "慢速", delayMs: 2200 },
   { value: "normal", label: "正常", delayMs: 1100 },
@@ -54,7 +56,7 @@ export function getReplayAutoplayStopReason(
     return `会话状态异常（${session.status || "未知"}），自动播放已暂停。`;
   }
   const pendingCount = session.pendingOrders?.length ?? 0;
-  if (pendingCount > 0) {
+  if (pendingCount > 0 && !isReplayBarOrderModel(session.executionModelVersion)) {
     return `检测到 ${pendingCount} 笔待处理委托，自动播放已暂停，请手动确认推进。`;
   }
   const draftRiskReason = getReplayDraftRiskStopReason(session, blindDraft);
@@ -66,6 +68,7 @@ export function getReplayAutoplayStopReason(
     limit_up: "当前交易日触及涨停状态，自动播放已暂停。",
     limit_down: "当前交易日触及跌停状态，自动播放已暂停。",
     invalid_market_data: "当前交易日行情数据异常，自动播放已暂停。",
+    rule_unavailable: "当前历史行情的交易规则信息不足，自动播放已暂停。",
   };
   const marketEventStatus = session.marketEvent?.status;
   if (
@@ -79,6 +82,9 @@ export function getReplayAutoplayStopReason(
   }
   if (executionStartIndex != null) {
     const newExecutions = (session.executions ?? []).slice(executionStartIndex);
+    if (isReplayBarOrderModel(session.executionModelVersion) && newExecutions.length) {
+      return "委托已有成交或状态变化，自动播放已暂停，请查看交易台。";
+    }
     const rejected = newExecutions.find(
       (execution) => execution.status !== "filled",
     );
