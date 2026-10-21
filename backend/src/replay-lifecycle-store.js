@@ -1,6 +1,16 @@
 export function createReplayLifecycleStore(database) {
   return {
     getSession: (sessionId) => database.getReplaySession(sessionId),
+    getFirstCryptoSession: (id) => database.getFirstReplayCryptoSession(id),
+    getCryptoExposureUsage: () => database.getReplayCryptoExposureUsage(),
+    getCryptoJournal: (id) => database.getReplayCryptoJournal(id),
+    getCryptoSnapshot: (id) => database.getReplayCryptoSnapshot(id),
+    createCryptoSession: (command) => database.createCryptoReplaySession(command),
+    mutateCryptoSession: (command) => database.mutateCryptoReplaySession(command),
+    retrainCryptoSession: (command) => database.retrainCryptoReplaySession(command),
+    readCryptoActions: (query) => database.readCryptoReplayActions(query),
+    readCryptoEntries: (query) => database.readCryptoReplayEntries(query),
+    readCryptoTraces: (query) => database.readCryptoReplayTraces(query),
     getComparisonSessions: (sessionId) =>
       database.getReplayComparisonSessions(sessionId),
     getTrainingAnalyticsData: () => database.getReplayTrainingAnalyticsData(),
