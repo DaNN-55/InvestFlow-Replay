@@ -1,3 +1,4 @@
+import { REPLAY_PRICE_LINE_GROUP, REPLAY_PRICE_LINE_OVERLAY } from '../utils/replayPriceLines.js';
 import {
   ActionType,
   dispose,
@@ -42,6 +43,7 @@ import {
 const CANDLE_PANE_ID = "candle_pane";
 const TRADE_OVERLAY_NAME = "replayTradeMarker";
 let tradeOverlayRegistered = false;
+let priceLineOverlayRegistered = false;
 let drawingOverlaysRegistered = false;
 
 function ensureTradeOverlayRegistered() {
@@ -98,6 +100,7 @@ export function useReplayKlineChart({
   });
   const error = shallowRef("");
   const bars = computed(() => model.value?.bars ?? []);
+  const priceLines = computed(() => model.value?.priceLines ?? []);
   const trades = computed(() => model.value?.trades ?? []);
   const indicators = computed(() => model.value?.indicators ?? {
     builtins: { main: [], panes: [] },
@@ -109,6 +112,7 @@ export function useReplayKlineChart({
   let themeObserver = null;
   let indicatorInstances = [];
   let indicatorStructureKey = "";
+  let priceLineIds = [], priceLineKey = '';
   let overlayIds = [];
   let tradeOverlayKey = "";
   let drawingIds = [];
@@ -235,6 +239,20 @@ export function useReplayKlineChart({
       } catch (error) {
         reportError(error);
       }
+    }
+  }
+
+  function syncPriceLines() {
+    const current = chart.value;
+    if (!current || !appliedData.length) return;
+    const nextKey = JSON.stringify(priceLines.value);
+    if (nextKey === priceLineKey) return;
+    for (const id of priceLineIds) current.removeOverlay(id);
+    priceLineIds = []; priceLineKey = nextKey;
+    for (const line of priceLines.value) {
+      const id = current.createOverlay({ name: REPLAY_PRICE_LINE_OVERLAY.name, id: line.id,
+        groupId: REPLAY_PRICE_LINE_GROUP, lock: true, points: [{ value: Number(line.price) }], extendData: line }, CANDLE_PANE_ID);
+      if (id) priceLineIds.push(id);
     }
   }
 
@@ -405,6 +423,7 @@ export function useReplayKlineChart({
       }
       syncIndicators();
       syncTrades();
+      syncPriceLines();
       emitVisibleRange(current.getVisibleRange());
       chartError("");
     } catch (error) {
@@ -433,6 +452,7 @@ export function useReplayKlineChart({
     if (!host.value || chart.value) {
       return;
     }
+    if (!priceLineOverlayRegistered) { registerOverlay(REPLAY_PRICE_LINE_OVERLAY); priceLineOverlayRegistered = true; }
     ensureTradeOverlayRegistered();
     ensureDrawingOverlaysRegistered();
     chart.value = init(host.value, {
@@ -476,6 +496,7 @@ export function useReplayKlineChart({
       dispose(chart.value);
       chart.value = null;
     }
+    priceLineIds = []; priceLineKey = '';
     drawingIds = [];
     pendingDrawingId = "";
     activeDrawingTool.value = "";
@@ -489,6 +510,7 @@ export function useReplayKlineChart({
   onBeforeUnmount(unmountChart);
   watch(bars, applyBars);
   watch(trades, syncTrades);
+  watch(priceLines, syncPriceLines, { deep: true });
   watch(indicators, syncIndicators, { deep: true });
 
   const state = computed(() => ({

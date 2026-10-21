@@ -33,3 +33,10 @@ export function replayCacheProgress(payload) {
     percent: Math.min(100, Math.round((completed / total) * 100)),
   };
 }
+
+export function formatCacheDateRange(value) {
+  const first = value?.earliestDataDate;
+  const last = value?.latestDataDate;
+  if (!first || !last) return "暂无";
+  return first === last ? first : `${first} 至 ${last}`;
+}

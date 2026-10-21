@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, shallowRef } from "vue";
 import { ChevronDown, ChevronUp, Ellipsis, ExternalLink, RefreshCw, Trash2 } from "lucide-vue-next";
 
 import {
@@ -22,6 +22,7 @@ import {
 } from "../../utils/replayReviewPresentation.js";
 import { getLatestReplayReviewSnapshot } from "../../utils/replayReviewCorrections.js";
 import { formatDisplayDate } from "../../utils/datePresentation.js";
+import ReplayAttemptComparison from "../replay/ReplayAttemptComparison.vue";
 import ReplayReviewTimeline from "../replay/ReplayReviewTimeline.vue";
 import ReplayOrderDecisionSnapshot from "../replay/ReplayOrderDecisionSnapshot.vue";
 import UiActionMenu from "../ui/UiActionMenu.vue";
@@ -55,6 +56,8 @@ const emit = defineEmits([
   "editCorrection",
   "deleteCorrection",
 ]);
+
+const comparisonOpen = shallowRef(false);
 
 const latestBlindCorrection = computed(() =>
   (props.item.corrections ?? []).filter((item) => item.stage === "blind").at(-1) ?? null,
@@ -145,7 +148,7 @@ const orderColumns = computed(() =>
       ...executions.value
         .filter((execution) => execution.side === side)
         .map((execution) => ({
-          key: `execution-${execution.orderId}`,
+          key: `execution-${execution.executionId ?? execution.orderId}`,
           kind: "execution",
           value: execution,
           sequence: Number(execution.sequence ?? 0),
@@ -256,6 +259,11 @@ function isPositiveMetric(metric) {
         <dd>{{ formatDisplayDate(item.reveal?.startDate, "—") }} 至 {{ formatDisplayDate(item.reveal?.endDate, "—") }}</dd>
       </div>
     </dl>
+
+    <section class="replay-history-detail__comparison-entry">
+      <div><strong>同场景训练对照</strong><p>{{ item.revealed ? '保留首次成绩，查看历次复练的判断和结果。' : '揭晓后可查看首次与历次复练对照。' }}</p></div>
+      <UiButton variant="secondary" size="sm" :disabled="!item.revealed" @click="comparisonOpen = true">首次与复练对照</UiButton>
+    </section>
 
     <details
       v-if="item.scoreCard"
@@ -421,7 +429,7 @@ function isPositiveMetric(metric) {
                     · 费用 ¥{{ formatMoney(record.value.totalFee) }}
                   </span>
                   <span v-else class="replay-history-detail__order-status">
-                    {{ record.value.status === "cancelled" ? "已取消" : "未成交" }}
+                    {{ record.value.status === "cancelled" ? "已取消" : record.value.status === "expired" ? "余量已到期" : "未成交" }}
                     <template v-if="record.value.reasonMessage">
                       · {{ record.value.reasonMessage }}
                     </template>
@@ -560,6 +568,7 @@ function isPositiveMetric(metric) {
           <dt>错误与不足</dt>
           <dd>{{ effectivePostReview.mistakes }}</dd>
         </div>
+        <div v-if="effectivePostReview.issueTags?.length"><dt>用户确认问题</dt><dd>{{ effectivePostReview.issueTags.join('、') }}</dd></div>
         <div>
           <dt>经验总结</dt>
           <dd>{{ effectivePostReview.lessons }}</dd>
@@ -627,10 +636,16 @@ function isPositiveMetric(metric) {
       @edit-correction="emit('editCorrection', $event)"
       @delete-correction="emit('deleteCorrection', $event)"
     />
+    <ReplayAttemptComparison :open="comparisonOpen" :session-id="item.id" @close="comparisonOpen = false" />
   </article>
 </template>
 
 <style scoped>
+.replay-history-detail__comparison-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--ql-line); }
+.replay-history-detail__comparison-entry strong { color: var(--ql-ink); font-size: 13px; }
+.replay-history-detail__comparison-entry p { margin: 4px 0 0; color: var(--ql-color-text-muted); font-size: 12px; }
+@media (max-width: 640px) { .replay-history-detail__comparison-entry { align-items: flex-start; flex-direction: column; } }
+
 .replay-history-detail {
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 10px;

@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 from contextlib import nullcontext
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from replay_engine.data_store import DuckDbBarStore
@@ -14,6 +15,7 @@ class RecordingMarketProvider:
     def __init__(self) -> None:
         self.ensure_calls = 0
         self.prepare_calls = 0
+        self._now = datetime(2026, 8, 9, 16, 0)
 
     def ensure_ready(self):
         self.ensure_calls += 1
@@ -37,6 +39,23 @@ class RecordingMarketProvider:
     def ensure_unseen_stock_available(self, excluded_ts_codes, *, target_count):
         self.prefetch_call = (excluded_ts_codes, target_count)
         return True
+
+    def now(self):
+        return self._now
+
+    def completed_trade_date(self):
+        return self._now.date()
+
+    minimum_replay_bars = 3
+
+    def background_retry_due(self):
+        return False
+
+    def unseen_eligible_codes(self, excluded=()):
+        excluded = set(excluded)
+        return [code for code in (
+            "600000.SH", "300001.SZ", "688001.SH", "600001.SH",
+        ) if code not in excluded]
 
     def load_hybrid_daily_history(self, ts_code, benchmark_code):
         def row(code):
@@ -117,6 +136,9 @@ class RecordingMinuteProvider:
     def __init__(self):
         self.calls = []
 
+    def cache_snapshot(self):
+        return {"statistics": {}, "storageBytes": 0, "inventory": []}
+
     def create_scenario(self, **kwargs):
         self.calls.append(kwargs)
         return {"interval": "hybrid", "sourceDataVersion": "minute-cache"}
@@ -130,6 +152,7 @@ class CacheStatusMarketProvider(RecordingMarketProvider):
                 "instrumentCount": 12,
                 "lastSuccessAt": "2026-08-09T10:00:00",
             },
+            "failedResourceCount": 0,
             "storageBytes": path.stat().st_size,
         }
 
@@ -160,7 +183,9 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
         class Store(ReplayStoreStub):
             def create_replay_scenario(self, **kwargs):
                 excluded = kwargs["excluded_ts_codes"]
-                code = next(code for code in ["600000.SH", "600001.SH", "600002.SH", "600003.SH"] if code not in excluded)
+                code = next(code for code in [
+                    "600000.SH", "300001.SZ", "688001.SH", "600001.SH",
+                ] if code not in excluded)
                 return {"tsCode": code}
 
         class MinuteProvider:
@@ -170,6 +195,16 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
 
             def prefetched_codes(self, _benchmark):
                 return self.codes.copy()
+
+            def cache_snapshot(self):
+                return {
+                    "statistics": {},
+                    "storageBytes": 0,
+                    "inventory": [
+                        {"code": code, "kind": "stock-5m", "lastAttemptAt": None}
+                        for code in self.codes
+                    ],
+                }
 
             def download_client(self):
                 return nullcontext(object())
@@ -182,11 +217,11 @@ class TdxRuntimeIntegrationTest(unittest.TestCase):
         supply = ReplayMarketSupply(store=Store(), market_data_provider=RecordingMarketProvider(), minute_replay_provider=minute)
         options = {"interval": "hybrid", "benchmark_code": "000001.SH"}
         self.assertEqual(supply.prefetch_replay_stocks((), **options)["minutePrepared"], 3)
-        self.assertEqual(minute.downloads, ["600000.SH", "600001.SH", "600002.SH"])
+        self.assertEqual(minute.downloads, ["600000.SH", "300001.SZ", "688001.SH"])
         supply.prefetch_replay_stocks((), **options)
         self.assertEqual(len(minute.downloads), 3)
         supply.prefetch_replay_stocks(("600000.SH",), **options)
-        self.assertEqual(minute.downloads[-1], "600003.SH")
+        self.assertEqual(minute.downloads[-1], "600001.SH")
 
     def test_supply_owns_cache_status_and_stock_reserve(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

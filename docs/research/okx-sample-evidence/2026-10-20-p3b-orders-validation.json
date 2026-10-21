@@ -1,0 +1,406 @@
+{
+  "status": "verified-p3b-offline",
+  "branch": "codex/okx-crypto-training",
+  "dataVersion": "okx-20240101-v1",
+  "dataManifestSHA256": "048fd665a006077050585ba34c8b498caab3672d21bd4311a270c412fe3e6f56",
+  "ruleSnapshotSHA256": "1a1f5a04615ab6e2229cb8abc5685ea20d13a47ef131027d571255824c0f78e6",
+  "codeSHA256": {
+    "backend/src/replay-crypto-calculations.js": "2d7f1e41c02d293d5a1ad034ba005fb4c7627077a75b0c8294d0fa7e6f052d58",
+    "backend/src/replay-crypto-order-execution.js": "acdfd213c6f2aa2d7a64f3f806cfc6a5be351d7626fec367a13fd2ef9995b7ee",
+    "backend/src/replay-crypto-order-execution.test.js": "e15e766dce67b1eb33a5efbb8abc30f5db7b2d2279fed4beed06dcb7d3e4f2e3",
+    "backend/scripts/verify-crypto-orders.mjs": "6b9d9919f0729b90a0e457096afc89fa322d37fe0bac9153bcf94a8fef6487cc"
+  },
+  "scope": "Pure order calculations; source data unchanged; no HTTP/UI/business ledger writes",
+  "results": {
+    "BTC-USDT-SWAP": {
+      "oracleCases": [
+        {
+          "side": "long",
+          "slippageBps": 0,
+          "availableBalance": "9992.80028631",
+          "tradingFees": "6.37752050",
+          "fundingPayments": "2.90319319",
+          "realizedPricePnl": "2.08100000",
+          "exact": true
+        },
+        {
+          "side": "short",
+          "slippageBps": 0,
+          "availableBalance": "9994.44467269",
+          "tradingFees": "6.37752050",
+          "fundingPayments": "-2.90319319",
+          "realizedPricePnl": "-2.08100000",
+          "exact": true
+        },
+        {
+          "side": "long",
+          "slippageBps": 2,
+          "availableBalance": "9990.24128581",
+          "tradingFees": "6.37752100",
+          "fundingPayments": "2.90319319",
+          "realizedPricePnl": "-0.47800000",
+          "exact": true
+        },
+        {
+          "side": "short",
+          "slippageBps": 2,
+          "availableBalance": "9991.88567319",
+          "tradingFees": "6.37752000",
+          "fundingPayments": "-2.90319319",
+          "realizedPricePnl": "-4.64000000",
+          "exact": true
+        },
+        {
+          "side": "long",
+          "slippageBps": 10,
+          "availableBalance": "9980.03728781",
+          "tradingFees": "6.37751900",
+          "fundingPayments": "2.90319319",
+          "realizedPricePnl": "-10.68200000",
+          "exact": true
+        },
+        {
+          "side": "short",
+          "slippageBps": 10,
+          "availableBalance": "9981.68167119",
+          "tradingFees": "6.37752200",
+          "fundingPayments": "-2.90319319",
+          "realizedPricePnl": "-14.84400000",
+          "exact": true
+        }
+      ],
+      "partialLimits": {
+        "long": {
+          "startingCashForCapacityFixture": "1000000",
+          "requested": "3596",
+          "firstFilled": "3595",
+          "firstRole": "taker",
+          "nextFilled": "1",
+          "nextRole": "maker",
+          "cancellationNoRevival": true
+        },
+        "short": {
+          "startingCashForCapacityFixture": "1000000",
+          "requested": "3596",
+          "firstFilled": "3595",
+          "firstRole": "taker",
+          "nextFilled": "1",
+          "nextRole": "maker",
+          "cancellationNoRevival": true
+        }
+      },
+      "protections": {
+        "long": {
+          "fixtureMinute": 2,
+          "bothLegsReachable": true,
+          "selected": "stopLoss",
+          "siblingCancelled": true,
+          "endingEquity": "9991.30438500",
+          "fillRole": "taker"
+        },
+        "short": {
+          "fixtureMinute": 2,
+          "bothLegsReachable": true,
+          "selected": "stopLoss",
+          "siblingCancelled": true,
+          "endingEquity": "9994.05301000",
+          "fillRole": "taker"
+        }
+      },
+      "fullWindow": {
+        "long": {
+          "endingEquity": "10031.23311436",
+          "totals": {
+            "tradingFees": "6.40456450",
+            "fundingPayments": "15.97132114",
+            "realizedPricePnl": "53.60900000",
+            "liquidationAggregatePnl": "0.00000000",
+            "manualTopups": "500.00000000",
+            "slippageAttribution": "2.57000000",
+            "deficitWaiverMemo": "0.00000000"
+          },
+          "traceSHA256": "ea4af39f9a3cf9b5a36a9297498b22ebdbd65e610e42aca9edf46770d4850341",
+          "equivalentSteps": [
+            1,
+            5,
+            15,
+            4321
+          ],
+          "fundingEvents": 9
+        },
+        "short": {
+          "endingEquity": "9950.81774664",
+          "totals": {
+            "tradingFees": "6.40457450",
+            "fundingPayments": "-15.97132114",
+            "realizedPricePnl": "-58.74900000",
+            "liquidationAggregatePnl": "0.00000000",
+            "manualTopups": "500.00000000",
+            "slippageAttribution": "2.57000000",
+            "deficitWaiverMemo": "0.00000000"
+          },
+          "traceSHA256": "734e6f250246c3e46487bea917475dd6f6a444c4d33e6bac8c3735940c06e470",
+          "equivalentSteps": [
+            1,
+            5,
+            15,
+            4321
+          ],
+          "fundingEvents": 9
+        }
+      },
+      "highLeverageRisk": {
+        "long": {
+          "testLeverage": "100",
+          "takeoverCount": 1,
+          "observedAtMinute": 412,
+          "outsideCashPreserved": true,
+          "pendingOrdersAndProtectionCleared": true
+        },
+        "short": {
+          "testLeverage": "100",
+          "takeoverCount": 1,
+          "observedAtMinute": 46,
+          "outsideCashPreserved": true,
+          "pendingOrdersAndProtectionCleared": true
+        }
+      },
+      "markProtection": {
+        "long": {
+          "fixtureMinute": 2,
+          "triggerReference": "mark",
+          "fillReference": "ordinary-adverse-extreme-proxy",
+          "fillPrice": "42433.8",
+          "approximate": true
+        },
+        "short": {
+          "fixtureMinute": 2,
+          "triggerReference": "mark",
+          "fillReference": "ordinary-adverse-extreme-proxy",
+          "fillPrice": "42478.5",
+          "approximate": true
+        }
+      },
+      "sharedCapacity": {
+        "sourceCapacity": "3595",
+        "orderedFills": [
+          "2157",
+          "1438"
+        ],
+        "exact": true
+      },
+      "partialProtection": {
+        "fixtureMinute": 1,
+        "initialContracts": "3595",
+        "triggerFilled": "3554",
+        "carriedContracts": "41",
+        "laterOpenRetries": 1,
+        "siblingStayedCancelled": true
+      },
+      "visibility": {
+        "futurePerturbationAtMinute": 5,
+        "identical": true,
+        "pausedAfterFirstFillMinute": 1
+      },
+      "noTrading": {
+        "completed": true,
+        "endingEquity": "10000.00000000"
+      }
+    },
+    "ETH-USDT-SWAP": {
+      "oracleCases": [
+        {
+          "side": "long",
+          "slippageBps": 0,
+          "availableBalance": "9975.74455973",
+          "tradingFees": "3.44031850",
+          "fundingPayments": "1.89212177",
+          "realizedPricePnl": "-18.92300000",
+          "exact": true
+        },
+        {
+          "side": "short",
+          "slippageBps": 0,
+          "availableBalance": "10017.37480327",
+          "tradingFees": "3.44031850",
+          "fundingPayments": "-1.89212177",
+          "realizedPricePnl": "18.92300000",
+          "exact": true
+        },
+        {
+          "side": "long",
+          "slippageBps": 2,
+          "availableBalance": "9974.35055673",
+          "tradingFees": "3.44032150",
+          "fundingPayments": "1.89212177",
+          "realizedPricePnl": "-20.31700000",
+          "exact": true
+        },
+        {
+          "side": "short",
+          "slippageBps": 2,
+          "availableBalance": "10015.98080627",
+          "tradingFees": "3.44031550",
+          "fundingPayments": "-1.89212177",
+          "realizedPricePnl": "17.52900000",
+          "exact": true
+        },
+        {
+          "side": "long",
+          "slippageBps": 10,
+          "availableBalance": "9968.84155123",
+          "tradingFees": "3.44032700",
+          "fundingPayments": "1.89212177",
+          "realizedPricePnl": "-25.82600000",
+          "exact": true
+        },
+        {
+          "side": "short",
+          "slippageBps": 10,
+          "availableBalance": "10010.47181177",
+          "tradingFees": "3.44031000",
+          "fundingPayments": "-1.89212177",
+          "realizedPricePnl": "12.02000000",
+          "exact": true
+        }
+      ],
+      "partialLimits": {
+        "long": {
+          "startingCashForCapacityFixture": "1000000",
+          "requested": "6017",
+          "firstFilled": "6016",
+          "firstRole": "taker",
+          "nextFilled": "1",
+          "nextRole": "maker",
+          "cancellationNoRevival": true
+        },
+        "short": {
+          "startingCashForCapacityFixture": "1000000",
+          "requested": "6017",
+          "firstFilled": "6016",
+          "firstRole": "taker",
+          "nextFilled": "1",
+          "nextRole": "maker",
+          "cancellationNoRevival": true
+        }
+      },
+      "protections": {
+        "long": {
+          "fixtureMinute": 2,
+          "bothLegsReachable": true,
+          "selected": "stopLoss",
+          "siblingCancelled": true,
+          "endingEquity": "9995.70069000",
+          "fillRole": "taker"
+        },
+        "short": {
+          "fixtureMinute": 2,
+          "bothLegsReachable": true,
+          "selected": "stopLoss",
+          "siblingCancelled": true,
+          "endingEquity": "9996.99025500",
+          "fillRole": "taker"
+        }
+      },
+      "fullWindow": {
+        "long": {
+          "endingEquity": "9922.68101043",
+          "totals": {
+            "tradingFees": "3.41777700",
+            "fundingPayments": "8.49521257",
+            "realizedPricePnl": "-65.40600000",
+            "liquidationAggregatePnl": "0.00000000",
+            "manualTopups": "500.00000000",
+            "slippageAttribution": "1.38300000",
+            "deficitWaiverMemo": "0.00000000"
+          },
+          "traceSHA256": "31570946ff60af527919b78de70c5737be9fc35757b9bbb9ff8726fe7c54dd48",
+          "equivalentSteps": [
+            1,
+            5,
+            15,
+            4321
+          ],
+          "fundingEvents": 8
+        },
+        "short": {
+          "endingEquity": "10067.71745257",
+          "totals": {
+            "tradingFees": "3.41776000",
+            "fundingPayments": "-8.49521257",
+            "realizedPricePnl": "62.64000000",
+            "liquidationAggregatePnl": "0.00000000",
+            "manualTopups": "500.00000000",
+            "slippageAttribution": "1.38300000",
+            "deficitWaiverMemo": "0.00000000"
+          },
+          "traceSHA256": "4aa6ea488d200a23c14c5cde98b16b413ce360e5526bc35816023acd4493707b",
+          "equivalentSteps": [
+            1,
+            5,
+            15,
+            4321
+          ],
+          "fundingEvents": 8
+        }
+      },
+      "highLeverageRisk": {
+        "long": {
+          "testLeverage": "100",
+          "takeoverCount": 1,
+          "observedAtMinute": 250,
+          "outsideCashPreserved": true,
+          "pendingOrdersAndProtectionCleared": true
+        },
+        "short": {
+          "testLeverage": "100",
+          "takeoverCount": 1,
+          "observedAtMinute": 1419,
+          "outsideCashPreserved": true,
+          "pendingOrdersAndProtectionCleared": true
+        }
+      },
+      "markProtection": {
+        "long": {
+          "fixtureMinute": 2,
+          "triggerReference": "mark",
+          "fillReference": "ordinary-adverse-extreme-proxy",
+          "fillPrice": "2298.30",
+          "approximate": true
+        },
+        "short": {
+          "fixtureMinute": 2,
+          "triggerReference": "mark",
+          "fillReference": "ordinary-adverse-extreme-proxy",
+          "fillPrice": "2300.11",
+          "approximate": true
+        }
+      },
+      "sharedCapacity": {
+        "sourceCapacity": "6016",
+        "orderedFills": [
+          "3609.6",
+          "2406.4"
+        ],
+        "exact": true
+      },
+      "partialProtection": {
+        "fixtureMinute": 3,
+        "initialContracts": "6016",
+        "triggerFilled": "2242",
+        "carriedContracts": "3774",
+        "laterOpenRetries": 1,
+        "siblingStayedCancelled": true
+      },
+      "visibility": {
+        "futurePerturbationAtMinute": 5,
+        "identical": true,
+        "pausedAfterFirstFillMinute": 1
+      },
+      "noTrading": {
+        "completed": true,
+        "endingEquity": "10000.00000000"
+      }
+    }
+  }
+}

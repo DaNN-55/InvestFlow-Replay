@@ -15,6 +15,8 @@ import {
   formatReplayReasonTags,
   REPLAY_REASON_TAG_OPTIONS,
 } from "../../utils/replayReviewPresentation.js";
+import ReplayAttemptComparison from "./ReplayAttemptComparison.vue";
+import ReplayIssueTags from "./ReplayIssueTags.vue";
 import ReplayReviewCorrectionForm from "./ReplayReviewCorrectionForm.vue";
 import ReplayReviewTimeline from "./ReplayReviewTimeline.vue";
 import ConfirmDialog from "../ConfirmDialog.vue";
@@ -68,6 +70,8 @@ const props = defineProps({
   },
 });
 
+const comparisonOpen = shallowRef(false);
+
 const emit = defineEmits([
   "saveBlind",
   "savePost",
@@ -92,6 +96,7 @@ const postForm = reactive({
   outcome: "partial",
   executionReview: "",
   mistakes: "",
+  issueTags: [],
   lessons: "",
   disciplineScore: 3,
   riskControlScore: 3,
@@ -263,6 +268,7 @@ function syncPostForm() {
     outcome: postReview?.outcome ?? "partial",
     executionReview: postReview?.executionReview ?? "",
     mistakes: postReview?.mistakes ?? "",
+    issueTags: Array.isArray(postReview?.issueTags) ? [...postReview.issueTags] : [],
     lessons: postReview?.lessons ?? "",
     disciplineScore: postReview?.disciplineScore ?? 3,
     riskControlScore: postReview?.riskControlScore ?? 3,
@@ -301,6 +307,7 @@ function buildPostPayload() {
     outcome: postForm.outcome,
     executionReview: postForm.executionReview.trim(),
     mistakes: postForm.mistakes.trim(),
+    ...(postForm.issueTags.length ? { issueTags: [...postForm.issueTags] } : {}),
     lessons: postForm.lessons.trim(),
     disciplineScore: Number(postForm.disciplineScore),
     riskControlScore: Number(postForm.riskControlScore),
@@ -389,6 +396,14 @@ function submitCorrection(payload) {
     emit("addPostCorrection", payload);
   }
 }
+
+// Close only after the new correction is present in the saved session.
+watch(
+  () => corrections.value.map(item => item.id).join(","),
+  (current, previous) => {
+    if (current !== previous && correctionStage.value && !editingCorrection.value) closeCorrection();
+  },
+);
 
 function confirmDeleteCorrection() {
   if (!pendingCorrectionDelete.value) return;
@@ -535,6 +550,7 @@ watch(
       id="replay-review-content"
       class="replay-review__content"
     >
+      <div v-if="revealed" class="replay-review__comparison-entry"><span>原始成绩保留，复练单独记录。</span><UiButton variant="secondary" size="sm" @click="comparisonOpen = true">首次与复练对照</UiButton></div>
       <form
         v-if="!revealed && !review.blindSaved"
         class="replay-review__form"
@@ -815,6 +831,7 @@ watch(
             {{ draftStatusLabels[draftStatuses.post] || "未保存" }}
           </span>
         </div>
+        <ReplayIssueTags v-model="postForm.issueTags" :disabled="savingPost" />
         <div class="replay-review__score-row">
           <label class="replay-review__field replay-review__field--compact">
             <span>判断结果</span>
@@ -960,6 +977,7 @@ watch(
             <dt>错误与不足</dt>
             <dd>{{ currentPostReview.mistakes }}</dd>
           </div>
+          <div v-if="currentPostReview.issueTags?.length"><dt>用户确认问题</dt><dd>{{ currentPostReview.issueTags.join('、') }}</dd></div>
           <div>
             <dt>经验总结</dt>
             <dd>{{ currentPostReview.lessons }}</dd>
@@ -1068,10 +1086,14 @@ watch(
       @cancel="pendingCorrectionDelete = null"
       @confirm="confirmDeleteCorrection"
     />
+    <ReplayAttemptComparison :open="comparisonOpen" :session-id="session.id" @close="comparisonOpen = false" />
   </section>
 </template>
 
 <style scoped>
+.replay-review__comparison-entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--ql-line); }
+.replay-review__comparison-entry span { color: var(--ql-color-text-muted); font-size: 12px; }
+
 .replay-review {
   flex-shrink: 0;
   overflow: hidden;

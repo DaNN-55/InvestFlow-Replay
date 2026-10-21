@@ -1,11 +1,12 @@
 <script setup>
-import { ChartCandlestick, ClipboardList, Moon, Sun } from "lucide-vue-next";
+import { ChartCandlestick, Coins, ClipboardList, Moon, Sun } from "lucide-vue-next";
 import { onMounted, ref } from "vue";
-import { RouterLink, RouterView } from "vue-router";
+import { RouterLink, RouterView, useRoute } from "vue-router";
 
 import ReplayCacheStatus from "./components/ReplayCacheStatus.vue";
 
 const dark = ref(true);
+const route = useRoute();
 
 function applyTheme() {
   document.documentElement.dataset.theme = dark.value ? "dark" : "light";
@@ -33,12 +34,15 @@ onMounted(() => {
         <RouterLink to="/decision/market-replay" aria-label="行情演练" title="行情演练">
           <ChartCandlestick :size="18" aria-hidden="true" />
         </RouterLink>
+        <RouterLink to="/decision/crypto-replay" aria-label="合约盲测" title="合约盲测">
+          <Coins :size="18" aria-hidden="true" />
+        </RouterLink>
         <RouterLink to="/decision/trade-records" aria-label="交易追踪" title="交易追踪">
           <ClipboardList :size="18" aria-hidden="true" />
         </RouterLink>
       </nav>
       <div class="standalone-shell__actions">
-        <ReplayCacheStatus />
+        <ReplayCacheStatus v-if="route.name !== 'crypto-market-replay'" />
         <button class="standalone-shell__theme" type="button" aria-label="切换主题" @click="toggleTheme">
           <Sun v-if="dark" :size="18" />
           <Moon v-else :size="18" />
