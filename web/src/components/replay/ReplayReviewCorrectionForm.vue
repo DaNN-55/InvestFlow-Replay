@@ -3,6 +3,7 @@ import { computed, reactive, watch } from "vue";
 
 import { buildReplayReviewCorrectionPayload } from "../../utils/replayReviewCorrections.js";
 import { REPLAY_REASON_TAG_OPTIONS } from "../../utils/replayReviewPresentation.js";
+import ReplayIssueTags from "./ReplayIssueTags.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 
@@ -51,6 +52,7 @@ const form = reactive({
   outcome: "partial",
   executionReview: "",
   mistakes: "",
+  issueTags: [],
   lessons: "",
   disciplineScore: 3,
   riskControlScore: 3,
@@ -120,6 +122,7 @@ function syncForm() {
     outcome: props.snapshot.outcome ?? "partial",
     executionReview: props.snapshot.executionReview ?? "",
     mistakes: props.snapshot.mistakes ?? "",
+    issueTags: Array.isArray(props.snapshot.issueTags) ? [...props.snapshot.issueTags] : [],
     lessons: props.snapshot.lessons ?? "",
     disciplineScore: props.snapshot.disciplineScore ?? 3,
     riskControlScore: props.snapshot.riskControlScore ?? 3,
@@ -215,6 +218,7 @@ watch(
     </template>
 
     <template v-else>
+      <ReplayIssueTags v-model="form.issueTags" :disabled="loading" />
       <label class="replay-correction__field replay-correction__field--compact">
         <span>判断结果</span>
         <select v-model="form.outcome">

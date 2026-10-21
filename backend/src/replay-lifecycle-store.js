@@ -1,6 +1,19 @@
 export function createReplayLifecycleStore(database) {
   return {
     getSession: (sessionId) => database.getReplaySession(sessionId),
+    getFirstCryptoSession: (id) => database.getFirstReplayCryptoSession(id),
+    getCryptoExposureUsage: () => database.getReplayCryptoExposureUsage(),
+    getCryptoJournal: (id) => database.getReplayCryptoJournal(id),
+    getCryptoSnapshot: (id) => database.getReplayCryptoSnapshot(id),
+    createCryptoSession: (command) => database.createCryptoReplaySession(command),
+    mutateCryptoSession: (command) => database.mutateCryptoReplaySession(command),
+    retrainCryptoSession: (command) => database.retrainCryptoReplaySession(command),
+    readCryptoActions: (query) => database.readCryptoReplayActions(query),
+    readCryptoEntries: (query) => database.readCryptoReplayEntries(query),
+    readCryptoTraces: (query) => database.readCryptoReplayTraces(query),
+    getComparisonSessions: (sessionId) =>
+      database.getReplayComparisonSessions(sessionId),
+    getTrainingAnalyticsData: () => database.getReplayTrainingAnalyticsData(),
     listSessions: (query) => database.listReplaySessions(query),
     getScenarioUsage: () => database.getReplayScenarioUsage(),
     createSession: (session) => database.createReplaySession(session),
@@ -10,6 +23,7 @@ export function createReplayLifecycleStore(database) {
     getPlaybookVersionLink: (playbookId, versionId) =>
       database.getReplayPlaybookVersionLink(playbookId, versionId),
     submitOrder: (command) => database.submitReplayOrder(command),
+    cancelOrder: (command) => database.cancelReplayOrder(command),
     advanceSession: (command) => database.advanceReplaySession(command),
     runInTransaction: (operation) =>
       database.runInReplayTransaction((transaction) =>

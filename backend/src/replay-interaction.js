@@ -1,6 +1,10 @@
+import { isBarOrderModel, LEGACY_ORDER_MODEL } from './replay-order-execution.js';
 import { randomUUID } from "node:crypto";
 
 import { createReplayLifecycle } from "./replay-lifecycle.js";
+import { BOARD_ORDER_MODEL, isSyntheticReplay, replayBoardRules, inspectBoardBar } from "./replay-board-rules.js";
+import { buildReplayComparison } from "./replay-comparison.js";
+import { buildReplayTrainingAnalytics, REPLAY_ISSUE_TAGS } from "./replay-training-analytics.js";
 
 const DEFAULT_REPLAY_COST_CONFIG = Object.freeze({
   commissionRate: 0.0003,
@@ -126,6 +130,9 @@ function normalizeReplayOrder(body) {
     "cashRatio",
     "positionRatio",
     "decision",
+    "orderType",
+    "limitPrice",
+    "stopPrice",
   ]);
   assertInteractionCondition(
     Object.keys(body).every((key) => allowedFields.has(key)),
@@ -136,6 +143,15 @@ function normalizeReplayOrder(body) {
     .trim()
     .toLowerCase();
   assertInteractionCondition(["buy", "sell"].includes(side), "side 只支持 buy 或 sell");
+  const orderType = body.orderType ?? "market";
+  assertInteractionCondition(["market", "limit", "stop"].includes(orderType), "orderType 只支持 market、limit、stop");
+  const limitPrice = normalizeReplayPositivePrice(body.limitPrice, "limitPrice");
+  const stopPrice = normalizeReplayPositivePrice(body.stopPrice, "stopPrice");
+  assertInteractionCondition(orderType === "limit" ? limitPrice != null : limitPrice == null, "限价委托必须且只能设置 limitPrice");
+  assertInteractionCondition(orderType === "stop" ? side === "sell" && stopPrice != null : stopPrice == null, "持仓止损必须为卖出并设置 stopPrice");
+  for (const price of [limitPrice, stopPrice]) {
+    assertInteractionCondition(price == null || Math.abs(price * 100 - Math.round(price * 100)) < 1e-7, "委托价格精度为0.01元");
+  }
   const selectors = [
     body.quantity == null ? null : "shares",
     body.cashRatio == null ? null : "cash_ratio",
@@ -147,8 +163,8 @@ function normalizeReplayOrder(body) {
     assertInteractionCondition(
       typeof body.quantity === "number" &&
         Number.isSafeInteger(body.quantity) &&
-        body.quantity >= 100,
-      "quantity 必须是大于等于 100 的安全整数",
+        body.quantity > 0,
+      "quantity 必须是大于 0 的安全整数",
     );
   }
   if (quantityType === "cash_ratio") {
@@ -173,6 +189,9 @@ function normalizeReplayOrder(body) {
   }
   const order = {
     side,
+    orderType,
+    limitPrice,
+    stopPrice,
     quantityType,
     requestedQuantity:
       quantityType === "shares" ? body.quantity : null,
@@ -184,12 +203,18 @@ function normalizeReplayOrder(body) {
           : null,
     decision: normalizeReplayOrderDecision(body.decision, side),
   };
+  assertInteractionCondition(orderType !== "stop" || (quantityType === "position_ratio" && order.ratio === 1), "持仓止损保护全部持仓，positionRatio 必须为1");
+  const requestOrder = { ...order };
+  // Keep actionId retries of pre-upgrade market requests byte-compatible.
+  if (!["orderType", "limitPrice", "stopPrice"].some((key) => Object.hasOwn(body, key))) {
+    for (const key of ["orderType", "limitPrice", "stopPrice"]) delete requestOrder[key];
+  }
   return {
     ...action,
     order,
     requestPayload: {
       expectedRevision: action.expectedRevision,
-      ...order,
+      ...requestOrder,
     },
   };
 }
@@ -498,6 +523,7 @@ function normalizeReplayPostReview(body) {
     "riskControlScore",
     "playbookFitScore",
     "strategyAdjustment",
+    "issueTags",
   ]);
   assertInteractionCondition(
     Object.keys(body).every((key) => allowedFields.has(key)),
@@ -509,6 +535,7 @@ function normalizeReplayPostReview(body) {
   const mistakes = String(body.mistakes ?? "").trim();
   const lessons = String(body.lessons ?? "").trim();
   const strategyAdjustment = String(body.strategyAdjustment ?? "").trim();
+  const issueTags = normalizeReplayIssueTags(body.issueTags);
   assertInteractionCondition(
     ["correct", "partial", "wrong"].includes(outcome),
     "outcome 只支持 correct、partial 或 wrong",
@@ -562,6 +589,7 @@ function normalizeReplayPostReview(body) {
       ? {}
       : { playbookFitScore: body.playbookFitScore }),
     strategyAdjustment,
+    ...(issueTags === undefined ? {} : { issueTags }),
   };
   return {
     ...action,
@@ -571,6 +599,19 @@ function normalizeReplayPostReview(body) {
       review,
     },
   };
+}
+
+function normalizeReplayIssueTags(value) {
+  if (value == null) return undefined;
+  assertInteractionCondition(Array.isArray(value), "issueTags 必须是数组");
+  const normalized = [...new Set(value.map((tag) => {
+    assertInteractionCondition(typeof tag === "string", "issueTags 每项必须是字符串");
+    const normalizedTag = tag.trim();
+    assertInteractionCondition(REPLAY_ISSUE_TAGS.includes(normalizedTag), "issueTags 包含不支持的标签");
+    return normalizedTag;
+  }))];
+  assertInteractionCondition(normalized.length <= 6, "issueTags 最多 6 项");
+  return normalized;
 }
 
 function normalizeReplayReviewCorrection(body, stage) {
@@ -646,6 +687,7 @@ function normalizeReplayReviewDraftRequest(body, stage) {
           "disciplineScore",
           "riskControlScore",
           "playbookFitScore",
+          "issueTags",
         ];
   const allowedFields = new Set([
     ...Object.keys(textLimits),
@@ -701,6 +743,9 @@ function normalizeReplayReviewDraftRequest(body, stage) {
       );
     }
   } else {
+    if (Object.hasOwn(draft, "issueTags")) {
+      normalized.issueTags = normalizeReplayIssueTags(draft.issueTags) ?? [];
+    }
     if (Object.hasOwn(draft, "outcome")) {
       assertInteractionCondition(typeof draft.outcome === "string", "outcome 必须是字符串");
       const outcome = draft.outcome.trim().toLowerCase();
@@ -800,6 +845,32 @@ function normalizeReplayHistoryQuery(query) {
   };
 }
 
+function normalizeReplayAnalyticsQuery(query) {
+  const interval = String(query.interval ?? "all").trim().toLowerCase();
+  assertInteractionCondition(["all", "1d", "hybrid", "1m"].includes(interval), "interval 不受支持");
+  const board = String(query.board ?? "all").trim().toLowerCase();
+  assertInteractionCondition(["all", "main", "chinext", "star"].includes(board), "board 不受支持");
+  const rawGameLength = query.gameLength == null || query.gameLength === "" ? "all" : String(query.gameLength).trim().toLowerCase();
+  const gameLengthValue = rawGameLength === "all" ? "all" : Number(rawGameLength);
+  assertInteractionCondition(
+    gameLengthValue === "all" || [20, 60, 120, 240, 720, 1200].includes(gameLengthValue),
+    "gameLength 不受支持",
+  );
+  const from = query.from == null || query.from === "" ? null : String(query.from).trim();
+  const to = query.to == null || query.to === "" ? null : String(query.to).trim();
+  for (const [label, value] of [["from", from], ["to", to]]) {
+    assertInteractionCondition(value == null || (/^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value), `${label} 必须是有效的 YYYY-MM-DD`);
+  }
+  assertInteractionCondition(!from || !to || from <= to, "from 不能晚于 to");
+  if (interval === "1d" || interval === "hybrid") {
+    assertInteractionCondition(gameLengthValue === "all" || [20, 60, 120].includes(gameLengthValue), "该周期的 gameLength 不受支持");
+  }
+  if (interval === "1m") {
+    assertInteractionCondition(gameLengthValue === "all" || [240, 720, 1200].includes(gameLengthValue), "1m 的 gameLength 不受支持");
+  }
+  return { from, to, interval, gameLength: gameLengthValue, board };
+}
+
 function roundReplayValue(value) {
   return Number(Number(value).toFixed(10));
 }
@@ -862,9 +933,9 @@ export function presentReplaySession(session) {
       Number(session.revealedFutureBars) > 0
         ? {
             sequence: progressBarCount,
-            status: classifyReplayMarketStatus(
-              privateBars[progressBarCount - 1],
-            ),
+            status: session.executionModelVersion === BOARD_ORDER_MODEL
+              ? inspectBoardBar(session.snapshot, privateBars, progressBarCount).status
+              : classifyReplayMarketStatus(privateBars[progressBarCount - 1]),
           }
         : null;
     const snapshotInterval = String(session.snapshot?.interval ?? "1d");
@@ -934,6 +1005,9 @@ export function presentReplaySession(session) {
         sourceSessionId: null,
       },
       trainingConfig: session.trainingConfig ?? { mode: "free" },
+      executionModelVersion: session.executionModelVersion ?? "legacy-next-open",
+      marketKind: isSyntheticReplay(session.snapshot) ? "synthetic" : "ashare",
+      tradingRules: session.executionModelVersion === BOARD_ORDER_MODEL ? replayBoardRules(session.snapshot, session.status === "active" ? progressBarCount + 1 : progressBarCount) : null,
       costConfig: {
         commissionRate: Number(session.costConfig?.commissionRate ?? 0),
         minCommission: Number(session.costConfig?.minCommission ?? 0),
@@ -959,11 +1033,23 @@ export function presentReplaySession(session) {
         decision: order.decision ?? null,
         submittedSequence: order.submittedSequence,
         scheduledSequence: order.scheduledSequence,
+        orderType: order.orderType ?? "market",
+        limitPrice: order.limitPrice ?? null,
+        stopPrice: order.stopPrice ?? null,
+        status: order.status ?? "pending",
+        targetQuantity: order.targetQuantity ?? null,
+        filledQuantity: order.filledQuantity ?? 0,
+        remainingQuantity: order.remainingQuantity ?? null,
+        triggeredSequence: order.triggeredSequence ?? null,
+        triggerPrice: order.triggerPrice ?? null,
+        reasonCode: order.reasonCode ?? null,
+        reasonMessage: order.reasonMessage ?? null,
       })),
       executions: (session.executions ?? []).map((execution) => {
         if (execution.status === "filled") {
           return {
               orderId: execution.orderId,
+              executionId: execution.executionId ?? execution.orderId,
               status: "filled",
               side: execution.side,
               decision: execution.decision ?? null,
@@ -981,8 +1067,9 @@ export function presentReplaySession(session) {
         }
         return {
           orderId: execution.orderId,
+          executionId: execution.executionId ?? execution.orderId,
           status:
-            execution.status === "cancelled" ? "cancelled" : "rejected",
+            ["cancelled", "expired"].includes(execution.status) ? execution.status : "rejected",
           side: execution.side,
           decision: execution.decision ?? null,
           sequence: execution.sequence,
@@ -1126,15 +1213,26 @@ export function createReplayInteraction({
   scenarioSource,
   createId = randomUUID,
   now = () => new Date().toISOString(),
+  crypto = null,
 }) {
+  const isCrypto = (id) => crypto && store.getSession(id)?.market === "crypto-perpetual";
+  const requireLegacyReview = (id) => {
+    if (isCrypto(id)) throw new ReplayInteractionError("INVALID_REQUEST", "合约复盘编辑与评分尚未接入；请使用合约盲评和揭晓接口", 409);
+  };
   const lifecycle = createReplayLifecycle({ store, scenarioSource, createId, now });
 
   function visible(session) {
+    if (session.market === "crypto-perpetual") return crypto.present(session);
+    if (session.executionModelVersion && session.executionModelVersion !== LEGACY_ORDER_MODEL && !isBarOrderModel(session.executionModelVersion)) {
+      throw new ReplayInteractionError("REPLAY_VERSION_UNSUPPORTED", "该股票会话的执行版本不受支持，未按旧模型解释", 409);
+    }
     return presentReplaySession(session);
   }
 
   async function create(rawBody) {
     const body = rawBody && typeof rawBody === "object" ? rawBody : {};
+    if (body.market === "crypto-perpetual" && crypto) return crypto.create(body);
+    assertInteractionCondition(body.market == null || body.market === "ashare", "不支持该市场");
     const interval = ["1m", "hybrid"].includes(body.interval) ? body.interval : "1d";
     const gameLength = body.gameLength == null
       ? interval === "1m" ? 240 : interval === "hybrid" ? 20 : 60
@@ -1164,16 +1262,42 @@ export function createReplayInteraction({
     return { session: visible(session) };
   }
 
-  function get(sessionId) {
+  function get(sessionId, query = {}) {
+    if (isCrypto(sessionId)) return crypto.get(sessionId, query);
     const session = store.getSession(sessionId);
     requireResult(session);
     return { session: visible(session) };
   }
 
+  function comparison(sessionId) {
+    requireLegacyReview(sessionId);
+    const group = store.getComparisonSessions(sessionId);
+    requireResult(group?.selected);
+    if (!group.selected.revealedAt) {
+      throw new ReplayInteractionError(
+        "REPLAY_COMPARISON_NOT_READY",
+        "当前演练尚未揭晓，不能查看首次与复练对照",
+        409,
+      );
+    }
+    return buildReplayComparison({
+      selectedSession: group.selected,
+      attempts: group.attempts,
+      firstUnavailable: group.firstUnavailable,
+    });
+  }
+
   function list(rawQuery) {
-    return store.listSessions(normalizeReplayHistoryQuery(
-      rawQuery && typeof rawQuery === "object" ? rawQuery : {},
-    ));
+    const query = rawQuery && typeof rawQuery === "object" ? rawQuery : {};
+    const market = query.market ?? "ashare";
+    assertInteractionCondition(["ashare", "crypto-perpetual"].includes(market), "不支持该市场");
+    return store.listSessions({ ...normalizeReplayHistoryQuery(query), ...(query.market == null ? {} : { market }) });
+  }
+
+  function analytics(rawQuery) {
+    const filters = normalizeReplayAnalyticsQuery(rawQuery && typeof rawQuery === "object" ? rawQuery : {});
+    const data = requireResult(store.getTrainingAnalyticsData());
+    return buildReplayTrainingAnalytics({ ...data, filters });
   }
 
   function deleteSession(sessionId) {
@@ -1183,18 +1307,21 @@ export function createReplayInteraction({
   }
 
   function retrain(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.retrain(sessionId, rawBody ?? {});
     const body = rawBody && typeof rawBody === "object" ? rawBody : {};
     assertInteractionCondition(Object.keys(body).length === 0, "复练请求不支持额外字段");
     return { session: visible(requireResult(lifecycle.retrainSession(sessionId))) };
   }
 
   function submitOrder(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.submitOrder(sessionId, rawBody ?? {});
     const normalized = normalizeReplayOrder(rawBody && typeof rawBody === "object" ? rawBody : {});
     const result = requireResult(lifecycle.submitOrder({ sessionId, ...normalized }));
     return { created: result.created, idempotent: result.idempotent, session: visible(result.session) };
   }
 
   function advance(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.advance(sessionId, rawBody ?? {});
     const body = rawBody && typeof rawBody === "object" ? rawBody : {};
     const action = normalizeReplayAction(body);
     const result = requireResult(lifecycle.advanceSession({
@@ -1205,6 +1332,7 @@ export function createReplayInteraction({
   }
 
   function finish(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.finish(sessionId, rawBody ?? {});
     const body = rawBody && typeof rawBody === "object" ? rawBody : {};
     const action = normalizeReplayAction(body);
     const completionReason = body.reason == null ? "early" : String(body.reason).trim().toLowerCase();
@@ -1217,12 +1345,14 @@ export function createReplayInteraction({
   }
 
   function reveal(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.reveal(sessionId, rawBody ?? {});
     const action = normalizeReplayAction(rawBody && typeof rawBody === "object" ? rawBody : {});
     const result = requireResult(lifecycle.revealSession({ sessionId, ...action }));
     return { revealed: result.revealed, idempotent: result.idempotent, session: visible(result.session) };
   }
 
   function saveBlindReview(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.saveBlindReview(sessionId, rawBody ?? {});
     const result = requireResult(lifecycle.saveBlindReview({
       sessionId,
       normalized: normalizeReplayBlindReview(rawBody && typeof rawBody === "object" ? rawBody : {}),
@@ -1231,6 +1361,7 @@ export function createReplayInteraction({
   }
 
   function saveReviewDraft(sessionId, stage, rawBody) {
+    requireLegacyReview(sessionId);
     const session = requireResult(lifecycle.saveReviewDraft({
       sessionId,
       stage,
@@ -1246,6 +1377,7 @@ export function createReplayInteraction({
   }
 
   function deleteReviewDraft(sessionId, stage, rawBody) {
+    requireLegacyReview(sessionId);
     const result = requireResult(lifecycle.deleteReviewDraft({
       sessionId,
       stage,
@@ -1257,6 +1389,8 @@ export function createReplayInteraction({
   }
 
   function savePostReview(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.savePostReview(sessionId, rawBody ?? {});
+    requireLegacyReview(sessionId);
     const result = requireResult(lifecycle.savePostReview({
       sessionId,
       normalized: normalizeReplayPostReview(rawBody && typeof rawBody === "object" ? rawBody : {}),
@@ -1269,6 +1403,7 @@ export function createReplayInteraction({
   }
 
   function appendReviewCorrection(sessionId, stage, rawBody) {
+    requireLegacyReview(sessionId);
     requireCorrectionStage(stage);
     const result = requireResult(lifecycle.appendReviewCorrection({
       sessionId,
@@ -1287,6 +1422,7 @@ export function createReplayInteraction({
   }
 
   function updateReviewCorrection(sessionId, stage, correctionId, rawBody) {
+    requireLegacyReview(sessionId);
     requireCorrectionStage(stage);
     const result = requireResult(lifecycle.updateReviewCorrection({
       sessionId,
@@ -1302,6 +1438,7 @@ export function createReplayInteraction({
   }
 
   function deleteReviewCorrection(sessionId, stage, correctionId, rawBody) {
+    requireLegacyReview(sessionId);
     requireCorrectionStage(stage);
     const action = normalizeReplayAction(rawBody && typeof rawBody === "object" ? rawBody : {});
     const result = requireResult(lifecycle.deleteReviewCorrection({
@@ -1317,10 +1454,20 @@ export function createReplayInteraction({
   return {
     create,
     list,
+    analytics,
     get,
+    comparison,
     deleteSession,
     retrain,
     submitOrder,
+    cancelOrder(sessionId, orderId, rawBody) {
+      const body = rawBody && typeof rawBody === "object" ? rawBody : {};
+      assertInteractionCondition(Object.keys(body).every((key) => ["actionId", "expectedRevision"].includes(key)), "撤单包含不支持的字段");
+      const action = normalizeReplayAction(body);
+      const result = requireResult(lifecycle.cancelOrder({ sessionId, orderId, ...action,
+        requestPayload: { expectedRevision: action.expectedRevision, orderId } }));
+      return { cancelled: result.cancelled, idempotent: result.idempotent, session: visible(result.session) };
+    },
     advance,
     finish,
     saveBlindReview,

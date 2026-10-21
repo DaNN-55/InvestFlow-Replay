@@ -19,6 +19,7 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  priceLines: { type: Array, default: () => [] },
   trades: {
     type: Array,
     default: () => [],
@@ -50,6 +51,7 @@ const drawingIcons = Object.freeze({
 
 const chartModel = computed(() => ({
   bars: props.bars,
+  priceLines: props.priceLines,
   trades: props.trades,
   indicators: props.indicators,
 }));
@@ -110,6 +112,9 @@ const { state, drawing, commands } = useReplayKlineChart({
         <Eraser :size="15" />
       </button>
     </div>
+    <ul v-if="priceLines.length" class="replay-price-lines" aria-label="当前图表状态线">
+      <li v-for="line in priceLines" :key="line.id" :data-price-line-id="line.id" :data-price-line-value="line.price" :data-price-line-quantity="line.contracts"><span :style="{ borderColor: line.color, borderStyle: line.dashed ? 'dashed' : 'solid' }" />{{ line.label }} · {{ line.price }}</li>
+    </ul>
     <div
       ref="host"
       class="replay-kline-chart__canvas"
@@ -220,4 +225,10 @@ const { state, drawing, commands } = useReplayKlineChart({
     padding: 7px 9px;
   }
 }
+</style>
+
+<style scoped>
+.replay-price-lines { list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 11px; border-bottom: 1px solid var(--ql-line); }
+.replay-price-lines li { display: inline-flex; align-items: center; gap: 6px; }
+.replay-price-lines span { width: 20px; border-top-width: 2px; }
 </style>

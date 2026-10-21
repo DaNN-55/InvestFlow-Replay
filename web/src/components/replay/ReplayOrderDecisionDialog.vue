@@ -11,6 +11,7 @@ import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
 import UiTextarea from "../ui/UiTextarea.vue";
+import { isReplayBarOrderModel, replayQuantityError } from "../../utils/replayOrderRules.js";
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -20,6 +21,10 @@ const props = defineProps({
   submitting: { type: Boolean, default: false },
   sessionInterval: { type: String, default: "1d" },
   stepMinutes: { type: Number, default: 1 },
+  executionModelVersion: { type: String, default: "legacy-next-open" },
+  tradingRules: { type: Object, default: null },
+  positionQuantity: { type: Number, default: 0 },
+  availableQuantity: { type: Number, default: 0 },
 });
 
 const emit = defineEmits(["close", "submit"]);
@@ -27,12 +32,15 @@ const emit = defineEmits(["close", "submit"]);
 const form = reactive(createEmptyForm());
 const quickRatios = [0.25, 0.5, 0.75, 1];
 const isBuy = computed(() => props.side === "buy");
+const advancedOrders = computed(() => isReplayBarOrderModel(props.executionModelVersion));
+const quantityMessage = computed(() => replayQuantityError({ rules: props.tradingRules, side: props.side,
+  quantity: Number(form.quantity), holding: props.positionQuantity, available: props.availableQuantity, orderType: form.orderType }));
 const reasonTagOptions = computed(() =>
   isBuy.value ? REPLAY_BUY_REASON_TAG_OPTIONS : REPLAY_SELL_REASON_TAG_OPTIONS,
 );
 const sizingReady = computed(() =>
-  form.inputMode === "shares"
-    ? Number.isSafeInteger(Number(form.quantity)) && Number(form.quantity) >= 100
+  form.orderType === "stop" || form.inputMode === "shares"
+    ? form.orderType === "stop" || !quantityMessage.value
     : Number(form.ratio) > 0 && Number(form.ratio) <= 1,
 );
 const decisionReady = computed(() => {
@@ -53,14 +61,20 @@ const decisionReady = computed(() => {
   return Boolean(form.exitType) && form.remainingPositionPlan.trim().length >= 2;
 });
 const canSubmit = computed(() =>
-  !props.submitting && sizingReady.value && decisionReady.value,
+  !props.submitting && sizingReady.value && decisionReady.value &&
+    (form.orderType !== "limit" || Number(form.limitPrice) > 0) &&
+    (form.orderType !== "stop" || Number(form.protectionPrice) > 0),
 );
 
 function createEmptyForm() {
   return {
     inputMode: "shares",
-    quantity: 100,
+    quantity: props.side === "sell" && props.tradingRules && props.positionQuantity < props.tradingRules.minimumSell
+      ? props.positionQuantity : props.tradingRules?.minimumBuy ?? 100,
     ratio: 0.25,
+    orderType: "market",
+    limitPrice: "",
+    protectionPrice: "",
     reasonTags: [],
     confidence: 3,
     thesis: "",
@@ -83,7 +97,7 @@ function selectRatio(value) {
 
 function submit() {
   if (!canSubmit.value) return;
-  emit("submit", buildReplayOrderSubmission({ side: props.side, ...form }));
+  emit("submit", buildReplayOrderSubmission({ side: props.side, ...form, orderType: advancedOrders.value ? form.orderType : undefined }));
 }
 
 watch(
@@ -129,7 +143,20 @@ watch(
         <div class="replay-order-decision__heading">
           <span>01</span><div><h3>委托规模</h3><p>{{ sessionInterval === "hybrid" ? `当前盘中决策，下一个${stepMinutes}分钟开盘尝试执行。` : sessionInterval === "1m" ? "当前分钟决策，下一分钟开盘尝试执行。" : "收盘后决策，下一交易日开盘尝试执行。" }}</p></div>
         </div>
-        <div class="replay-order-decision__sizing">
+        <div v-if="advancedOrders" class="replay-order-decision__risk-grid">
+          <label><span>委托类型</span><UiSelect v-model="form.orderType" aria-label="委托类型">
+            <option value="market">下一开盘买卖</option><option value="limit">限价 · 当日有效</option>
+            <option v-if="!isBuy" value="stop">持仓止损 · 持续保护</option>
+          </UiSelect></label>
+          <label v-if="form.orderType === 'limit'"><span>{{ isBuy ? '最高买价' : '最低卖价' }}</span>
+            <UiInput v-model="form.limitPrice" aria-label="委托限价" type="number" min="0.01" step="0.01" /></label>
+          <label v-if="form.orderType === 'stop'"><span>止损触发价</span>
+            <UiInput v-model="form.protectionPrice" aria-label="止损触发价" type="number" min="0.01" step="0.01" /></label>
+        </div>
+        <p v-if="advancedOrders" class="replay-order-decision__invalidation-help">
+          {{ form.orderType === 'stop' ? '保护全部当前持仓。触价后持续卖出余量，反弹和跨日不取消；仍受T+1及成交容量限制，可在交易台主动取消。' : form.orderType === 'limit' ? '从下一根K线开始等待价格，允许部分成交；该交易日收盘后余量到期。' : '下一根开盘尝试成交，成交量不足时余量在当日继续等待。' }}
+        </p>
+        <div v-if="form.orderType !== 'stop'" class="replay-order-decision__sizing">
           <div class="replay-order-decision__mode">
             <button
               type="button"
@@ -153,8 +180,8 @@ watch(
               v-model="form.quantity"
               aria-label="委托股数"
               type="number"
-              min="100"
-              step="100"
+              :min="isBuy ? tradingRules?.minimumBuy ?? 100 : tradingRules ? 1 : 100"
+              :step="isBuy ? tradingRules?.quantityStep ?? 100 : tradingRules ? 1 : 100"
               inputmode="numeric"
             />
             <span aria-hidden="true">股</span>
@@ -171,6 +198,10 @@ watch(
               {{ value * 100 }}%
             </button>
           </div>
+          <p v-if="tradingRules" class="replay-order-decision__invalidation-help">
+            {{ tradingRules.label }}：{{ tradingRules.board === 'star' ? '200股起，超过部分可逐股递增；不足200股的卖出余额须一次性处理。' : '买入按100股整数倍；卖出零股余额须一次性处理。' }}
+          </p>
+          <p v-if="form.inputMode === 'shares' && quantityMessage" role="status" class="replay-order-decision__invalidation-help">{{ quantityMessage }}</p>
         </div>
       </section>
 
@@ -224,6 +255,7 @@ watch(
           <label><span>止损价</span><UiInput v-model="form.stopLossPrice" type="number" min="0" step="0.01" /></label>
           <label class="replay-order-decision__toggle"><input v-model="form.invalidationEnabled" type="checkbox" /><span>记录收盘确认的失效条件</span></label>
         </div>
+        <p v-if="advancedOrders" class="replay-order-decision__invalidation-help">填写止损价后，买入成交会建立或更新当前持仓的止损保护；触价后持续退出。只填写收盘失效条件则用于记录和提醒，不自动卖出。</p>
         <div v-if="form.invalidationEnabled" class="replay-order-decision__invalidation">
           <UiSelect v-model="form.invalidationOperator"><option value="lte">收盘价 ≤</option><option value="gte">收盘价 ≥</option></UiSelect>
           <UiInput v-model="form.invalidationThreshold" type="number" min="0" step="0.01" placeholder="价格" />

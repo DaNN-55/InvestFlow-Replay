@@ -17,6 +17,7 @@ async function request(path, options = {}) {
   if (!response.ok) {
     throw createRequestError(payload?.error?.message ?? `请求失败（${response.status}）`, {
       status: response.status,
+      code: payload?.error?.code ?? null,
       details: payload?.error?.details ?? null,
       raw,
     });
@@ -41,6 +42,10 @@ export const api = {
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== ""));
     return request(`/api/quant/replay/sessions?${query}`);
   },
+  getReplayTrainingAnalytics(params = {}) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value != null && value !== ""));
+    return request(`/api/quant/replay/analytics?${query}`);
+  },
   listReplayPlaybooks() { return request("/api/quant/replay/playbooks"); },
   createReplayPlaybook(payload) { return request("/api/quant/replay/playbooks", json("POST", payload)); },
   renameReplayPlaybook(id, payload) { return request(`/api/quant/replay/playbooks/${encodeURIComponent(id)}`, json("PATCH", payload)); },
@@ -52,9 +57,18 @@ export const api = {
   acceptReplayPlaybookCandidate(id, payload) { return request(`/api/quant/replay/playbook-candidates/${encodeURIComponent(id)}/accept`, json("POST", payload)); },
   rejectReplayPlaybookCandidate(id, payload = {}) { return request(`/api/quant/replay/playbook-candidates/${encodeURIComponent(id)}/reject`, json("POST", payload)); },
   getReplaySession: (id) => request(replaySessionPath(id)),
+  getReplayAttemptComparison: (id) => request(`${replaySessionPath(id)}/comparison`),
   deleteReplaySession(sessionId) { return request(replaySessionPath(sessionId), json("DELETE")); },
   retrainReplaySession(sessionId) { return request(`${replaySessionPath(sessionId)}/retrain`, json("POST")); },
+  cryptoPreview: (id, payload) => request(`${replaySessionPath(id)}/preview`, json("POST", payload)),
+  cryptoAnalysis: (id) => request(`${replaySessionPath(id)}/analysis`),
+  cryptoPool: () => request("/api/quant/replay/crypto-pool"),
+  cryptoRetrain: (sessionId, payload) => request(`${replaySessionPath(sessionId)}/retrain`, json("POST", payload)),
+  cryptoAction: (id, payload) => request(`${replaySessionPath(id)}/actions`, json("POST", payload)),
+  cryptoMarket: (id, params) => request(`${replaySessionPath(id)}/market?${new URLSearchParams(params)}`),
+  cryptoAudit: (id, kind, params) => request(`${replaySessionPath(id)}/${kind}?${new URLSearchParams(params)}`),
   submitReplayOrder: (id, payload) => request(`${replaySessionPath(id)}/orders`, json("POST", payload)),
+  cancelReplayOrder: (id, orderId, payload) => request(`${replaySessionPath(id)}/orders/${encodeURIComponent(orderId)}/cancel`, json("POST", payload)),
   advanceReplaySession: (id, payload) => request(`${replaySessionPath(id)}/advance`, json("POST", payload)),
   finishReplaySession: (id, payload) => request(`${replaySessionPath(id)}/finish`, json("POST", payload)),
   saveReplayBlindReview: (id, payload) => request(`${replaySessionPath(id)}/reviews/blind`, json("POST", payload)),

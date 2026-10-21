@@ -17,6 +17,7 @@ import { createDatabase } from "./db.js";
 import { createEngineClient, EngineClientError } from "./engine-client.js";
 import { createReplayLifecycleStore } from "./replay-lifecycle-store.js";
 import { createReplayInteraction } from "./replay-interaction.js";
+import { createCryptoReplayService } from "./replay-crypto-session.js";
 
 export function publicErrorCode(error) {
   return [
@@ -27,6 +28,9 @@ export function publicErrorCode(error) {
     "MARKET_CACHE_INSUFFICIENT",
     "RUNTIME_SYNC_FAILED",
     "CONFIG_PERSIST_FAILED",
+    "INTERNAL_ERROR", "REPLAY_ACTION_CONFLICT", "REPLAY_REVISION_CONFLICT", "REPLAY_POOL_EXHAUSTED", "REPLAY_EXPOSURE_CONFLICT", "REPLAY_CURSOR_FORBIDDEN",
+    "REPLAY_SNAPSHOT_CORRUPT", "REPLAY_SNAPSHOT_UNAVAILABLE", "REPLAY_VERSION_UNSUPPORTED", "REPLAY_ACCOUNTING_CORRUPT", "INVALID_CRYPTO_COMMAND", "REPLAY_COMPARISON_NOT_READY",
+    "REPLAY_COMPARISON_NOT_READY",
     "INTERNAL_ERROR",
   ].includes(error?.code)
     ? error.code
@@ -855,8 +859,10 @@ export function createApp(options = {}) {
   const database = createDatabase(options.dbPath);
   const engine = createEngineClient(options.engineUrl);
   const replayStore = createReplayLifecycleStore(database);
+  const cryptoReplay = createCryptoReplayService({ store: replayStore, snapshotSource: options.cryptoSnapshotSource, now: isoNow });
   const replayInteraction = createReplayInteraction({
     store: replayStore,
+    crypto: cryptoReplay,
     scenarioSource: engine,
     createId: randomUUID,
     now: isoNow,
@@ -1321,7 +1327,14 @@ export function createApp(options = {}) {
 
   app.get("/api/quant/replay/benchmarks", async (req, res, next) => {
     try {
-      res.json(await engine.getReplayBenchmarks({ retry: req.query.retry === "true" }));
+      const payload = await engine.getReplayBenchmarks({ retry: req.query.retry === "true" });
+      if (payload.items?.length && payload.initialization?.ready !== false && typeof engine.prefetchReplayStocks === "function") {
+        const usage = database.getReplayScenarioUsage();
+        void Promise.resolve().then(() => engine.prefetchReplayStocks({ excludedTsCodes: usage.usedTsCodes,
+          targetReserve: 12, interval: usage.cacheContext?.interval ?? "1d",
+          benchmarkCode: usage.cacheContext?.benchmarkCode || payload.items[0].code })).catch(() => {});
+      }
+      res.json(payload);
     } catch (error) {
       next(error);
     }
@@ -1329,7 +1342,8 @@ export function createApp(options = {}) {
 
   app.get("/api/quant/replay/cache/status", async (_req, res, next) => {
     try {
-      res.json(await engine.getReplayCacheStatus());
+      const usage = database.getReplayScenarioUsage();
+      res.json(await engine.getReplayCacheStatus({ excludedTsCodes: usage.usedTsCodes, benchmarkCode: usage.cacheContext?.benchmarkCode ?? "" }));
     } catch (error) {
       next(error);
     }
@@ -1508,9 +1522,14 @@ export function createApp(options = {}) {
     },
   );
 
+  app.get("/api/quant/replay/crypto-pool", (req, res, next) => {
+    try { res.json(cryptoReplay.poolSummary(req.query ?? {})); } catch (error) { next(error); }
+  });
+
   app.post("/api/quant/replay/sessions", async (req, res, next) => {
     try {
-      res.status(201).json(await replayInteraction.create(normalizeBody(req.body)));
+      const result = await replayInteraction.create(normalizeBody(req.body));
+      res.status(result.idempotent ? 200 : 201).json(result);
     } catch (error) {
       next(error);
     }
@@ -1524,9 +1543,41 @@ export function createApp(options = {}) {
     }
   });
 
+  app.get("/api/quant/replay/analytics", (req, res, next) => {
+    try {
+      res.json(replayInteraction.analytics(req.query ?? {}));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/api/quant/replay/sessions/:sessionId", (req, res, next) => {
     try {
-      res.json(replayInteraction.get(String(req.params.sessionId ?? "")));
+      res.json(replayInteraction.get(String(req.params.sessionId ?? ""), req.query ?? {}));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/quant/replay/sessions/:sessionId/preview", (req, res, next) => {
+    try { res.json(cryptoReplay.preview(String(req.params.sessionId), normalizeBody(req.body))); } catch (error) { next(error); }
+  });
+  app.get("/api/quant/replay/sessions/:sessionId/analysis", (req, res, next) => {
+    try { res.json(cryptoReplay.analysis(String(req.params.sessionId), req.query ?? {})); } catch (error) { next(error); }
+  });
+  app.post("/api/quant/replay/sessions/:sessionId/actions", (req, res, next) => {
+    try { res.json(cryptoReplay.command(String(req.params.sessionId), normalizeBody(req.body))); } catch (error) { next(error); }
+  });
+  app.get("/api/quant/replay/sessions/:sessionId/market", (req, res, next) => {
+    try { res.json(cryptoReplay.market(String(req.params.sessionId), req.query ?? {})); } catch (error) { next(error); }
+  });
+  for (const kind of ["ledger", "traces"]) app.get(`/api/quant/replay/sessions/:sessionId/${kind}`, (req, res, next) => {
+    try { res.json(cryptoReplay.audit(String(req.params.sessionId), kind, req.query ?? {})); } catch (error) { next(error); }
+  });
+
+  app.get("/api/quant/replay/sessions/:sessionId/comparison", (req, res, next) => {
+    try {
+      res.json(replayInteraction.comparison(String(req.params.sessionId ?? "")));
     } catch (error) {
       next(error);
     }
@@ -1544,10 +1595,8 @@ export function createApp(options = {}) {
     "/api/quant/replay/sessions/:sessionId/retrain",
     (req, res, next) => {
       try {
-        res.status(201).json(replayInteraction.retrain(
-          String(req.params.sessionId ?? ""),
-          normalizeBody(req.body),
-        ));
+        const result = replayInteraction.retrain(String(req.params.sessionId ?? ""), normalizeBody(req.body));
+        res.status(result.idempotent ? 200 : 201).json(result);
       } catch (error) {
         next(error);
       }
@@ -1563,6 +1612,12 @@ export function createApp(options = {}) {
     } catch (error) {
       next(error);
     }
+  });
+
+  app.post("/api/quant/replay/sessions/:sessionId/orders/:orderId/cancel", (req, res, next) => {
+    try {
+      res.json(replayInteraction.cancelOrder(String(req.params.sessionId), String(req.params.orderId), normalizeBody(req.body)));
+    } catch (error) { next(error); }
   });
 
   app.post(

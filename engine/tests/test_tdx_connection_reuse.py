@@ -40,9 +40,18 @@ class ConnectionReuseTest(unittest.TestCase):
     def test_prefetch_uses_complete_cache_without_network(self):
         with TemporaryDirectory() as directory:
             provider = TdxMinuteReplayProvider(Path(directory) / "minute.duckdb")
+            row = {
+                "datetime": datetime(2026, 10, 19, 14, 55),
+                "open": 10, "high": 11, "low": 9, "close": 10,
+                "vol": 100, "amount": 1000,
+            }
+            provider.store.save("600000.SH", "stock-5m", [row])
+            provider.store.save("000001.SH", "index-5m", [row])
             provider.store.mark_full_history("600000.SH", "stock-5m")
             provider.store.mark_full_history("000001.SH", "index-5m")
-            provider.prefetch("600000.SH", "000001.SH")
+            with patch.object(provider, "_fetch") as fetch:
+                provider.prefetch("600000.SH", "000001.SH")
+            fetch.assert_not_called()
 
     def test_interrupted_prefetch_keeps_partial_cache_but_not_complete_marker(self):
         class Client:
@@ -89,6 +98,14 @@ class ConnectionReuseTest(unittest.TestCase):
                 pass
 
             def get_security_bars(self, *_args, **_kwargs):
+                downloaded.set()
+                return pd.DataFrame([{
+                    "datetime": datetime(2026, 1, 1),
+                    "open": 10, "high": 11, "low": 9, "close": 10,
+                    "vol": 100, "amount": 1000,
+                }])
+
+            def get_index_bars(self, *_args, **_kwargs):
                 downloaded.set()
                 return pd.DataFrame([{
                     "datetime": datetime(2026, 1, 1),

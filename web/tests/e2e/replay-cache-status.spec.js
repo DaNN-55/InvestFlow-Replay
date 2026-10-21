@@ -341,3 +341,60 @@ test("点击面板外或按 Esc 可以收起面板", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
 });
+
+test("板块覆盖区分合格、未练习储备、日期与更新失败，窄屏可以滚动查看", async ({ page }) => {
+  const board = (key, label) => ({ key, label,
+    daily: { cachedCount: 8, eligibleCount: 6, unseenCount: 3, targetReserve: 4, staleCount: 2, failedCount: 1, earliestDataDate: "2026-10-16", latestDataDate: "2026-10-19" },
+    fiveMinute: { cachedCount: 2, completeCount: 2, unseenCount: 0, targetReserve: 1, staleCount: 1, failedCount: 1, earliestDataDate: "2026-10-15", latestDataDate: "2026-10-16" },
+  });
+  await mockReplayApi(page, {
+    benchmarks: { items: [benchmark], initialization: readyInitialization() },
+    status: { ...cacheStatus(), state: "partial", activeTask: { state: "partial", message: "部分板块未见日线储备仍不足" },
+      coverage: { targetTradeDate: "2026-10-19", minimumDailyBars: 370, benchmarkCurrent: false,
+        boards: [board("main", "主板"), board("chinext", "创业板"), board("star", "科创板")] } },
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openReplay(page);
+  await page.getByRole("button", { name: "行情缓存状态" }).click();
+  const panel = page.getByRole("status").filter({ hasText: "行情数据" });
+  const coverage = panel.locator("details.replay-cache-status__coverage");
+  await expect(coverage).not.toHaveAttribute("open");
+  await expect(page.getByRole("article", { name: "主板样本覆盖" })).toBeHidden();
+  // Native disclosure must also work without a pointer.
+  await coverage.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  await expect(coverage).toHaveAttribute("open", "");
+  await expect(panel.getByText("更新基准日：2026-10-19")).toBeVisible();
+  for (const name of ["主板", "创业板", "科创板"]) {
+    const row = page.getByRole("article", { name: `${name}样本覆盖` });
+    await expect(row).toContainText("6 / 8 只");
+    await expect(row).toContainText("3 / 4 只");
+    await expect(row).toContainText("0 / 1 只");
+    await expect(row).toContainText("2026-10-16 至 2026-10-19");
+    await expect(row).toContainText("日线 待更新 2 · 失败 1");
+  }
+  await panel.getByText("5分钟基准指数尚未同步，当前不计入可用储备。").scrollIntoViewIfNeeded();
+  await expect(panel.getByText("5分钟基准指数尚未同步，当前不计入可用储备。")).toBeVisible();
+  const box = await panel.boundingBox();
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(844);
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+});
+
+test("更新摘要精简，成功为绿色、待更新沿用黄色", async ({ page }) => {
+  await mockReplayApi(page, {
+    benchmarks: { items: [benchmark], initialization: readyInitialization() },
+    status: { ...cacheStatus(), state: "partial", coverage: { targetTradeDate: "2026-10-19", minimumDailyBars: 370, benchmarkCurrent: true, boards: [{ key: "main", label: "主板",
+      daily: { cachedCount: 8, eligibleCount: 6, unseenCount: 4, targetReserve: 4, staleCount: 0, failedCount: 0, earliestDataDate: "2026-10-19", latestDataDate: "2026-10-19" },
+      fiveMinute: { cachedCount: 20, unseenCount: 1, targetReserve: 1, staleCount: 17, failedCount: 0, earliestDataDate: "2026-09-30", latestDataDate: "2026-10-19" },
+    }] } },
+  });
+  await openReplay(page);
+  await page.getByRole("button", { name: "行情缓存状态" }).click();
+  await page.getByText("板块样本覆盖", { exact: true }).click();
+  const main = page.getByRole("article", { name: "主板样本覆盖" });
+  await expect(main.getByText("日线 已更新", { exact: true })).toHaveCSS("color", /rgb\((16, 185, 129|52, 211, 153)\)/u);
+  await expect(main.getByText("5分钟 待更新 17", { exact: true })).toHaveCSS("color", /rgb\((245, 158, 11|251, 191, 36)\)/u);
+  await expect(main).not.toContainText("失败 0");
+});

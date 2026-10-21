@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isSyntheticReplay, replayBoardRules } from "./replay-board-rules.js";
 
 function buildActionRequest(expectedRevision, extra = {}) {
   return {
@@ -57,6 +58,7 @@ export function createReplayLifecycle({
     if (!validSnapshot) {
       throw lifecycleError("行情演练场景数据不完整", 502);
     }
+    if (!replayBoardRules(snapshot) && !isSyntheticReplay(snapshot)) throw lifecycleError("仅支持沪深主板、创业板和科创板A股", 502);
     if (
       !snapshot.bars.every(hasValidMarketPrices) ||
       (snapshot.benchmark != null && (
@@ -405,6 +407,7 @@ export function createReplayLifecycle({
     retrainSession,
     deleteSession,
     submitOrder,
+    cancelOrder: (command) => store.cancelOrder({ ...command, updatedAt: now() }),
     advanceSession,
     finishSession,
     saveBlindReview,

@@ -30,6 +30,7 @@ function blindFields(snapshot) {
 
 function postFields(snapshot) {
   const fields = [
+    ...(snapshot.issueTags?.length ? [{ label: "用户确认问题", value: snapshot.issueTags.join("、") }] : []),
     {
       label: "判断结果",
       value:
@@ -102,6 +103,7 @@ export function buildReplayReviewCorrectionPayload({
     outcome: form.outcome,
     executionReview: form.executionReview.trim(),
     mistakes: form.mistakes.trim(),
+    ...(Array.isArray(form.issueTags) ? { issueTags: [...form.issueTags] } : {}),
     lessons: form.lessons.trim(),
     disciplineScore: Number(form.disciplineScore),
     riskControlScore: Number(form.riskControlScore),

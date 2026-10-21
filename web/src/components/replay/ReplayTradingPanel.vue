@@ -15,6 +15,7 @@ import {
 import { computed, shallowRef, watch } from "vue";
 
 import UiButton from "../ui/UiButton.vue";
+import { isReplayBarOrderModel } from "../../utils/replayOrderRules.js";
 import { REPLAY_AUTOPLAY_SPEEDS } from "../../utils/replayAutoplay.js";
 import { getReplayReviewEntryState } from "../../utils/replayReviewPresentation.js";
 import ReplayOrderDecisionSnapshot from "./ReplayOrderDecisionSnapshot.vue";
@@ -63,6 +64,7 @@ const emit = defineEmits([
   "reveal",
   "toggleAutoplay",
   "changeAutoplaySpeed",
+  "cancelOrder",
 ]);
 
 const finishConfirming = shallowRef(false);
@@ -109,7 +111,7 @@ const advanceLabel = computed(() => {
     return "本局演练已完成";
   }
   if (pendingOrders.value.length) {
-    return `执行 ${pendingOrders.value.length} 笔委托并推进`;
+    return `${isReplayBarOrderModel(props.session.executionModelVersion) ? "检查" : "执行"} ${pendingOrders.value.length} 笔委托并推进`;
   }
   if (isMinuteReplay.value) {
     return hasPosition.value ? "持仓不动，推进一分钟" : "空仓观望，推进一分钟";
@@ -206,7 +208,10 @@ watch(
           卖出
         </button>
       </div>
-      <p class="replay-trading__decision-hint">每次买入或卖出都会先填写独立决策记录，再提交下一开盘委托。</p>
+      <p class="replay-trading__decision-hint">{{ isReplayBarOrderModel(session.executionModelVersion) ? '支持当日限价、部分成交与持仓止损；成交量按K线总量近似，不模拟盘口排队。' : '旧会话保留下一开盘模型；新建演练可使用限价、止损和部分成交。' }}</p>
+      <p v-if="session.tradingRules" class="replay-trading__decision-hint">{{ session.tradingRules.label }} · {{ session.tradingRules.board === 'star' ? '200股起，可逐股递增' : '买入100股整数倍' }} · T+1</p>
+      <p v-else-if="session.executionModelVersion === 'bar-orders-v1' && session.interval !== '1m' && session.marketKind !== 'synthetic'" class="replay-trading__decision-hint">本局保留原有数量与涨跌停规则；新建一局启用板块规则。</p>
+      <p v-if="session.marketEvent?.status === 'rule_unavailable'" role="status" class="replay-trading__decision-hint">本根K线的历史交易规则信息不足，暂不撮合；请查看委托状态或继续观察。</p>
 
       <section v-if="pendingOrders.length" class="replay-trading__pending">
         <div class="replay-trading__section-title">
@@ -228,7 +233,14 @@ watch(
                 : `${Number(order.ratio) * 100}%`
             }}
           </strong>
-          <span>第 {{ order.scheduledSequence }} {{ sequenceUnit }}开盘</span>
+          <span v-if="order.orderType === 'limit'" class="replay-trading__order-kind">限价 ¥{{ formatMoney(order.limitPrice) }} · 当日有效</span>
+          <span v-else-if="order.orderType === 'stop'" class="replay-trading__order-kind">止损 ¥{{ formatMoney(order.stopPrice) }} · {{ order.triggeredSequence == null ? '持续保护' : '已触发，持续退出' }}</span>
+          <span v-else class="replay-trading__order-kind">下一开盘尝试</span>
+          <small v-if="order.targetQuantity != null">已成交 {{ order.filledQuantity }} 股 · 剩余 {{ order.remainingQuantity }} 股</small>
+          <small v-if="order.reasonMessage">{{ order.reasonMessage }}</small>
+          <UiButton size="sm" variant="secondary" :disabled="busy || completed" :aria-label="order.orderType === 'stop' ? '取消止损保护' : '撤销未成交余量'" @click="emit('cancelOrder', order.orderId)">
+            {{ order.orderType === 'stop' ? '取消止损' : '撤销余单' }}
+          </UiButton>
           <ReplayOrderDecisionSnapshot :decision="order.decision" :side="order.side" />
         </div>
       </section>
@@ -446,7 +458,7 @@ watch(
         </div>
         <div
           v-for="execution in recentExecutions"
-          :key="execution.orderId"
+          :key="execution.executionId ?? execution.orderId"
           class="replay-trading__execution"
         >
           <div>
@@ -463,7 +475,7 @@ watch(
           </template>
           <template v-else>
             <span class="replay-trading__rejected">
-              {{ execution.status === "cancelled" ? "已取消" : "未成交" }}
+              {{ execution.status === "cancelled" ? "已取消" : execution.status === "expired" ? "余量已到期" : "未成交" }}
             </span>
             <small>{{ execution.reasonMessage }}</small>
           </template>
@@ -705,6 +717,15 @@ watch(
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.replay-trading__pending-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+.replay-trading__pending-row > .ql-ui-button { grid-column: 3; grid-row: 1; }
+.replay-trading__pending-row > .replay-trading__order-kind,
+.replay-trading__pending-row > small,
+.replay-trading__pending-row :deep(.replay-order-snapshot),
+.replay-trading__execution :deep(.replay-order-snapshot) { grid-column: 1 / -1; }
+.replay-trading__pending-row > .replay-trading__order-kind,
+.replay-trading__pending-row > small { color: var(--ql-color-text-muted); line-height: 1.5; }
 
 .replay-trading__tag--buy,
 .replay-trading__tag--sell {

@@ -1,11 +1,12 @@
 <script setup>
-import { AlertTriangle, Database, LoaderCircle, RefreshCw } from "lucide-vue-next";
+import { AlertTriangle, ChevronDown, Database, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from "vue";
 
 import { useReplayCacheStatus } from "../composables/useReplayCacheStatus.js";
 import {
   formatCacheBytes,
   formatCacheCount,
+  formatCacheDateRange,
   formatCacheTime,
 } from "../utils/replayCacheStatus.js";
 
@@ -20,7 +21,7 @@ const isCachedFallback = computed(() => {
 const tone = computed(() => {
   if (error.value || status.value?.state === "failed") return "failed";
   if (status.value?.state === "running") return "running";
-  if (isCachedFallback.value) return "cached";
+  if (status.value?.state === "partial" || isCachedFallback.value) return "cached";
   return "ready";
 });
 const headline = computed(() => {
@@ -30,6 +31,7 @@ const headline = computed(() => {
 });
 const market = computed(() => status.value?.market ?? {});
 const minute = computed(() => status.value?.minute ?? {});
+const coverage = computed(() => status.value?.coverage);
 const storage = computed(() => status.value?.storage ?? {});
 
 function close() {
@@ -61,7 +63,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutsideP
       @click="open = !open"
     >
       <LoaderCircle v-if="tone === 'running'" class="replay-cache-status__spin" :size="17" />
-      <AlertTriangle v-else-if="tone === 'failed'" :size="17" />
+      <AlertTriangle v-else-if="tone === 'failed' || tone === 'cached'" :size="17" />
       <Database v-else :size="17" />
       <span v-if="progress" class="replay-cache-status__badge">{{ progress.percent }}%</span>
     </button>
@@ -106,6 +108,30 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutsideP
         </dl>
       </div>
 
+      <details v-if="coverage?.boards?.length" class="replay-cache-status__coverage">
+        <summary>板块样本覆盖<ChevronDown :size="14" aria-hidden="true" /></summary>
+        <p>更新基准日：{{ coverage.targetTradeDate || "交易日历不足，暂无法判断" }}</p>
+        <p v-if="coverage.dailyFailedResourceCount" class="replay-cache-status__warning">日线、指数或证券名单更新失败：{{ coverage.dailyFailedResourceCount }} 项，稍后自动重试。</p>
+        <p>日线合格：连续有效历史至少 {{ coverage.minimumDailyBars }} 根；开局还会校验所选基准与练习长度。</p>
+        <article v-for="board in coverage.boards" :key="board.key" :aria-label="`${board.label}样本覆盖`">
+          <strong>{{ board.label }}</strong>
+          <dl>
+            <div><dt>日线合格 / 已缓存</dt><dd>{{ board.daily.eligibleCount }} / {{ board.daily.cachedCount }} 只</dd></div>
+            <div><dt>日线未练习储备</dt><dd>{{ board.daily.unseenCount }} / {{ board.daily.targetReserve }} 只</dd></div>
+            <div><dt>5分钟未练习储备</dt><dd>{{ board.fiveMinute.unseenCount }} / {{ board.fiveMinute.targetReserve }} 只</dd></div>
+          </dl>
+          <p>日线最新数据分布：{{ formatCacheDateRange(board.daily) }}</p>
+          <p>5分钟最新数据分布：{{ formatCacheDateRange(board.fiveMinute) }}</p>
+          <p class="replay-cache-status__updates">
+            <span v-for="group in [{ label: '日线', data: board.daily }, { label: '5分钟', data: board.fiveMinute }]" :key="group.label" :class="group.data.staleCount || group.data.failedCount ? 'replay-cache-status__warning' : group.data.cachedCount ? 'replay-cache-status__success' : ''">
+              {{ group.label }} {{ group.data.staleCount ? `待更新 ${group.data.staleCount}` : group.data.cachedCount ? '已更新' : '暂无' }}<span v-if="group.data.failedCount" class="replay-cache-status__failure"> · 失败 {{ group.data.failedCount }}</span>
+            </span>
+          </p>
+        </article>
+        <p>储备分母是目标数量；5分钟须历史完整、达到更新基准日，且对应指数同步。未练习不包含已删除练习中见过的标的。</p>
+        <p v-if="!coverage.benchmarkCurrent" class="replay-cache-status__warning">5分钟基准指数尚未同步，当前不计入可用储备。</p>
+      </details>
+
       <div class="replay-cache-status__group replay-cache-status__storage">
         <h3>存储占用</h3>
         <dl>
@@ -128,7 +154,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutsideP
 .replay-cache-status--failed .replay-cache-status__trigger { color: var(--ql-color-danger); }
 .replay-cache-status__trigger:focus-visible { outline: 2px solid var(--ql-color-primary); outline-offset: 2px; }
 .replay-cache-status__badge { position: absolute; top: -5px; right: -8px; min-width: 23px; padding: 1px 3px; border-radius: 8px; background: var(--ql-color-primary); color: #fff; font-size: 9px; font-weight: 700; line-height: 13px; }
-.replay-cache-status__panel { visibility: hidden; position: absolute; top: calc(100% + 8px); right: 0; z-index: 50; width: min(340px, calc(100vw - 24px)); padding: 14px; border: 1px solid var(--ql-line-strong); border-radius: 10px; background: var(--ql-panel); box-shadow: var(--ql-shadow-lg); opacity: 0; transform: translateY(-4px); transition: opacity 120ms ease, transform 120ms ease, visibility 120ms; pointer-events: none; }
+.replay-cache-status__panel { visibility: hidden; position: absolute; top: calc(100% + 8px); right: 0; z-index: 50; width: min(340px, calc(100vw - 24px)); padding: 14px; max-height: min(80vh, 720px); overflow-y: auto; border: 1px solid var(--ql-line-strong); border-radius: 10px; background: var(--ql-panel); box-shadow: var(--ql-shadow-lg); opacity: 0; transform: translateY(-4px); transition: opacity 120ms ease, transform 120ms ease, visibility 120ms; pointer-events: none; }
 .replay-cache-status--open .replay-cache-status__panel { visibility: visible; opacity: 1; transform: translateY(0); pointer-events: auto; }
 .replay-cache-status__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 11px; border-bottom: 1px solid var(--ql-line); }
 .replay-cache-status__heading strong { color: var(--ql-ink); font-size: 14px; }
@@ -149,9 +175,36 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutsideP
 .replay-cache-status__storage dl > div { display: block; padding: 7px; border-radius: 6px; background: var(--ql-paper-soft); }
 .replay-cache-status__storage dd { margin-top: 3px; text-align: left; }
 .replay-cache-status footer { margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--ql-line); color: var(--ql-muted-soft); font-size: 10px; }
+.replay-cache-status__coverage { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--ql-line); }
+.replay-cache-status__coverage summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; color: var(--ql-ink); font-size: 12px; font-weight: 600; list-style: none; cursor: pointer; }
+.replay-cache-status__coverage summary::-webkit-details-marker { display: none; }
+.replay-cache-status__coverage summary:focus-visible { outline: 2px solid var(--ql-color-primary); outline-offset: 2px; border-radius: 4px; }
+.replay-cache-status__coverage[open] summary svg { transform: rotate(180deg); }
+.replay-cache-status__coverage p { margin: 5px 0 0; font-size: 11px; line-height: 1.5; }
+.replay-cache-status__coverage article { padding: 10px 0; border-bottom: 1px solid var(--ql-line); }
+.replay-cache-status__coverage article strong { color: var(--ql-ink); font-size: 12px; }
+.replay-cache-status__coverage dl { display: grid; gap: 4px; margin: 7px 0; font-size: 11px; }
+.replay-cache-status__coverage dl > div { display: flex; justify-content: space-between; gap: 10px; }
+.replay-cache-status__coverage dd { margin: 0; color: var(--ql-ink); font-variant-numeric: tabular-nums; }
+.replay-cache-status__updates { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.replay-cache-status__success { color: var(--ql-color-success); }
+.replay-cache-status__failure { color: var(--ql-color-danger); }
+.replay-cache-status__warning { color: var(--ql-color-warning); }
 .replay-cache-status__spin { animation: replay-cache-spin 1s linear infinite; }
 @keyframes replay-cache-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .replay-cache-status__spin { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .replay-cache-status__coverage { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--ql-line); }
+.replay-cache-status__coverage h3 { margin: 0 0 6px; color: var(--ql-ink); font-size: 12px; }
+.replay-cache-status__coverage p { margin: 5px 0 0; font-size: 11px; line-height: 1.5; }
+.replay-cache-status__coverage article { padding: 10px 0; border-bottom: 1px solid var(--ql-line); }
+.replay-cache-status__coverage article strong { color: var(--ql-ink); font-size: 12px; }
+.replay-cache-status__coverage dl { display: grid; gap: 4px; margin: 7px 0; font-size: 11px; }
+.replay-cache-status__coverage dl > div { display: flex; justify-content: space-between; gap: 10px; }
+.replay-cache-status__coverage dd { margin: 0; color: var(--ql-ink); font-variant-numeric: tabular-nums; }
+.replay-cache-status__updates { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.replay-cache-status__success { color: var(--ql-color-success); }
+.replay-cache-status__failure { color: var(--ql-color-danger); }
+.replay-cache-status__warning { color: var(--ql-color-warning); }
+.replay-cache-status__spin { animation: none; } }
 @media (max-width: 720px) {
   .replay-cache-status__panel { position: fixed; top: 52px; right: 12px; left: 12px; width: auto; }
 }
