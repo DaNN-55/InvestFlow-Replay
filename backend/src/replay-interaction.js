@@ -1,3 +1,4 @@
+import { isBarOrderModel, LEGACY_ORDER_MODEL } from './replay-order-execution.js';
 import { randomUUID } from "node:crypto";
 
 import { createReplayLifecycle } from "./replay-lifecycle.js";
@@ -1212,15 +1213,26 @@ export function createReplayInteraction({
   scenarioSource,
   createId = randomUUID,
   now = () => new Date().toISOString(),
+  crypto = null,
 }) {
+  const isCrypto = (id) => crypto && store.getSession(id)?.market === "crypto-perpetual";
+  const requireLegacyReview = (id) => {
+    if (isCrypto(id)) throw new ReplayInteractionError("INVALID_REQUEST", "合约复盘编辑与评分尚未接入；请使用合约盲评和揭晓接口", 409);
+  };
   const lifecycle = createReplayLifecycle({ store, scenarioSource, createId, now });
 
   function visible(session) {
+    if (session.market === "crypto-perpetual") return crypto.present(session);
+    if (session.executionModelVersion && session.executionModelVersion !== LEGACY_ORDER_MODEL && !isBarOrderModel(session.executionModelVersion)) {
+      throw new ReplayInteractionError("REPLAY_VERSION_UNSUPPORTED", "该股票会话的执行版本不受支持，未按旧模型解释", 409);
+    }
     return presentReplaySession(session);
   }
 
   async function create(rawBody) {
     const body = rawBody && typeof rawBody === "object" ? rawBody : {};
+    if (body.market === "crypto-perpetual" && crypto) return crypto.create(body);
+    assertInteractionCondition(body.market == null || body.market === "ashare", "不支持该市场");
     const interval = ["1m", "hybrid"].includes(body.interval) ? body.interval : "1d";
     const gameLength = body.gameLength == null
       ? interval === "1m" ? 240 : interval === "hybrid" ? 20 : 60
@@ -1250,13 +1262,15 @@ export function createReplayInteraction({
     return { session: visible(session) };
   }
 
-  function get(sessionId) {
+  function get(sessionId, query = {}) {
+    if (isCrypto(sessionId)) return crypto.get(sessionId, query);
     const session = store.getSession(sessionId);
     requireResult(session);
     return { session: visible(session) };
   }
 
   function comparison(sessionId) {
+    requireLegacyReview(sessionId);
     const group = store.getComparisonSessions(sessionId);
     requireResult(group?.selected);
     if (!group.selected.revealedAt) {
@@ -1274,9 +1288,10 @@ export function createReplayInteraction({
   }
 
   function list(rawQuery) {
-    return store.listSessions(normalizeReplayHistoryQuery(
-      rawQuery && typeof rawQuery === "object" ? rawQuery : {},
-    ));
+    const query = rawQuery && typeof rawQuery === "object" ? rawQuery : {};
+    const market = query.market ?? "ashare";
+    assertInteractionCondition(["ashare", "crypto-perpetual"].includes(market), "不支持该市场");
+    return store.listSessions({ ...normalizeReplayHistoryQuery(query), ...(query.market == null ? {} : { market }) });
   }
 
   function analytics(rawQuery) {
@@ -1292,18 +1307,21 @@ export function createReplayInteraction({
   }
 
   function retrain(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.retrain(sessionId, rawBody ?? {});
     const body = rawBody && typeof rawBody === "object" ? rawBody : {};
     assertInteractionCondition(Object.keys(body).length === 0, "复练请求不支持额外字段");
     return { session: visible(requireResult(lifecycle.retrainSession(sessionId))) };
   }
 
   function submitOrder(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.submitOrder(sessionId, rawBody ?? {});
     const normalized = normalizeReplayOrder(rawBody && typeof rawBody === "object" ? rawBody : {});
     const result = requireResult(lifecycle.submitOrder({ sessionId, ...normalized }));
     return { created: result.created, idempotent: result.idempotent, session: visible(result.session) };
   }
 
   function advance(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.advance(sessionId, rawBody ?? {});
     const body = rawBody && typeof rawBody === "object" ? rawBody : {};
     const action = normalizeReplayAction(body);
     const result = requireResult(lifecycle.advanceSession({
@@ -1314,6 +1332,7 @@ export function createReplayInteraction({
   }
 
   function finish(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.finish(sessionId, rawBody ?? {});
     const body = rawBody && typeof rawBody === "object" ? rawBody : {};
     const action = normalizeReplayAction(body);
     const completionReason = body.reason == null ? "early" : String(body.reason).trim().toLowerCase();
@@ -1326,12 +1345,14 @@ export function createReplayInteraction({
   }
 
   function reveal(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.reveal(sessionId, rawBody ?? {});
     const action = normalizeReplayAction(rawBody && typeof rawBody === "object" ? rawBody : {});
     const result = requireResult(lifecycle.revealSession({ sessionId, ...action }));
     return { revealed: result.revealed, idempotent: result.idempotent, session: visible(result.session) };
   }
 
   function saveBlindReview(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.saveBlindReview(sessionId, rawBody ?? {});
     const result = requireResult(lifecycle.saveBlindReview({
       sessionId,
       normalized: normalizeReplayBlindReview(rawBody && typeof rawBody === "object" ? rawBody : {}),
@@ -1340,6 +1361,7 @@ export function createReplayInteraction({
   }
 
   function saveReviewDraft(sessionId, stage, rawBody) {
+    requireLegacyReview(sessionId);
     const session = requireResult(lifecycle.saveReviewDraft({
       sessionId,
       stage,
@@ -1355,6 +1377,7 @@ export function createReplayInteraction({
   }
 
   function deleteReviewDraft(sessionId, stage, rawBody) {
+    requireLegacyReview(sessionId);
     const result = requireResult(lifecycle.deleteReviewDraft({
       sessionId,
       stage,
@@ -1366,6 +1389,8 @@ export function createReplayInteraction({
   }
 
   function savePostReview(sessionId, rawBody) {
+    if (isCrypto(sessionId)) return crypto.savePostReview(sessionId, rawBody ?? {});
+    requireLegacyReview(sessionId);
     const result = requireResult(lifecycle.savePostReview({
       sessionId,
       normalized: normalizeReplayPostReview(rawBody && typeof rawBody === "object" ? rawBody : {}),
@@ -1378,6 +1403,7 @@ export function createReplayInteraction({
   }
 
   function appendReviewCorrection(sessionId, stage, rawBody) {
+    requireLegacyReview(sessionId);
     requireCorrectionStage(stage);
     const result = requireResult(lifecycle.appendReviewCorrection({
       sessionId,
@@ -1396,6 +1422,7 @@ export function createReplayInteraction({
   }
 
   function updateReviewCorrection(sessionId, stage, correctionId, rawBody) {
+    requireLegacyReview(sessionId);
     requireCorrectionStage(stage);
     const result = requireResult(lifecycle.updateReviewCorrection({
       sessionId,
@@ -1411,6 +1438,7 @@ export function createReplayInteraction({
   }
 
   function deleteReviewCorrection(sessionId, stage, correctionId, rawBody) {
+    requireLegacyReview(sessionId);
     requireCorrectionStage(stage);
     const action = normalizeReplayAction(rawBody && typeof rawBody === "object" ? rawBody : {});
     const result = requireResult(lifecycle.deleteReviewCorrection({

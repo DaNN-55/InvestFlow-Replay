@@ -1,0 +1,50 @@
+{
+  "status": "Independent Decimal arithmetic oracles; crypto engine not implemented or tested",
+  "roundingAssumption": "8 USDT decimals HALF_UP; adverse computed fill tick rounding; lot floor for sizing helpers",
+  "BTC_round_trip": {
+    "contracts": "10",
+    "ctVal": ".01",
+    "slippageBps": 2,
+    "openReference": "50000",
+    "closeReference": "50500",
+    "openFill": "50010.0",
+    "closeFill": "50489.9",
+    "openFee": "2.50050000",
+    "closeFee": "2.52449500",
+    "grossPnL": "47.99",
+    "fundingMark": "50200",
+    "fundingRate": ".0001",
+    "fundingPayment": "0.50200000",
+    "netPnL": "42.46300500",
+    "referenceGrossPnL": "50",
+    "slippageAttribution": "2.01"
+  },
+  "BTC_fee": {
+    "contracts": "100",
+    "ctVal": ".01",
+    "price": "60000",
+    "takerFee": "30.00000000",
+    "makerFee": "12.00000000"
+  },
+  "ETH_mixed_fills_total_fee": "12.86250000",
+  "BTC_tier_2": {
+    "contracts": "1500",
+    "ctVal": ".01",
+    "mark": "60000",
+    "mmr": ".005",
+    "maintenanceMargin": "4500",
+    "incorrectProgressiveResult": "3900"
+  },
+  "liquidation_thresholds": {
+    "12000": {
+      "longRaw": "48216.97639377197388247112004018081366148",
+      "shortRaw": "71677.45146839223494275759084121453459433",
+      "note": "M is given isolated ledger balance, not recomputed from live mark; thresholds are not clearing fill prices"
+    },
+    "14000": {
+      "longRaw": "46207.93571069814163736815670517327975892",
+      "shortRaw": "73668.49178695868591338974614235938277750",
+      "note": "M is given isolated ledger balance, not recomputed from live mark; thresholds are not clearing fill prices"
+    }
+  }
+}

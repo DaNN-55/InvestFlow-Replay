@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
+import { cryptoExposure, CRYPTO_EXPOSURE_VERSION } from "./replay-crypto-pool.js";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import { initializeCryptoReplaySchema, createCryptoPersistence, cryptoHash, cryptoPersistenceError } from "./replay-crypto-persistence.js";
 import { BAR_ORDER_MODEL, LEGACY_ORDER_MODEL, isBarOrderModel, newOrderState, isOpenOrder, closeOrder, executeReplayOrders } from "./replay-order-execution.js";
 import { BOARD_ORDER_MODEL, isSyntheticReplay, replayBoardRules, quantityError } from "./replay-board-rules.js";
 import { detectTrainingConditionEvents } from "./replay-training-events.js";
@@ -125,6 +127,17 @@ function createReplayScenarioIdentity({
   gameLength,
   legacySessionId = "",
 }) {
+  if (snapshot?.market === "crypto-perpetual") {
+    if (!/^[a-f0-9]{64}$/.test(snapshot.scenarioSHA256 ?? "") || !/^[a-f0-9]{64}$/.test(snapshot.cryptoSnapshotId ?? "")) {
+      throw cryptoPersistenceError("REPLAY_SNAPSHOT_CORRUPT", "合约场景身份缺失", 500);
+    }
+    if (snapshot.exposure) {
+      const exposure = cryptoExposure(snapshot.instrumentId, snapshot.exposure);
+      if (snapshot.exposure.version !== CRYPTO_EXPOSURE_VERSION) throw cryptoPersistenceError("REPLAY_VERSION_UNSUPPORTED", "不支持该行情暴露身份版本");
+      return { fingerprint: `crypto-window:${cryptoHash(JSON.stringify([exposure.instrumentId, exposure.replayStartMs, exposure.replayEndMs]))}`, version: CRYPTO_EXPOSURE_VERSION };
+    }
+    return { fingerprint: `crypto:${cryptoHash(JSON.stringify([snapshot.instrumentId, snapshot.scenarioSHA256]))}`, version: "crypto-scenario-v1" };
+  }
   const tsCode = String(snapshot?.tsCode ?? "").trim();
   const normalizedObservationBars = Number(observationBars);
   const normalizedGameLength = Number(gameLength);
@@ -243,6 +256,9 @@ function rowToReplaySession(row) {
   if (!row) {
     return null;
   }
+  if (row.market === "crypto-perpetual" && (cryptoHash(row.snapshot_json) !== row.snapshot_hash || cryptoHash(row.account_json) !== row.account_state_hash)) {
+    throw cryptoPersistenceError("REPLAY_SNAPSHOT_CORRUPT", "会话冻结配置或执行状态校验失败", 500);
+  }
   const scoringConfig = parseJson(row.scoring_config_json, null, {
     fieldName: "replay_sessions.scoring_config_json",
     rowId: row.id,
@@ -260,6 +276,7 @@ function rowToReplaySession(row) {
   return {
     id: row.id,
     sourceDataVersion: row.source_data_version,
+    market: row.market ?? "ashare",
     gameLength: Number(row.game_length),
     observationBars: Number(row.observation_bars),
     revealedFutureBars: Number(row.revealed_future_bars),
@@ -383,6 +400,14 @@ function rowToReplayHistoryItem(row) {
     rowId: row.id,
     strict: false,
   });
+  if (snapshot.market === "crypto-perpetual") {
+    return { id: row.id, market: "crypto-perpetual", instrumentId: snapshot.instrumentId, interval: "1m",
+      gameLength: Number(row.game_length), progress: { current: Number(row.revealed_future_bars), total: Number(row.game_length) },
+      status: row.status, completionReason: row.completion_reason ?? null, revealed, reviewState: row.review_state,
+      blindReview: parseJson(row.blind_json, null), postReview: revealed ? parseJson(row.post_json, null) : null, scoreCard: null,
+      attemptInfo: { attemptNumber: Number(row.attempt_number), kind: row.attempt_kind, countsTowardFirstScore: Boolean(row.counts_toward_first_score), sourceSessionId: row.source_session_id ?? null },
+      createdAt: row.created_at, updatedAt: row.updated_at };
+  }
   const interval = ["1m", "hybrid"].includes(row.interval)
     ? row.interval
     : "1d";
@@ -1059,6 +1084,12 @@ function ensureColumn(db, tableName, columnName, columnDefinition) {
 
 
 
+function assertStockReplayMutation(session) {
+  if (session.market === "crypto-perpetual" || session.executionModelVersion !== LEGACY_ORDER_MODEL && !isBarOrderModel(session.executionModelVersion)) {
+    throw cryptoPersistenceError("REPLAY_VERSION_UNSUPPORTED", "该会话必须使用其已冻结的市场执行器，不能回落到旧股票模型");
+  }
+}
+
 export function createDatabase(dbPath = DEFAULT_DB_PATH) {
   mkdirSync(dirname(dbPath), { recursive: true });
 
@@ -1289,6 +1320,10 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
     DROP TRIGGER IF EXISTS replay_review_corrections_no_delete;
   `);
 
+  ensureColumn(db, "replay_sessions", "market", "TEXT NOT NULL DEFAULT 'ashare'");
+  ensureColumn(db, "replay_sessions", "execution_model_version", "TEXT NOT NULL DEFAULT 'legacy-next-open'");
+  ensureColumn(db, "replay_sessions", "snapshot_hash", "TEXT");
+  ensureColumn(db, "replay_sessions", "account_state_hash", "TEXT");
   ensureColumn(db, "replay_sessions", "revision", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "replay_sessions", "completion_reason", "TEXT");
   ensureColumn(db, "replay_sessions", "revealed_at", "TEXT");
@@ -1333,6 +1368,8 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         game_length,
         observation_bars,
         snapshot_json,
+        market,
+        snapshot_hash,
         scenario_fingerprint,
         scenario_fingerprint_version,
         attempt_number,
@@ -1359,6 +1396,9 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       ]),
   );
   for (const row of replayAttemptRows) {
+    if (row.market === "crypto-perpetual" && cryptoHash(row.snapshot_json) !== row.snapshot_hash) {
+      db.close(); throw cryptoPersistenceError("REPLAY_SNAPSHOT_CORRUPT", "合约冻结配置校验失败，未重建场景身份", 500);
+    }
     const snapshot = parseJson(row.snapshot_json, null, {
       fieldName: "replay_sessions.snapshot_json",
       rowId: row.id,
@@ -1899,6 +1939,8 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
 
 
 
+  initializeCryptoReplaySchema(db);
+
   function readReplayAction(sessionId, actionId) {
     const row = db
       .prepare(
@@ -2335,7 +2377,11 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
     );
   }
 
+  const cryptoPersistence = createCryptoPersistence({ db, readSession: readReplaySession, rowToSession: rowToReplaySession, readReview: readReplayReview,
+    readAction: readReplayAction, insertEvent: insertReplayEvent, reserveAttempt: reserveReplayAttempt,
+    scenarioIdentity: createReplayScenarioIdentity, scoringConfig: cloneReplayScoringConfig });
   return {
+    ...cryptoPersistence,
     close() {
       if (closed) {
         return;
@@ -2422,6 +2468,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
         `
         SELECT snapshot_json
         FROM replay_sessions
+        WHERE market = 'ashare'
         ORDER BY created_at DESC
         `,
       ).all();
@@ -2542,6 +2589,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const source = rowToReplaySession(sourceRow);
+        assertStockReplayMutation(source);
         if (!source.revealedAt) {
           throw createReplayStateError(
             "原演练尚未揭晓，不能使用该场景复练",
@@ -2660,14 +2708,14 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
 
     getReplayTrainingAnalyticsData() {
       const rows = db.prepare(
-        "SELECT id FROM replay_sessions WHERE deleted_at IS NULL ORDER BY created_at ASC, id ASC",
+        "SELECT id FROM replay_sessions WHERE deleted_at IS NULL AND market = 'ashare' ORDER BY created_at ASC, id ASC",
       ).all();
       const sessions = rows.map((row) => readReplaySession(row.id)).filter(Boolean);
       const eventsBySession = new Map();
       const eventRows = db.prepare(
         `SELECT session_id, event_type, sequence, payload_json, created_at
          FROM replay_events
-         WHERE session_id IN (SELECT id FROM replay_sessions WHERE deleted_at IS NULL)
+         WHERE session_id IN (SELECT id FROM replay_sessions WHERE deleted_at IS NULL AND market = 'ashare')
          ORDER BY sequence ASC, created_at ASC, rowid ASC`,
       ).all();
       for (const row of eventRows) {
@@ -2958,7 +3006,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
       }
     },
 
-    listReplaySessions({ state, attemptKind, keyword, page, pageSize }) {
+    listReplaySessions({ state, attemptKind, keyword, page, pageSize, market = "ashare" }) {
       const reviewStateSql = `
         CASE
           WHEN sessions.status = 'active' THEN 'active'
@@ -2970,8 +3018,8 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           ELSE 'reviewed'
         END
       `;
-      const conditions = ["sessions.deleted_at IS NULL"];
-      const parameters = [];
+      const conditions = ["sessions.deleted_at IS NULL", "sessions.market = ?"];
+      const parameters = [market];
       const stateConditions = {
         active: "sessions.status = 'active'",
         skipped: "sessions.completion_reason = 'no_opportunity'",
@@ -3687,6 +3735,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const current = rowToReplaySession(currentRow);
+        assertStockReplayMutation(current);
         const existingAction = readReplayAction(sessionId, actionId);
         if (existingAction) {
           assertReplayActionMatches(
@@ -3879,6 +3928,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const current = rowToReplaySession(currentRow);
+        assertStockReplayMutation(current);
         const existingAction = readReplayAction(sessionId, actionId);
         if (existingAction) {
           assertReplayActionMatches(existingAction, "finished", requestPayload);
@@ -3998,6 +4048,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const current = rowToReplaySession(currentRow);
+        assertStockReplayMutation(current);
         const existingAction = readReplayAction(sessionId, actionId);
         if (existingAction) {
           assertReplayActionMatches(
@@ -4109,6 +4160,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const current = rowToReplaySession(currentRow);
+        assertStockReplayMutation(current);
         const existingAction = readReplayAction(sessionId, actionId);
         if (existingAction) {
           assertReplayActionMatches(
@@ -4234,6 +4286,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const current = rowToReplaySession(currentRow);
+        assertStockReplayMutation(current);
         const eventType = `${stage}_review_correction_appended`;
         const existingAction = readReplayAction(sessionId, actionId);
         if (existingAction) {
@@ -4381,6 +4434,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const current = rowToReplaySession(currentRow);
+        assertStockReplayMutation(current);
         const correctionRow = db.prepare(
           "SELECT * FROM replay_review_corrections WHERE id = ? AND session_id = ? AND stage = ?",
         ).get(correctionId, sessionId, stage);
@@ -4439,6 +4493,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const current = rowToReplaySession(currentRow);
+        assertStockReplayMutation(current);
         const correctionRow = db.prepare(
           "SELECT * FROM replay_review_corrections WHERE id = ? AND session_id = ? AND stage = ?",
         ).get(correctionId, sessionId, stage);
@@ -4493,6 +4548,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const current = rowToReplaySession(currentRow);
+        assertStockReplayMutation(current);
         const existingAction = readReplayAction(sessionId, actionId);
         if (existingAction) {
           assertReplayActionMatches(existingAction, "revealed", requestPayload);
@@ -4600,6 +4656,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           return null;
         }
         const current = rowToReplaySession(currentRow);
+        assertStockReplayMutation(current);
         const existingAction = readReplayAction(sessionId, actionId);
         if (existingAction) {
           assertReplayActionMatches(

@@ -1,0 +1,220 @@
+{
+  "completedOnAsiaShanghai": "2026-10-20",
+  "branch": "codex/okx-crypto-training",
+  "scope": "P2 offline market samples and visibility projection; no UI or business ledger",
+  "dataVersion": "okx-20240101-v1",
+  "parserVersion": "okx-frozen-sample-v1",
+  "viewVersion": "crypto-prefix-view-v1",
+  "manifestPath": "storage/crypto-samples/okx-20240101-v1/manifest.json",
+  "manifestSHA256": "048fd665a006077050585ba34c8b498caab3672d21bd4311a270c412fe3e6f56",
+  "sourceIndexSHA256": "7db14b0be0c903978e0cf4a456ff438fe2a956376619570fef21a936e13362a5",
+  "sourcePayloadFiles": 479,
+  "rawPayloadBytes": 12056624,
+  "normalizedBytes": 11763334,
+  "unitTests": {
+    "command": "node --test backend/src/replay-crypto-scenario.test.js",
+    "tests": 30,
+    "passed": 30,
+    "failed": 0,
+    "skipped": 0
+  },
+  "offlineVerification": {
+    "command": "node backend/scripts/build-crypto-sample.mjs verify",
+    "observedStatus": "verified-offline",
+    "results": {
+      "BTC-USDT-SWAP": {
+        "validation": {
+          "priceBarsPerStream": 133921,
+          "backgroundMinutes": 129600,
+          "replayMinutes": 4320,
+          "executionMinutes": 1,
+          "fundingEventsWithGuards": 282,
+          "maxFundingTimestampOffsetMs": 0,
+          "observedFundingCadenceAuditMs": 28800000,
+          "fundingReplayEventsWithMarkProxy": 10
+        },
+        "crosschecks": [
+          {
+            "kind": "last",
+            "timeframeMinutes": 60,
+            "checkedBars": 2232,
+            "fields": [
+              "open",
+              "high",
+              "low",
+              "close",
+              "volumeContracts",
+              "volumeBase",
+              "volumeQuote"
+            ],
+            "exact": true
+          },
+          {
+            "kind": "last",
+            "timeframeMinutes": 1440,
+            "checkedBars": 93,
+            "fields": [
+              "open",
+              "high",
+              "low",
+              "close",
+              "volumeContracts",
+              "volumeBase",
+              "volumeQuote"
+            ],
+            "exact": true
+          },
+          {
+            "kind": "mark",
+            "timeframeMinutes": 60,
+            "checkedBars": 2232,
+            "fields": [
+              "open",
+              "high",
+              "low",
+              "close"
+            ],
+            "exact": true
+          },
+          {
+            "kind": "mark",
+            "timeframeMinutes": 1440,
+            "checkedBars": 93,
+            "fields": [
+              "open",
+              "high",
+              "low",
+              "close"
+            ],
+            "exact": true
+          }
+        ],
+        "visibility": {
+          "checkedCursors": [
+            0,
+            1,
+            5,
+            61,
+            1441,
+            4320,
+            4321
+          ],
+          "timeframes": [
+            5,
+            60,
+            1440
+          ],
+          "realDataFuturePerturbation": {
+            "elapsedMinutes": 5,
+            "timeframes": [
+              5,
+              1440
+            ],
+            "unchanged": true
+          },
+          "passed": true
+        }
+      },
+      "ETH-USDT-SWAP": {
+        "validation": {
+          "priceBarsPerStream": 133921,
+          "backgroundMinutes": 129600,
+          "replayMinutes": 4320,
+          "executionMinutes": 1,
+          "fundingEventsWithGuards": 282,
+          "maxFundingTimestampOffsetMs": 2000,
+          "observedFundingCadenceAuditMs": 28800000,
+          "fundingReplayEventsWithMarkProxy": 10
+        },
+        "crosschecks": [
+          {
+            "kind": "last",
+            "timeframeMinutes": 60,
+            "checkedBars": 2232,
+            "fields": [
+              "open",
+              "high",
+              "low",
+              "close",
+              "volumeContracts",
+              "volumeBase",
+              "volumeQuote"
+            ],
+            "exact": true
+          },
+          {
+            "kind": "last",
+            "timeframeMinutes": 1440,
+            "checkedBars": 93,
+            "fields": [
+              "open",
+              "high",
+              "low",
+              "close",
+              "volumeContracts",
+              "volumeBase",
+              "volumeQuote"
+            ],
+            "exact": true
+          },
+          {
+            "kind": "mark",
+            "timeframeMinutes": 60,
+            "checkedBars": 2232,
+            "fields": [
+              "open",
+              "high",
+              "low",
+              "close"
+            ],
+            "exact": true
+          },
+          {
+            "kind": "mark",
+            "timeframeMinutes": 1440,
+            "checkedBars": 93,
+            "fields": [
+              "open",
+              "high",
+              "low",
+              "close"
+            ],
+            "exact": true
+          }
+        ],
+        "visibility": {
+          "checkedCursors": [
+            0,
+            1,
+            5,
+            61,
+            1441,
+            4320,
+            4321
+          ],
+          "timeframes": [
+            5,
+            60,
+            1440
+          ],
+          "realDataFuturePerturbation": {
+            "elapsedMinutes": 5,
+            "timeframes": [
+              5,
+              1440
+            ],
+            "unchanged": true
+          },
+          "passed": true
+        }
+      }
+    }
+  },
+  "codeSHA256": {
+    "engine/scripts/download_okx_sample.py": "5b5a2afe4c646e5f8726795c7a83d360eddafafa45163607ef850941a3fa3b98",
+    "backend/scripts/build-crypto-sample.mjs": "c7bda9fc14a9da3df9a3d3c3515af0b0b3ba2694b973f35b4926540b527537f8",
+    "backend/src/replay-crypto-scenario.js": "c74df15ce5525f16601c544d48b803cd466715218b58e72e057db150fe1b4b82",
+    "backend/src/replay-crypto-source-job.js": "50c225b9c91862b44532b752be51f0a44fa099a698de3844f3d5a5d8111d4cb1",
+    "backend/src/replay-crypto-scenario.test.js": "93abadb45458fe590e898e409e4c3b2731eea8526b4ee3a05e368793018b41b1"
+  }
+}
