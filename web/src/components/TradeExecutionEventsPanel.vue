@@ -1,6 +1,6 @@
 <script setup>
-import { ChevronDown, ChevronUp, Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
-import { reactive, shallowRef } from "vue";
+import { ChevronDown, ChevronUp, Ellipsis, Pencil, Plus, Trash2 } from "lucide-vue-next";
+import { reactive, shallowRef, ref } from "vue";
 
 import { formatDisplayDate } from "../utils/datePresentation.js";
 import { toExecutionEventDate } from "../utils/tradeExecutionDateTime.js";
@@ -10,7 +10,8 @@ import UiInput from "./ui/UiInput.vue";
 import UiSelect from "./ui/UiSelect.vue";
 import UiTextarea from "./ui/UiTextarea.vue";
 
-defineProps({
+const props = defineProps({
+  addEvent: { type: Function, required: true },
   events: {
     type: Array,
     default: () => [],
@@ -29,8 +30,10 @@ defineProps({
   },
 });
 
-const emit = defineEmits(["add", "edit", "delete"]);
+const emit = defineEmits(["edit", "delete"]);
 const collapsed = shallowRef(false);
+const composer = ref(null);
+const submitting = shallowRef(false);
 
 const ACTION_OPTIONS = [
   { value: "buy", label: "买入" },
@@ -63,11 +66,11 @@ function resetForm() {
   form.note = "";
 }
 
-function submit() {
-  if (!form.eventAt || !form.action) {
+async function submit() {
+  if (props.disabled || props.saving || submitting.value || !form.eventAt || !form.action) {
     return;
   }
-  emit("add", {
+  const payload = {
     eventAt: toExecutionEventDate(form.eventAt),
     action: form.action,
     price: form.price === "" ? null : Number(form.price),
@@ -76,8 +79,16 @@ function submit() {
     planStatus: form.planStatus,
     source: form.source.trim(),
     note: form.note.trim(),
-  });
-  resetForm();
+  };
+  submitting.value = true;
+  try {
+    if (await props.addEvent(payload)) {
+      resetForm();
+      if (composer.value) composer.value.open = false;
+    }
+  } finally {
+    submitting.value = false;
+  }
 }
 
 function actionLabel(value) {
@@ -170,49 +181,52 @@ function formatSigned(value, suffix = "") {
     </div>
     <p v-else class="trade-execution-events__empty">还没有动作记录。你可以先记录计划外观察，也可以在实际发生时逐笔补录。</p>
 
-    <form class="trade-execution-events__form" @submit.prevent="submit">
-      <label>
-        <span>时间</span>
-        <UiInput v-model="form.eventAt" size="sm" type="date" :disabled="disabled" />
-      </label>
-      <label>
-        <span>动作</span>
-        <UiSelect v-model="form.action" size="sm" :disabled="disabled">
-          <option v-for="option in ACTION_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </UiSelect>
-      </label>
-      <label>
-        <span>价格</span>
-        <UiInput v-model="form.price" size="sm" type="number" min="0" step="0.001" :disabled="disabled" />
-      </label>
-      <label>
-        <span>数量</span>
-        <UiInput v-model="form.quantity" size="sm" type="number" min="0" step="100" :disabled="disabled" />
-      </label>
-      <label>
-        <span>费用</span>
-        <UiInput v-model="form.fee" size="sm" type="number" min="0" step="0.01" :disabled="disabled" />
-      </label>
-      <label>
-        <span>是否按计划</span>
-        <UiSelect v-model="form.planStatus" size="sm" :disabled="disabled">
-          <option value="unknown">未标记</option>
-          <option value="planned">计划内</option>
-          <option value="unplanned">计划外</option>
-        </UiSelect>
-      </label>
-      <label>
-        <span>来源</span>
-        <UiInput v-model="form.source" size="sm" type="text" placeholder="盘中 / 复盘 / 外部记录" :disabled="disabled" />
-      </label>
-      <label class="trade-execution-events__note">
-        <span>备注</span>
-        <UiTextarea v-model="form.note" :disabled="disabled" placeholder="为什么做这个动作，或当时观察到什么" />
-      </label>
-      <UiButton type="submit" size="sm" variant="secondary" :loading="saving" :disabled="disabled || !form.eventAt">
-        添加动作
-      </UiButton>
-    </form>
+    <details ref="composer" class="trade-execution-events__composer">
+      <summary><span><Plus :size="15" />新增动作</span><ChevronDown :size="14" /></summary>
+      <form class="trade-execution-events__form" @submit.stop.prevent="submit">
+        <label>
+          <span>时间</span>
+          <UiInput v-model="form.eventAt" size="sm" type="date" :disabled="disabled || saving || submitting" />
+        </label>
+        <label>
+          <span>动作</span>
+          <UiSelect v-model="form.action" size="sm" :disabled="disabled || saving || submitting">
+            <option v-for="option in ACTION_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </UiSelect>
+        </label>
+        <label>
+          <span>价格</span>
+          <UiInput v-model="form.price" size="sm" type="number" min="0" step="0.001" :disabled="disabled || saving || submitting" />
+        </label>
+        <label>
+          <span>数量</span>
+          <UiInput v-model="form.quantity" size="sm" type="number" min="0" step="100" :disabled="disabled || saving || submitting" />
+        </label>
+        <label>
+          <span>费用</span>
+          <UiInput v-model="form.fee" size="sm" type="number" min="0" step="0.01" :disabled="disabled || saving || submitting" />
+        </label>
+        <label>
+          <span>是否按计划</span>
+          <UiSelect v-model="form.planStatus" size="sm" :disabled="disabled || saving || submitting">
+            <option value="unknown">未标记</option>
+            <option value="planned">计划内</option>
+            <option value="unplanned">计划外</option>
+          </UiSelect>
+        </label>
+        <label>
+          <span>来源</span>
+          <UiInput v-model="form.source" size="sm" type="text" placeholder="盘中 / 复盘 / 外部记录" :disabled="disabled || saving || submitting" />
+        </label>
+        <label class="trade-execution-events__note">
+          <span>备注</span>
+          <UiTextarea v-model="form.note" :disabled="disabled || saving || submitting" placeholder="为什么做这个动作，或当时观察到什么" />
+        </label>
+        <UiButton type="submit" size="sm" variant="secondary" :loading="saving || submitting" :disabled="disabled || !form.eventAt">
+          添加动作
+        </UiButton>
+      </form>
+    </details>
     </template>
   </section>
 </template>
@@ -341,6 +355,13 @@ function formatSigned(value, suffix = "") {
   white-space: pre-wrap;
 }
 
+.trade-execution-events__composer { border-top:1px solid var(--ql-color-border-soft);padding-top:8px; }
+.trade-execution-events__composer summary { display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:32px;list-style:none;font-size:12px;color:var(--ql-accent);cursor:pointer; }
+.trade-execution-events__composer summary::-webkit-details-marker { display:none; }
+.trade-execution-events__composer summary>span { display:inline-flex;align-items:center;gap:6px; }
+.trade-execution-events__composer summary:focus-visible { outline:2px solid var(--ql-accent);outline-offset:2px;border-radius:4px; }
+.trade-execution-events__composer[open] summary>svg { transform:rotate(180deg); }
+.trade-execution-events__composer[open] summary { margin-bottom:10px; }
 .trade-execution-events__form {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

@@ -93,10 +93,13 @@
 
   .replay-setup__intro {
     max-width: 620px;
+    padding-inline: 20px;
+    box-sizing: border-box;
   }
 
   .replay-setup__card {
-    width: min(100%, 500px);
+    width: min(calc(100% - 32px), 500px);
+    box-sizing: border-box;
     justify-self: center;
   }
 }

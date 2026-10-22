@@ -563,8 +563,11 @@ onBeforeUnmount(() => {
 }
 
 .market-replay :deep(.replay-setup__card) {
+  border-radius: 12px !important;
   box-shadow: none !important;
 }
+
+.market-replay :deep(.replay-resume) { border-radius:0 !important; }
 
 @keyframes replay-spin {
   to {

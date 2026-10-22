@@ -15,6 +15,7 @@ import UiButton from "../ui/UiButton.vue";
 import UiCard from "../ui/UiCard.vue";
 import UiModal from "../ui/UiModal.vue";
 import UiInput from "../ui/UiInput.vue";
+import UiSelect from "../ui/UiSelect.vue";
 import { formatReplayBenchmarkLabel } from "../../utils/replayMarket.js";
 
 const props = defineProps({
@@ -195,8 +196,8 @@ function submit() {
             <button type="button" class="replay-setup__configuration-trigger" aria-label="调整资金与成本" title="调整资金与成本" aria-haspopup="dialog" :aria-expanded="configurationOpen" @click="configurationOpen=true"><Settings2 :size="16" /></button>
           </div>
 
-          <fieldset class="replay-setup__choice-card">
-            <legend class="replay-setup__choice-label">01 · 行情精度</legend>
+          <section class="replay-setup__choice-group" role="group" aria-labelledby="replay-interval-label">
+            <h3 id="replay-interval-label" class="replay-setup__choice-label">01 · 行情精度</h3>
             <div class="replay-setup__intervals">
               <button
                 type="button"
@@ -218,10 +219,10 @@ function submit() {
                 <strong>日内模拟</strong>
               </button>
             </div>
-          </fieldset>
+          </section>
 
-          <fieldset class="replay-setup__choice-card">
-            <legend class="replay-setup__choice-label">02 · 演练长度</legend>
+          <section class="replay-setup__choice-group" role="group" aria-labelledby="replay-length-label">
+            <h3 id="replay-length-label" class="replay-setup__choice-label">02 · 演练长度</h3>
             <div class="replay-setup__lengths">
               <button
                 v-for="length in lengthOptions"
@@ -236,12 +237,12 @@ function submit() {
                 <span>交易日</span>
               </button>
             </div>
-          </fieldset>
+          </section>
 
-          <section class="replay-setup__choice-card replay-setup__benchmark" aria-label="指数基准设置">
+          <section class="replay-setup__choice-group replay-setup__benchmark" aria-label="指数基准设置">
             <label class="replay-setup__field">
               <span class="replay-setup__choice-label">03 · 指数基准</span>
-              <select
+              <UiSelect
                 v-model="form.benchmarkCode"
                 class="replay-setup__select"
                 :disabled="compatibleBenchmarks.length === 0"
@@ -256,7 +257,7 @@ function submit() {
                 >
                   {{ formatReplayBenchmarkLabel(benchmark) }}
                 </option>
-              </select>
+              </UiSelect>
             </label>
             <div
               v-if="benchmarksLoading || benchmarkInitialization?.state === 'running'"
@@ -370,13 +371,18 @@ function submit() {
 }
 
 .replay-setup__card {
+  --ql-color-primary: #2563eb;
+  --ql-color-primary-strong: #1d4ed8;
   border-color: var(--ql-color-border-soft);
-  box-shadow: 0 18px 42px color-mix(in srgb, var(--ql-ink) 9%, transparent);
+  border-radius: 12px;
+  background: var(--ql-panel);
 }
+
+.replay-setup__card :deep(.ql-ui-card__body) { padding:24px; }
 
 .replay-setup__form {
   display: grid;
-  gap: 10px;
+  gap: 16px;
 }
 
 .replay-setup__choice-heading { display:flex;align-items:center;justify-content:space-between;gap:12px; }
@@ -390,19 +396,12 @@ function submit() {
   letter-spacing: -0.035em;
 }
 
-.replay-setup__choice-card {
-  min-width: 0;
-  margin: 0;
-  padding: 10px;
-  border: 1px solid var(--ql-line);
-  border-radius: 11px;
-  background: var(--ql-paper-soft);
-}
+.replay-setup__choice-group { min-width:0;margin:0;padding:0; }
 
 .replay-setup__choice-label,
 .replay-setup__label {
   display: block;
-  margin-bottom: 7px;
+  margin: 0 0 7px;
   color: var(--ql-color-text-muted);
   font-size: 11px;
   font-weight: 700;
@@ -435,7 +434,7 @@ function submit() {
 
 .replay-setup__interval {
   display: grid;
-  min-height: 50px;
+  min-height: 40px;
   place-items: center;
   padding: 8px 10px;
   text-align: center;
@@ -443,12 +442,13 @@ function submit() {
 
 .replay-setup__interval strong {
   color: var(--ql-ink);
-  font-size: 15px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .replay-setup__length {
   display: flex;
-  min-height: 44px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
   gap: 4px;
@@ -457,7 +457,8 @@ function submit() {
 .replay-setup__length strong {
   color: var(--ql-ink);
   font-family: var(--ql-font-mono, monospace);
-  font-size: 20px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .replay-setup__length span {
@@ -469,7 +470,7 @@ function submit() {
   border-color: var(--ql-accent);
   color: var(--ql-accent);
   background: var(--ql-color-primary-soft);
-  box-shadow: 0 0 0 3px var(--ql-color-primary-ring);
+  box-shadow: none;
 }
 
 .replay-setup__benchmark {
@@ -477,16 +478,10 @@ function submit() {
   gap: 9px;
 }
 
-.replay-setup__select {
-  width: 100%;
-  min-height: 40px;
-  padding: 0 10px;
-  border: 1px solid var(--ql-line-strong);
-  border-radius: 8px;
-  color: var(--ql-ink);
-  background: var(--ql-color-bg-surface-strong);
-  font: inherit;
-  font-size: 12px;
+.replay-setup__benchmark :deep(.replay-setup__select) {
+  width:100%;height:40px;min-height:40px;
+  border:1px solid var(--ql-line-strong);border-radius:8px;
+  color:var(--ql-ink);background:var(--ql-field-bg);font-size:13px;
 }
 
 .replay-setup__playbook-state {

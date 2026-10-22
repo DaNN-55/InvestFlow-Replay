@@ -209,13 +209,10 @@ describe("replay history tracking surface", () => {
     );
   });
 
-  it("uses the same selector component for all three basic-information fields", () => {
-    const basicInformation = viewSource.match(
-      /<h3>基本信息<\/h3>([\s\S]*?)<\/section>/u,
-    )?.[1] ?? "";
-
-    assert.equal((basicInformation.match(/<UiSelect/gu) ?? []).length, 3);
-    assert.match(basicInformation, /:model-value="form\.status"/u);
-    assert.doesNotMatch(basicInformation, /trade-record-readonly/u);
+  it("summarizes account, stage and trade type in the detail header without duplicate selectors", () => {
+    assert.doesNotMatch(viewSource, /<h3>基本信息<\/h3>/u);
+    assert.match(viewSource, /账户：\$\{accountTypeLabel\(form\.accountType\)\}/u);
+    assert.match(viewSource, /阶段：\$\{statusLabel\(form\.status\)\}/u);
+    assert.match(viewSource, /类型：\$\{formatTradeRecordTradeType\(form\.tradeType\)\}/u);
   });
 });

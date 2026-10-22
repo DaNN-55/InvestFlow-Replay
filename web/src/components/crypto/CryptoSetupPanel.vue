@@ -42,7 +42,7 @@ const setup = reactive({ instrumentId: 'BTC-USDT-SWAP', startingCash: '10000', l
       </fieldset>
       <div class="crypto-setup__facts"><span>固定：90 天背景</span><span>72 小时回放</span><span>逐仓 · 单向</span></div>
       <ReplayResumeCard v-if="resumable" :session-id="resumable.id" :description="`${resumable.instrumentId} · 原进度、持仓与委托保留`" :busy="busy" @resume="emit('resume',$event)" />
-      <p class="muted" v-if="pool?.mode==='history-pool'">可首次盲测：{{ selectedPool?.unseenWindows??0 }} 段历史行情。<span class="crypto-pool-help">每段回放 72 小时；用完后可到演练记录复练。</span></p>
+
       <p v-if="exhausted" role="status" class="muted">当前合约没有尚未暴露的场景，请到演练记录选择历史场景并显式复练；不会删除首次成绩或自动重置已见状态。</p>
       <p v-if="unavailable" role="status" class="muted">本地行情尚未准备或校验失败，暂时不能开始新练习。请按项目 README 的「加密行情数据准备」导入并核验冻结小样或历史池，然后刷新页面。已有练习仍可从演练记录继续。</p>
       <UiButton class="crypto-setup__submit" type="submit" :loading="busy" :disabled="blocked || exhausted || unavailable" block>开始合约盲测</UiButton>
@@ -62,6 +62,4 @@ h2 { margin:0 0 20px;font-size:24px;letter-spacing:-.035em; }
 .crypto-cost-settings legend { padding:0 8px 0 0;color:var(--ql-color-text-muted);font-size:11px; }
 .crypto-starting-funds { display:grid;grid-template-columns:1.4fr 1fr;gap:12px; }
 .crypto-starting-funds>div { min-width:0; }
-.crypto-pool-help { display:block;font-size:11px;margin-top:3px; }
-@media(max-width:780px) { .crypto-setup__intro { padding-inline:20px; }.crypto-setup__form { width:min(calc(100% - 32px),500px);box-sizing:border-box; } }
 </style>
