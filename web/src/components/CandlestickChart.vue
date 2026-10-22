@@ -46,7 +46,7 @@ const subPaneCount = computed(() =>
   ).length ?? 0),
 );
 const chartHeight = computed(() => props.height || 330 + (props.showVolume ? 92 : 0) + subPaneCount.value * 126 + 24);
-const emit = defineEmits(['crosshair','range','price-line-drag']);
+const emit = defineEmits(['crosshair','range','price-line-drag','price-line-cancel']);
 const drawingIcons = Object.freeze({
   trend: TrendingUp,
   horizontal: Minus,
@@ -71,6 +71,7 @@ const { state, drawing, commands } = useReplayKlineChart({
   onCrosshair: value => emit('crosshair',value),
   onRange: value => emit('range',value),
   onPriceLineDrag: value => emit('price-line-drag',value),
+  onPriceLineCancel: value => emit('price-line-cancel',value),
 });
 defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(value,dateRange)=>commands.syncRange(value,dateRange), latest:()=>commands.latest() });
 </script>
@@ -127,7 +128,7 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
       </button>
     </div>
     <ul v-if="priceLines.length" class="replay-price-lines" :class="{'replay-price-lines--compact':compact}" aria-label="当前图表状态线">
-      <li v-for="line in priceLines" :key="line.id" :data-price-line-id="line.id" :data-price-line-value="line.price" :data-price-line-quantity="line.contracts"><span :style="{ borderColor: line.color, borderStyle: line.dashed ? 'dashed' : 'solid' }" />{{ line.label }} · {{ line.price }}</li>
+      <li v-for="line in priceLines" :key="line.id" :data-price-line-id="line.id" :data-price-line-value="line.price" :data-price-line-quantity="line.contracts"><span :style="{ borderColor: line.color, borderStyle: line.dashed ? 'dashed' : 'solid' }" />{{ line.label }} · {{ line.price }}<button v-if="line.cancellable" type="button" :aria-label="`撤销${line.cancelLabel}`" @click="emit('price-line-cancel',{orderId:line.orderId,leg:line.protectionLeg})">×</button></li>
     </ul>
     <div
       ref="host"
@@ -149,6 +150,7 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
 
 <style scoped>
 .replay-kline-chart {
+  position: relative;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--ql-line-strong);
@@ -245,5 +247,8 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
 .replay-price-lines { list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 11px; border-bottom: 1px solid var(--ql-line); }
 .replay-price-lines li { display: inline-flex; align-items: center; gap: 6px; }
 .replay-price-lines--compact { position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0; }
+.replay-price-lines--compact:focus-within { z-index:10;top:36px;left:0;right:0;width:auto;height:auto;margin:0;padding:8px 12px;overflow:visible;clip-path:none;white-space:normal;background:var(--ql-color-bg-surface-strong); }
+.replay-price-lines button { border:1px solid var(--ql-line-strong);border-radius:4px;background:var(--ql-color-bg-surface-strong);color:var(--ql-color-text-body);cursor:pointer; }
+.replay-price-lines button:focus-visible { outline:2px solid var(--ql-accent);outline-offset:2px; }
 .replay-price-lines span { width: 20px; border-top-width: 2px; }
 </style>

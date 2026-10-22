@@ -429,7 +429,7 @@ test('stale protection drag is rejected instead of overwriting a newer session r
   expect(changed.status()).toBe(200);
   await page.getByRole('button',{name:'确认生效',exact:true}).click();
   await expect(page.getByRole('region',{name:'确认止盈止损调整'})).toHaveCount(0);
-  await expect(page.getByText('已重新同步操作结果，请核对当前委托或保护；继续调整请重新拖动。',{exact:true})).toBeVisible();
+  await expect(page.getByText('已重新同步操作结果，请核对当前委托或保护后重新操作。',{exact:true})).toBeVisible();
   expect(commands.length).toBe(1);expect(commands[0].expectedRevision).toBe(session.revision);
   const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(latest.protection).toEqual(session.protection);
@@ -531,7 +531,7 @@ test('stale limit preview cannot restore an order cancelled by another writer',a
   expect(cancelled.status()).toBe(200);
   await page.getByRole('button',{name:'确认生效',exact:true}).click();
   await expect(page.getByRole('region',{name:'确认限价委托调整'})).toHaveCount(0);
-  await expect(page.getByText('已重新同步操作结果，请核对当前委托或保护；继续调整请重新拖动。',{exact:true})).toBeVisible();
+  await expect(page.getByText('已重新同步操作结果，请核对当前委托或保护后重新操作。',{exact:true})).toBeVisible();
   expect(commands).toHaveLength(1);
   const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(latest.revision).toBe(session.revision+1);expect(latest.orders.some(o=>o.id===order.id)).toBe(false);
@@ -556,4 +556,87 @@ test('lost limit amendment response retries the original action without charging
   const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(latest).toEqual(committed);expect(latest.revision).toBe(session.revision+1);
   expect(latest.orders.find(o=>o.id===order.id).limitPrice).toBe(original.command.limitPrice);
+});
+
+async function clickNativePriceCancel(page,index,id,{drag=false}={}) {
+  await page.locator(`[data-chart-index="${index}"]`).scrollIntoViewIfNeeded();
+  const point=await page.evaluate(async({index,id})=>{
+    const url=performance.getEntriesByType('resource').find(e=>/\/klinecharts\.js\?v=/.test(e.name)).name;
+    const {init}=await import(url),host=document.querySelector(`[data-chart-index="${index}"] [k-line-chart-id]`),chart=init({id:host.getAttribute('k-line-chart-id')});
+    const overlay=chart.getOverlayById(id),bounding=chart.getSize('candle_pane','main'),yAxis={convertToPixel:value=>chart.convertToPixel({value},{paneId:'candle_pane'}).y};
+    const figures=overlay.createPointFigures({overlay,coordinates:[{x:0,y:yAxis.convertToPixel(overlay.points[0].value)}],bounding,yAxis});
+    const button=figures.find(f=>f.key==='price-cancel');if(!button) throw new Error('No cancellation button on this line');
+    const box=host.getBoundingClientRect();return {x:box.x+button.attrs.x+5,y:box.y+button.attrs.y};
+  },{index,id});
+  if(drag) {await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x,point.y+30,{steps:5});await page.mouse.up();}
+  else await page.mouse.click(point.x,point.y);
+}
+
+for(const side of ['long','short']) test(`${side} chart protection cancel confirms each leg without dragging or cancelling its sibling`,async({page,request})=>{
+  const {id,session,commands}=await protectedPractice(page,request,side);
+  const current=async()=> (await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  await page.screenshot({path:test.info().outputPath('chart-cancel-labels.png')});
+  await clickNativePriceCancel(page,0,`${id}:stopLoss`,{drag:true});
+  await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.getByRole('region',{name:'确认止盈止损调整'})).toHaveCount(0);expect(commands).toHaveLength(0);
+  for(const [index,leg,label] of [[0,'stopLoss','自动止损'],[1,'takeProfit','自动止盈']]) {
+    const before=await current();
+    await clickNativePriceCancel(page,index,`${id}:${leg}`);
+    let dialog=page.getByRole('dialog',{name:`撤销${label}？`});await expect(dialog).toBeVisible();
+    expect((await current()).protection).toEqual(before.protection);expect(commands).toHaveLength(leg==='stopLoss'?0:1);
+    await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true,includeHidden:true})).toBeDisabled();
+    await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+    await clickNativePriceCancel(page,index,`${id}:${leg}`);await expect(dialog).toBeVisible();
+    await page.screenshot({path:test.info().outputPath(`${leg}-cancel.png`)});
+    const count=commands.length;await dialog.getByRole('button',{name:'确认撤销',exact:true}).evaluate(button=>{button.click();button.click();});
+    await expect(dialog).toHaveCount(0);await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+    const after=await current();expect(commands).toHaveLength(count+1);expect(commands.at(-1).command).toEqual({type:'cancel-protection',leg});
+    expect(commands.at(-1).expectedRevision).toBe(before.revision);expect(after.elapsedMinutes).toBe(session.elapsedMinutes);expect(after.account.position).toEqual(session.account.position);
+    expect(after.protection?.[leg]??null).toBe(null);
+    if(leg==='stopLoss') expect(after.protection.takeProfit).toEqual(before.protection.takeProfit);
+    await expect.poll(async()=> (await nativeCharts(page)).every(c=>!c.lines.some(l=>l.id===`${id}:${leg}`))).toBe(true);
+  }
+});
+
+for(const intent of ['increase','reduce']) test(`${intent} chart limit cancel preserves fills and sibling, Escape and refresh discard confirmation, keyboard can confirm`,async({page,request})=>{
+  const {id,session,order,commands}=await limitPractice(page,request,'long',intent);
+  const lineId=`${id}:order-${order.id}`,dialog=page.getByRole('dialog',{name:'撤销限价委托？'});
+  await clickNativePriceCancel(page,0,lineId);await expect(dialog).toBeVisible();expect(commands).toHaveLength(0);
+  await dialog.getByRole('button',{name:'保留',exact:true}).click();await expect(dialog).toHaveCount(0);
+  await clickNativePriceCancel(page,1,lineId);await expect(dialog).toBeVisible();
+  await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();await expect(dialog).toHaveCount(0);expect(commands).toHaveLength(0);
+  // The native canvas icon also has a focusable, named keyboard equivalent.
+  const keyboard=page.locator('[data-chart-index="0"]').getByRole('button',{name:`撤销限价委托 #${order.id}，${order.limitPrice}`,exact:true});
+  await keyboard.focus();await page.keyboard.press('Enter');await expect(dialog).toBeVisible();await expect(dialog).toContainText(`未成交 ${order.remainingContracts} 张`);
+  await dialog.getByRole('button',{name:'确认撤销',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'cancel-order',orderId:order.id});expect(commands[0].expectedRevision).toBe(session.revision);
+  expect(saved.orders).toEqual(session.orders.filter(o=>o.id!==order.id));expect(saved.account.position).toEqual(session.account.position);expect(saved.protection).toEqual(session.protection);
+  if(intent==='increase') expect(Number(saved.reservedBalance)).toBeLessThan(Number(session.reservedBalance));else expect(saved.reservedBalance).toBe(session.reservedBalance);expect(saved.elapsedMinutes).toBe(session.elapsedMinutes);
+  await expect.poll(async()=> (await nativeCharts(page)).every(c=>!c.lines.some(l=>l.id===lineId))).toBe(true);
+});
+
+test('stale chart cancellation cannot delete a limit order repriced by another writer',async({page,request})=>{
+  const {id,session,order,commands}=await limitPractice(page,request);
+  await clickNativePriceCancel(page,0,`${id}:order-${order.id}`);const dialog=page.getByRole('dialog',{name:'撤销限价委托？'});await expect(dialog).toBeVisible();
+  const response=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,command:{type:'amend-limit',orderId:order.id,limitPrice:'49800'}}});expect(response.status()).toBe(200);
+  await dialog.getByRole('button',{name:'确认撤销',exact:true}).click();await expect(dialog).toHaveCount(0);
+  await expect(page.getByText('已重新同步操作结果，请核对当前委托或保护后重新操作。',{exact:true})).toBeVisible();
+  expect(commands).toHaveLength(1);const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(latest.orders.find(o=>o.id===order.id).limitPrice).toBe('49800');expect(latest.revision).toBe(session.revision+1);
+});
+
+test('lost chart cancellation response retries the same single-leg action after reload',async({page,request})=>{
+  const {id,session}=await protectedPractice(page,request);
+  await clickNativePriceCancel(page,0,`${id}:stopLoss`);await expect(page.getByRole('dialog',{name:'撤销自动止损？'})).toBeVisible();
+  let original;await page.route('**/api/quant/replay/sessions/*/actions',async route=>{
+    original=route.request().postDataJSON();const response=await route.fetch({url:`${fixture.url}${path}/${id}/actions`});expect(response.status()).toBe(200);await route.abort('failed');
+  },{times:1});
+  await page.getByRole('button',{name:'确认撤销',exact:true}).click();await expect(page.getByRole('button',{name:'重试原动作',exact:true})).toBeVisible();
+  const committed=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  await page.reload();await expect(page.getByRole('button',{name:'重试原动作',exact:true})).toBeVisible();
+  expect((await page.evaluate(()=>JSON.parse(localStorage.getItem('investflow-crypto-attempt-v1')).pending)).body).toEqual(original);
+  await page.getByRole('button',{name:'重试原动作',exact:true}).click();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;expect(latest).toEqual(committed);expect(latest.revision).toBe(session.revision+1);
+  expect(latest.protection.stopLoss).toBe(null);expect(latest.protection.takeProfit).toEqual(session.protection.takeProfit);
 });
