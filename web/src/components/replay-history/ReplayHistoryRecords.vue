@@ -1,6 +1,7 @@
 <script setup>
-import { computed, reactive, shallowRef } from "vue";
-import { useRouter } from "vue-router";
+import { computed, reactive, shallowRef, onActivated, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import CryptoHistoryDetail from '../crypto/CryptoHistoryDetail.vue';
 
 import { useReplayHistory } from "../../composables/useReplayHistory.js";
 import { api } from "../../services/api.js";
@@ -17,11 +18,13 @@ import ReplayHistoryList from "./ReplayHistoryList.vue";
 const activeView = shallowRef("records");
 const analysisKind = computed(() => activeView.value === "retrain" ? "retrain" : "first");
 const router = useRouter();
+const route = useRoute();
 const {
   items,
   total,
   page,
   state,
+  market,
   attemptKind,
   keyword,
   loading,
@@ -36,7 +39,9 @@ const {
   goToPage,
   selectItem,
   refresh,
-} = useReplayHistory();
+} = useReplayHistory({ market: ['all','ashare','crypto-perpetual'].includes(route.query.market) ? route.query.market : 'all', keyword:route.query.session??'', selectedId: route.query.session ?? '' });
+onActivated(()=>{if(items.value.length) refresh();});
+watch(()=>route.fullPath,()=>{if(route.name==='quant-trade-records'&&route.query.tab==='replay') applyFilters({market:['all','ashare','crypto-perpetual'].includes(route.query.market)?route.query.market:market.value,keyword:route.query.session??'',...(route.query.session?{state:'all',attemptKind:'all'}:{})});});
 
 const candidateStates = reactive({});
 const retrainStates = reactive({});
@@ -149,6 +154,7 @@ async function deleteCorrection() {
 }
 
 function openReplay(item) {
+  if(item.market === 'crypto-perpetual') { router.push({path:'/decision/crypto-replay',query:{session:item.id}}); return; }
   window.localStorage.setItem(
     "investflow.replay.active-session-id",
     item.id,
@@ -250,9 +256,11 @@ async function addCandidate(item) {
 </script>
 
 <template>
-  <div class="replay-history-records">
+  <div class="replay-history-records crypto-controls">
+    <p v-if="route.query.session" class="crypto-muted">当前定位本局练习。<button type="button" class="crypto-text-button" @click="router.replace({query:{...route.query,session:undefined}})">查看全部演练记录</button></p>
     <ReplayHistoryControls v-if="activeView === 'records'" :active-view="activeView" @view-change="activeView = $event">
       <ReplayHistoryFilters
+        :market="market"
         :state="state"
         :attempt-kind="attemptKind"
         :keyword="keyword"
@@ -280,8 +288,9 @@ async function addCandidate(item) {
         @select="selectItem"
         @page="goToPage"
       />
+      <CryptoHistoryDetail v-if="selectedDetailItem?.market === 'crypto-perpetual'" :key="selectedDetailItem.id" :item="selectedDetailItem" @open="openReplay" />
       <ReplayHistoryDetail
-        v-if="selectedDetailItem"
+        v-else-if="selectedDetailItem"
         :item="selectedDetailItem"
         :candidate-state="candidateStateFor(selectedDetailItem.id)"
         :retrain-state="retrainStateFor(selectedDetailItem.id)"

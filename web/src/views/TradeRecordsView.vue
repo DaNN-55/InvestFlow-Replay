@@ -38,6 +38,7 @@ import {
 
 const route = useRoute();
 const primaryTab = ref("records");
+watch(() => route.query.tab, value => { if (["records", "replay", "playbooks"].includes(value)) primaryTab.value = value; }, { immediate: true });
 const tradeRecordArchive = useTradeRecordArchive();
 const records = tradeRecordArchive.records;
 const tradeRecordPage = tradeRecordArchive.page;
@@ -658,7 +659,7 @@ onMounted(() => {
         :class="{ 'trade-records-primary-tabs__button--active': primaryTab === 'replay' }"
         @click="primaryTab = 'replay'"
       >
-        历史演练
+        演练记录
       </button>
       <button
         type="button"

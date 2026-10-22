@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prototype:ui": "vite --host 127.0.0.1 --port 5181 --strictPort --open \"/decision/crypto-replay?prototype=ui&variant=A\"",
     "build": "vite build",
     "lint": "eslint . --ext .js,.vue",
     "preview": "vite preview --host 127.0.0.1 --port 4180",

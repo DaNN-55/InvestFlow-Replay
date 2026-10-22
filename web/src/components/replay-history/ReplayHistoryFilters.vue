@@ -6,6 +6,7 @@ import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
 
 const props = defineProps({
+  market: { type: String, default: 'all' },
   state: {
     type: String,
     default: "all",
@@ -26,14 +27,16 @@ const props = defineProps({
 
 const emit = defineEmits(["apply"]);
 const filters = reactive({
+  market: props.market,
   state: props.state,
   attemptKind: props.attemptKind,
   keyword: props.keyword,
 });
 
 watch(
-  () => [props.state, props.attemptKind, props.keyword],
-  ([state, attemptKind, keyword]) => {
+  () => [props.state, props.attemptKind, props.keyword, props.market],
+  ([state, attemptKind, keyword, market]) => {
+    filters.market = market;
     filters.state = state;
     filters.attemptKind = attemptKind;
     filters.keyword = keyword;
@@ -42,6 +45,7 @@ watch(
 
 function submit() {
   emit("apply", {
+    market: filters.market,
     state: filters.state,
     attemptKind: filters.attemptKind,
     keyword: filters.keyword,
@@ -51,6 +55,7 @@ function submit() {
 
 <template>
   <form class="replay-history-filters" @submit.prevent="submit">
+    <label><span>市场</span><UiSelect v-model="filters.market" aria-label="演练市场筛选"><option value="all">全部市场</option><option value="ashare">A股</option><option value="crypto-perpetual">加密合约</option></UiSelect></label>
     <label>
       <span>状态筛选</span>
       <UiSelect v-model="filters.state" size="sm">
@@ -60,7 +65,7 @@ function submit() {
         <option value="skipped">主动空仓</option>
         <option value="awaiting_reveal">待揭晓</option>
         <option value="awaiting_post">待事后复盘</option>
-        <option value="reviewed">已评分</option>
+        <option value="reviewed">已完成复盘</option>
       </UiSelect>
     </label>
     <label>
@@ -99,6 +104,7 @@ function submit() {
   display: grid;
   gap: 0.75rem;
   grid-template-columns:
+    minmax(130px, 0.38fr)
     minmax(130px, 0.38fr)
     minmax(130px, 0.38fr)
     minmax(220px, 1fr)

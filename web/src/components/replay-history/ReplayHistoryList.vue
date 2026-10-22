@@ -80,10 +80,11 @@ function formatScore(value) {
               `replay-history-list__state--${getReplayHistoryStatePresentation(item.reviewState).tone}`,
             ]"
           >
-            {{ getReplayHistoryStatePresentation(item.reviewState).label }}
+            {{ item.status === 'end-blocked' ? '结束受阻' : item.market === 'crypto-perpetual' && item.reviewState === 'reviewed' ? '已完成复盘' : getReplayHistoryStatePresentation(item.reviewState).label }}
           </span>
         </span>
         <span class="replay-history-list__meta">
+          <b>{{ item.market === 'crypto-perpetual' ? '加密合约' : 'A股' }}</b> ·
           {{ item.interval === "1m" ? "1 分钟" : item.interval === "hybrid" ? `日内模拟 · ${item.stepMinutes ?? 1}分钟` : "日线" }}
           {{ item.gameLength }} {{ item.interval === "1m" ? "分钟" : "日" }} · 已推进
           {{ item.progress?.current ?? 0 }} / {{ item.progress?.total ?? item.gameLength }}

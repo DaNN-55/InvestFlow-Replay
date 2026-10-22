@@ -37,6 +37,7 @@ export function getReplayHistoryStatePresentation(state) {
 }
 
 export function formatReplayHistoryIdentity(item) {
+  if (item?.market === 'crypto-perpetual') return item.instrumentId;
   if (!item?.revealed) {
     return `匿名演练 · ${String(item?.id ?? "").slice(0, 8)}`;
   }

@@ -16,7 +16,8 @@ test("replay setup presents the compact hero choices with one primary CTA", asyn
     /开始\{\{ form\.barInterval === "hybrid" \? "日内模拟" : "日线盲测" \}\}/u,
   );
   assert.match(setup, /replay-setup__hero/u);
-  assert.match(setup, /grid-template-columns: minmax\(0, 1fr\) minmax\(360px, 430px\)/u);
+  const startLayout = await readFile(new URL("../../src/components/replay/replay-start.css", import.meta.url), "utf8");
+  assert.match(startLayout, /grid-template-columns: minmax\(0, 1fr\) minmax\(360px, 430px\)/u);
   assert.match(setup, /这次怎么练？/u);
   assert.match(setup, /调整资金与成本/u);
   assert.match(setup, /<UiModal/u);

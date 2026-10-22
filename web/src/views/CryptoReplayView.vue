@@ -1,71 +1,98 @@
 <script setup>
-import { computed, onActivated, shallowRef, watch } from 'vue';
+import { computed, inject, onActivated, onDeactivated, onBeforeUnmount, reactive, ref, shallowRef, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { Settings2, Play, Pause } from 'lucide-vue-next';
 import { api } from '../services/api.js';
 import UiButton from '../components/ui/UiButton.vue';
 import UiSelect from '../components/ui/UiSelect.vue';
-import CandlestickChart from '../components/CandlestickChart.vue';
+import UiDrawer from '../components/ui/UiDrawer.vue';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
 import CryptoSetupPanel from '../components/crypto/CryptoSetupPanel.vue';
 import CryptoTradingPanel from '../components/crypto/CryptoTradingPanel.vue';
+import CryptoPositionPanel from '../components/crypto/CryptoPositionPanel.vue';
+import CryptoChartWorkspace from '../components/crypto/CryptoChartWorkspace.vue';
 import CryptoReviewPanel from '../components/crypto/CryptoReviewPanel.vue';
-import CryptoModelNotice from '../components/crypto/CryptoModelNotice.vue';
 import { createCryptoReplayController } from '../utils/cryptoReplayController.js';
-import { amount, CRYPTO_PERIODS, cryptoChartBars, cryptoChartLines, relativeTime } from '../utils/cryptoReplayPresentation.js';
-const state = shallowRef({});
-const controller = createCryptoReplayController({ api, storage: localStorage, changed: (value) => { state.value = value; } });
-state.value = { ...controller.state };
-const kind = shallowRef('last');
-const bars = computed(() => cryptoChartBars(state.value.market, kind.value));
-const s = computed(() => state.value.session);
-const priceLines = computed(() => cryptoChartLines(s.value, kind.value));
-const otherPriceLines = computed(() => cryptoChartLines(s.value).filter(line => line.reference !== kind.value));
-const locked = computed(() => state.value.busy || Boolean(state.value.pending));
-const selectableHistory = computed(() => state.value.history ?? []);
-function command(value, note = '') { return controller.act('command', { command: value, ...(note ? { note } : {}) }); }
-watch(() => s.value?.id, () => window.scrollTo({ top: 0 }));
-onActivated(() => controller.sync());
+import { amount, relativeTime } from '../utils/cryptoReplayPresentation.js';
+import { loadCryptoPreferences, CRYPTO_WORKSPACE_KEY, cryptoVisiblePeriods } from '../utils/cryptoWorkspacePreferences.js';
+import '../components/crypto/crypto-terminal.css';
+const route=useRoute(),router=useRouter();
+const openData=inject('openCryptoData',()=>{});
+const state=shallowRef({}),preferences=ref(loadCryptoPreferences(localStorage));
+const controller=createCryptoReplayController({api,storage:localStorage,changed:value=>{state.value=value;}});
+controller.state.timeframes=cryptoVisiblePeriods(preferences.value);controller.state.timeframe=controller.state.timeframes[0];state.value={...controller.state};
+const s=computed(()=>state.value.session);
+const routeMismatch=computed(()=>route.name==='crypto-market-replay'&&typeof route.query.session==='string'&&route.query.session!==s.value?.id);
+const locked=computed(()=>state.value.busy||Boolean(state.value.pending)||routeMismatch.value);
+const finishOpen=ref(false),settingsOpen=ref(false),playing=ref(false);
+const retraining=ref(false);
+const display=reactive({precision:'auto'});
+let playbackTimer;
+let lastRequestedSession=null;
+function records(focusCurrent=false) { playing.value=false;router.push({path:'/decision/trade-records',query:{tab:'replay',market:'crypto-perpetual',...(focusCurrent===true&&s.value?{session:s.value.id}:{})}}); }
+function command(value,note='') {playing.value=false;return controller.act('command',{command:value,...(note?{note}:{})});}
+async function fresh() {playing.value=false;await controller.fresh();if(!state.value.session) await router.replace({query:{}});}
+function ensurePeriods() {
+  const wanted=cryptoVisiblePeriods(preferences.value);
+  if(!state.value.busy && wanted.join(',')!==state.value.timeframes.join(',')) controller.periods(wanted);
+}
+watch(preferences,value=>{try {localStorage.setItem(CRYPTO_WORKSPACE_KEY,JSON.stringify(value));}catch{/* A full browser store must not block practice. */}ensurePeriods();},{deep:true});
+function syncRequestedSession() {
+  const id=route.query.session;
+  if(!state.value.busy&&!retraining.value&&route.name==='crypto-market-replay'&&typeof id==='string'&&id!==s.value?.id&&id!==lastRequestedSession) loadRequestedSession(id);
+}
+async function loadRequestedSession(id) {
+  if(state.value.busy) return;
+  stop();lastRequestedSession=id;
+  await controller.select(id);
+  if(!state.value.session&&!state.value.error&&route.query.session===id) await router.replace({query:{...route.query,session:undefined}});
+}
+function resync() {return typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync();}
+watch(()=>state.value.busy,value=>{if(!value) {syncRequestedSession();ensurePeriods();}});
+watch(()=>route.query.session,()=>{lastRequestedSession=null;syncRequestedSession();});
+onActivated(()=>typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync());
+async function advance(minutes=1) {playing.value=false;return controller.act('advance',{minutes});}
+async function tick() {
+  if(!playing.value||locked.value||s.value?.status!=='active'||s.value?.ending){playing.value=false;return;}
+  const sequence=state.value.traces.at(-1)?.sequence??0;
+  const ok=await controller.act('advance',{minutes:1});
+  const paused=state.value.traces.some(e=>e.sequence>sequence&&['order-filled','funding-settled','protection-triggered','teaching-liquidation','risk-triggered','end-filled','training-ended'].includes(e.type));
+  if(!ok||paused||s.value?.status!=='active') playing.value=false;
+  if(playing.value) playbackTimer=setTimeout(tick,900);
+}
+watch(playing,value=>{clearTimeout(playbackTimer);if(value) playbackTimer=setTimeout(tick,200);});
+function stop() {playing.value=false;clearTimeout(playbackTimer);}
+onDeactivated(stop);onBeforeUnmount(stop);
+async function finish() {stop();if(await controller.act('finish')) finishOpen.value=false;}
+async function retrain() {
+  stop();retraining.value=true;
+  try {if(await controller.act('retrain')) await router.replace({query:{session:state.value.session.id}});}
+  finally {retraining.value=false;}
+}
 </script>
 <template>
-  <div class="crypto-workspace" :aria-busy="state.busy">
-    <header class="crypto-header"><div><p class="eyebrow">决策台 / 合约盲测</p><h1>{{ s ? s.instrumentId : '合约练习' }} <span v-if="s">逐仓 · 单向</span></h1></div><div class="header-actions"><UiSelect aria-label="恢复历史合约练习" :model-value="s?.id ?? ''" :disabled="state.busy" @update:model-value="controller.select($event)"><option disabled value="">恢复历史练习</option><option v-for="h in selectableHistory" :key="h.id" :value="h.id">{{ h.instrumentId }} · {{ h.attemptInfo.kind === 'first' ? '首次' : '复练' }} #{{ h.attemptInfo.attemptNumber }} · {{ h.status === 'completed' ? '已结束' : '进行中' }}</option></UiSelect><UiButton v-if="s" variant="secondary" :disabled="locked" @click="controller.fresh()">新开一局</UiButton></div></header>
-    <div v-if="state.error" class="crypto-error" role="alert">{{ state.error }}<UiButton v-if="!state.pending" variant="secondary" :disabled="state.busy" @click="controller.sync()">重新同步</UiButton></div>
-    <div v-if="state.pending && !state.busy" class="crypto-pending" role="status">有一个动作的结果待核对。可以查看历史练习；请重试原动作，核对前不能提交新操作。<UiButton variant="secondary" @click="controller.retry()">重试原动作</UiButton></div>
-    <p v-if="state.busy" class="muted" role="status">正在保存与同步…</p>
-    <p v-else-if="state.notice" class="muted" role="status">{{ state.notice }}</p>
-    <p v-if="state.poolError" class="muted" role="status">{{ state.poolError }}</p>
-    <CryptoSetupPanel v-if="!s" :busy="state.busy" :pool="state.pool" :blocked="Boolean(state.pending) || Boolean(state.poolError)" @create="controller.act('create', $event)" />
+  <div class="crypto-workspace crypto-controls" :class="{'crypto-workspace--setup':!s}" :aria-busy="state.busy">
+    <header v-if="s" class="crypto-header"><div><p class="crypto-eyebrow">USDT 永续 / 历史盲测</p><h1>{{ s?s.instrumentId:'合约练习' }} <span v-if="s">逐仓 · 单向</span></h1><div v-if="s" class="crypto-quotes"><span>最新价 <b data-testid="crypto-last">{{ amount(s.currentPrices.last,4) }}</b></span><span>标记价格 <b>{{ amount(s.currentPrices.mark,4) }}</b></span></div></div><div class="crypto-header-actions"><UiButton variant="secondary" @click="records">演练记录</UiButton><button v-if="s" type="button" class="crypto-icon" aria-label="交易与显示设置" title="交易与显示设置" @click="settingsOpen=true"><Settings2 :size="17" /></button><UiButton v-if="s" variant="secondary" :disabled="locked" @click="fresh">新开一局</UiButton></div></header>
+    <div v-if="state.error" class="crypto-alert" role="alert"><span>{{ state.error }}</span><UiButton v-if="!state.pending" variant="secondary" :disabled="state.busy" @click="resync">重新同步</UiButton></div>
+    <div v-if="state.pending&&!state.busy" class="crypto-alert" role="status"><span>上次动作的结果待核对；核对前不能提交新动作。可以从演练记录查看历史。</span><UiButton variant="secondary" @click="controller.retry()">重试原动作</UiButton></div>
+    <p v-if="state.busy" class="crypto-save-status" role="status">正在同步与保存…</p><p v-else-if="state.notice" class="crypto-save-status" role="status">{{ state.notice }}</p>
+    <p v-if="state.poolError" class="crypto-muted" role="status">{{ state.poolError }}</p>
+    <CryptoSetupPanel v-if="!s" :busy="state.busy" :pool="state.pool" :history="state.history" :blocked="Boolean(state.pending)||Boolean(state.poolError)" @create="controller.act('create',$event)" @resume="controller.select($event)" @records="records" />
     <template v-else>
-      <CryptoModelNotice location="setup" />
-      <div class="crypto-account" data-testid="crypto-account"><div><span>账户权益 · USDT</span><strong>{{ amount(s.summary.accountEquity, 8) }}</strong></div><div><span>仓外可用</span><strong data-testid="crypto-available">{{ s.account.availableBalance }}</strong></div><div><span>委托冻结</span><strong>{{ amount(s.reservedBalance, 8) }}</strong></div><div><span>本次净盈亏</span><strong>{{ amount(s.summary.netPnl, 8) }}</strong></div></div>
-      <div class="crypto-progress"><span>{{ relativeTime(s.elapsedMinutes) }} · 已展示 {{ s.elapsedMinutes }}/{{ s.gameLength }} 分钟</span><span>{{ s.config.leverage }} 倍 · {{ s.attemptInfo.kind === 'first' ? '首次练习' : `已见复练 #${s.attemptInfo.attemptNumber}` }}</span><progress :value="s.elapsedMinutes" :max="s.gameLength" aria-label="训练进度" /></div>
-      <div class="crypto-grid">
-        <div class="crypto-main">
-          <section class="crypto-chart">
-            <div class="chart-toolbar"><h2>观察行情</h2><UiSelect v-model="kind" aria-label="图表价格"><option value="last">普通价格 last</option><option value="mark">标记价格 mark</option></UiSelect><UiSelect aria-label="K线周期" :model-value="String(state.timeframe)" :disabled="state.busy" @update:model-value="controller.period($event)"><option v-for="[value,label] in CRYPTO_PERIODS" :key="value" :value="String(value)">{{ label }}</option></UiSelect></div>
-            <div class="crypto-quotes"><span>普通价格 <strong data-testid="crypto-last">{{ amount(s.currentPrices.last, 4) }}</strong></span><span>标记价格 <strong>{{ amount(s.currentPrices.mark, 4) }}</strong></span></div>
-            <p class="muted">90 天背景，72 小时练习与一个结束执行分钟。仅聚合服务端已知分钟；形成中 K 线只含已知部分。图表显示最近 {{ bars.length }} / {{ state.market?.availableBars ?? 0 }} 根，1day 可观察完整背景。</p>
-            <CandlestickChart v-if="state.market" :key="`${s.id}:${state.timeframe}:${kind}`" :bars="bars" :price-lines="priceLines" />
-            <p v-else role="status">正在同步已展示行情…</p>
-            <p v-if="otherPriceLines.length" class="muted">另有 {{ otherPriceLines.length }} 条计划/委托/保护使用另一价格流；请切换图表价格查看，触发参考不会随图表切换改变。</p>
-            <div class="advance-bar"><UiButton :disabled="locked || s.status !== 'active'" @click="controller.act('advance', { minutes: 1 })">推进 1 分钟</UiButton><UiButton variant="secondary" :disabled="locked || s.status !== 'active'" @click="controller.act('advance', { minutes: 5 })">推进 5 分钟</UiButton><UiButton variant="secondary" :disabled="locked || s.status !== 'active'" @click="controller.act('advance', { minutes: 15 })">推进 15 分钟</UiButton><UiButton variant="secondary" :disabled="locked || s.status !== 'active' || s.ending" @click="controller.act('finish')">结束并退出</UiButton></div>
-            <p class="muted">成交、持仓资金费、保护触发或教学强平后自动暂停在该分钟；一次点击未必推进满所选分钟。结束平仓也受容量限制。</p>
-            <p v-if="s.ending" role="status" class="end-warning">{{ s.status === 'end-blocked' ? '结束受阻：预留分钟容量不足，仍有仓位；保留该状态，不能揭晓或复练。' : '正在结束：继续推进以退出剩余仓位，不再新开仓。' }}</p>
-          </section>
-          <CryptoReviewPanel :key="s.id" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)" @blind="controller.act('blind', { review: $event })" @reveal="controller.act('reveal')" @post="controller.act('post', { review: $event })" @retrain="controller.act('retrain')" />
+      <div class="crypto-account" data-testid="crypto-account"><div v-for="[label,value,id] in [['账户权益 · USDT',s.summary.accountEquity,'crypto-equity'],['仓外可用',s.account.availableBalance,'crypto-available'],['委托冻结',s.reservedBalance,'crypto-reserved'],['本次净盈亏',s.summary.netPnl,'crypto-net-summary']]" :key="label"><span>{{ label }}</span><strong :data-testid="id" :title="String(value)">{{ amount(value,display.precision==='full'?8:2) }}</strong></div></div>
+      <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed}">
+        <div class="crypto-terminal-main">
+          <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" />
+          <div class="crypto-playback"><button type="button" class="crypto-icon" :aria-label="playing?'暂停回放':'自动回放'" :disabled="locked||s.status!=='active'||s.ending" @click="playing=!playing"><Pause v-if="playing" :size="16" /><Play v-else :size="16" /></button><div><strong>{{ relativeTime(s.elapsedMinutes) }}</strong><small>{{ s.attemptInfo.kind==='first'?'首次盲测':`复练 #${s.attemptInfo.attemptNumber}` }} · {{ s.config.leverage }}倍</small></div><progress :value="s.elapsedMinutes" :max="s.gameLength" aria-label="训练进度" /><UiButton v-for="n in [1,5,15]" :key="n" variant="secondary" :disabled="locked||s.status!=='active'" @click="advance(n)">推进 {{ n }} 分钟</UiButton><UiButton variant="secondary" class="crypto-finish" :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton></div>
+          <p v-if="s.ending&&s.status!=='completed'" class="crypto-alert" role="status">{{ s.status==='end-blocked'?'结束受阻：预留分钟容量不足，仍有仓位；不能揭晓或复练。':'正在结束：继续推进以退出剩余仓位，不再新开仓。' }}</p>
+          <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @command="command" @records="records" />
+          <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
+          <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
         </div>
-        <CryptoTradingPanel :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="Boolean(state.pending)" @command="command" />
+        <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @command="command" />
       </div>
     </template>
+    <UiDrawer :open="settingsOpen" title="交易与显示设置" description="交易参数开局后冻结；显示偏好可随时调整。" panel-class="crypto-controls crypto-data-drawer" @close="settingsOpen=false"><label>账户数字精度<UiSelect v-model="display.precision" aria-label="账户数字显示精度"><option value="auto">摘要 · 两位小数</option><option value="full">完整 · 八位小数</option></UiSelect></label><p>布局、各图周期和联动开关会在本浏览器记住。</p><template v-if="s"><dl class="crypto-detail-facts"><div><dt>杠杆 / 持仓</dt><dd>{{ s.config.leverage }}倍 · 逐仓单向</dd></div><div><dt>固定 Maker / Taker</dt><dd>{{ Number(s.frozenRules.makerRate)*100 }}% / {{ Number(s.frozenRules.takerRate)*100 }}%</dd></div><div><dt>单边教学滑点</dt><dd>{{ s.frozenRules.slippageBps }} bps</dd></div></dl></template><button type="button" class="crypto-text-button" @click="settingsOpen=false;openData()">查看数据来源与完整规则</button></UiDrawer>
+    <ConfirmDialog :open="finishOpen" title="结束本次练习？" message="结束练习会处理剩余仓位；退出完成后先提交盲评，再揭晓。仅平仓请使用图表下方的持仓操作。" confirm-text="结束并进入盲评" :busy="state.busy" @cancel="finishOpen=false" @confirm="finish" />
   </div>
 </template>
-<style scoped>
-.crypto-workspace :deep(.ql-ui-control) { min-height: 40px; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; box-shadow: none; color: #344054; font-size: 13px; }
-.crypto-workspace :deep(.ql-ui-control:focus) { border-color: #2563eb; box-shadow: 0 0 0 3px rgb(37 99 235 / 14%); }
-.crypto-workspace :deep(.ql-ui-control:disabled) { background: #f2f4f7; }
-.crypto-workspace :deep(.ql-ui-button) { min-height: 40px; border-radius: 8px; font-size: 13px; }
-.crypto-workspace { display: flex; flex-direction: column; gap: 16px; padding-top: 22px; min-width: 0; }.crypto-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }.eyebrow { margin: 0 0 6px; color: var(--ql-accent); font-size: 11px; font-weight: 700; }h1 { margin: 0; font-size: 27px; letter-spacing: -.035em; }h1 span { font-size: 12px; font-weight: 500; color: var(--ql-color-text-muted); margin-left: 10px; }.header-actions { display: flex; gap: 10px; min-width: 0; }.header-actions > :first-child { max-width: 300px; }
-.crypto-account { display: grid; grid-template-columns: repeat(4,1fr); gap: 20px; border-block: 1px solid var(--ql-line); padding: 18px 0; min-width: 0; }.crypto-account span { display: block; font-size: 12px; color: var(--ql-color-text-muted); margin-bottom: 7px; }.crypto-account strong { font-size: clamp(14px,1.65vw,22px); font-variant-numeric: tabular-nums; letter-spacing: -.02em; overflow-wrap: anywhere; }
-.crypto-progress { display: flex; align-items: center; gap: 20px; font-size: 12px; color: var(--ql-color-text-muted); flex-wrap: wrap; }progress { width: 180px; height: 5px; accent-color: var(--ql-accent); }
-.crypto-grid { display: grid; grid-template-columns: minmax(0,1fr) 365px; gap: 20px; align-items: start; }.crypto-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }.crypto-chart { min-width: 0; padding: 18px; border: 1px solid var(--ql-line-strong); border-radius: 10px; background: var(--ql-panel); }.chart-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }.chart-toolbar h2 { margin: 0 auto 0 0; font-size: 16px; }.crypto-quotes { display: flex; gap: 25px; margin: 20px 0 0; font-size: 12px; color: var(--ql-color-text-muted); }.crypto-quotes strong { margin-left: 6px; color: var(--ql-ink); font-variant-numeric: tabular-nums; }.advance-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }.muted { margin: 7px 0; color: var(--ql-color-text-muted); font-size: 12px; line-height: 1.8; }.crypto-error { padding: 12px; border: 1px solid #dc2626; border-radius: 8px; display: flex; align-items: center; gap: 15px; font-size: 13px; }.crypto-pending,.end-warning { padding: 12px; background: var(--ql-color-primary-soft); font-size: 13px; line-height: 1.8; }
-@media(max-width:1050px) { .crypto-grid { display: flex; flex-direction: column; }.crypto-main { display: contents; }.crypto-chart { width: 100%; }.crypto-grid > aside { order: 1; width: 100%; }.crypto-grid :deep(.crypto-review) { order: 2; width: 100%; }.crypto-account { grid-template-columns: 1fr 1fr; }.crypto-header { align-items: flex-start; flex-direction: column; }.header-actions { width: 100%; }.header-actions > :first-child { max-width: none; flex: 1; } }
-@media(max-width:600px) { .crypto-chart { padding: 12px; }h1 { font-size: 23px; }.crypto-account { gap: 16px 8px; }.crypto-error { align-items: flex-start; flex-direction: column; } }
-</style>

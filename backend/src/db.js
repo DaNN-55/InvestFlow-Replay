@@ -3018,8 +3018,9 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           ELSE 'reviewed'
         END
       `;
-      const conditions = ["sessions.deleted_at IS NULL", "sessions.market = ?"];
-      const parameters = [market];
+      const conditions = ["sessions.deleted_at IS NULL"];
+      const parameters = [];
+      if (market !== "all") { conditions.push("sessions.market = ?"); parameters.push(market); }
       const stateConditions = {
         active: "sessions.status = 'active'",
         skipped: "sessions.completion_reason = 'no_opportunity'",
@@ -3057,6 +3058,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           `
           (
             sessions.id LIKE ?
+            OR (sessions.market = 'crypto-perpetual' AND COALESCE(json_extract(sessions.snapshot_json, '$.instrumentId'), '') LIKE ?)
             OR COALESCE(reviews.blind_json, '') LIKE ?
             OR (
               sessions.revealed_at IS NOT NULL
@@ -3074,6 +3076,7 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
           `,
         );
         parameters.push(
+          pattern,
           pattern,
           pattern,
           pattern,

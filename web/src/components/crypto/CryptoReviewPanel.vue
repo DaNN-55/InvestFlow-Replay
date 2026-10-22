@@ -4,7 +4,7 @@ import UiButton from '../ui/UiButton.vue';
 import UiTextarea from '../ui/UiTextarea.vue';
 import CryptoModelNotice from './CryptoModelNotice.vue';
 import { amount, exact, eventName, relativeTime, commandName, eventReason } from '../../utils/cryptoReplayPresentation.js';
-const props = defineProps({ session: { type: Object, required: true }, traces: { type: Array, default: () => [] }, ledger: { type: Array, default: () => [] }, busy: Boolean, blocked: Boolean, analysis: { type: Object, default: null }, analysisError: { type: String, default: '' } });
+const props = defineProps({ session: { type: Object, required: true }, traces: { type: Array, default: () => [] }, ledger: { type: Array, default: () => [] }, busy: Boolean, blocked: Boolean, readonly: Boolean, analysis: { type: Object, default: null }, analysisError: { type: String, default: '' } });
 const emit = defineEmits(['blind', 'reveal', 'post', 'retrain']);
 const draft = reactive({ thesis: '', tradePlan: '', observation: '', executionLesson: '', nextAttempt: '' });
 watch(() => props.session.id, () => { const blind = props.session.blindReview, post = props.session.trainingJournal.postReview; Object.assign(draft, { thesis: blind?.thesis ?? '', tradePlan: blind?.tradePlan ?? '', observation: post?.observation ?? '', executionLesson: post?.executionLesson ?? '', nextAttempt: post?.nextAttempt ?? '' }); }, { immediate: true });
@@ -12,7 +12,7 @@ const liquidations = computed(() => props.traces.filter((e) => e.type === 'teach
 const interesting = computed(() => props.traces.filter((e) => e.type !== 'funding-skipped'));
 const metrics = computed(() => props.analysis?.analysis);
 const returnPercent = computed(() => metrics.value?.returnPercent ?? Number(props.session.summary.netPnl) / Number(props.session.config.startingCash) * 100);
-const disabled = computed(() => props.busy || props.blocked);
+const disabled = computed(() => props.busy || props.blocked || props.readonly);
 </script>
 <template>
   <section class="crypto-review" aria-label="合约复盘">

@@ -1,12 +1,16 @@
 <script setup>
 import { ChartCandlestick, Coins, ClipboardList, Moon, Sun } from "lucide-vue-next";
-import { onMounted, ref } from "vue";
+import { onMounted, ref, provide } from "vue";
+import { Database } from 'lucide-vue-next';
+import CryptoDataPanel from './components/crypto/CryptoDataPanel.vue';
 import { RouterLink, RouterView, useRoute } from "vue-router";
 
 import ReplayCacheStatus from "./components/ReplayCacheStatus.vue";
 
 const dark = ref(true);
 const route = useRoute();
+const cryptoDataOpen = ref(false);
+provide('openCryptoData',()=>{cryptoDataOpen.value=true;});
 
 function applyTheme() {
   document.documentElement.dataset.theme = dark.value ? "dark" : "light";
@@ -43,6 +47,7 @@ onMounted(() => {
       </nav>
       <div class="standalone-shell__actions">
         <ReplayCacheStatus v-if="route.name !== 'crypto-market-replay'" />
+        <button v-else type="button" class="standalone-shell__theme" aria-label="合约行情数据" title="合约数据池、来源与训练规则" @click="cryptoDataOpen=true"><Database :size="17" /></button>
         <button class="standalone-shell__theme" type="button" aria-label="切换主题" @click="toggleTheme">
           <Sun v-if="dark" :size="18" />
           <Moon v-else :size="18" />
@@ -56,6 +61,7 @@ onMounted(() => {
         </KeepAlive>
       </RouterView>
     </main>
+    <CryptoDataPanel :open="cryptoDataOpen" @close="cryptoDataOpen=false" />
   </div>
 </template>
 
