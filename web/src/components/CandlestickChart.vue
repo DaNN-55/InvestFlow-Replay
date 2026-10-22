@@ -123,7 +123,7 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
         <Eraser :size="15" />
       </button>
     </div>
-    <ul v-if="priceLines.length" class="replay-price-lines" aria-label="当前图表状态线">
+    <ul v-if="priceLines.length" class="replay-price-lines" :class="{'replay-price-lines--compact':compact}" aria-label="当前图表状态线">
       <li v-for="line in priceLines" :key="line.id" :data-price-line-id="line.id" :data-price-line-value="line.price" :data-price-line-quantity="line.contracts"><span :style="{ borderColor: line.color, borderStyle: line.dashed ? 'dashed' : 'solid' }" />{{ line.label }} · {{ line.price }}</li>
     </ul>
     <div
@@ -241,5 +241,6 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
 <style scoped>
 .replay-price-lines { list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 11px; border-bottom: 1px solid var(--ql-line); }
 .replay-price-lines li { display: inline-flex; align-items: center; gap: 6px; }
+.replay-price-lines--compact { position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0; }
 .replay-price-lines span { width: 20px; border-top-width: 2px; }
 </style>

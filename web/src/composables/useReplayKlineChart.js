@@ -282,13 +282,16 @@ export function useReplayKlineChart({
   function syncPriceLines() {
     const current = chart.value;
     if (!current || !appliedData.length) return;
-    const nextKey = JSON.stringify(priceLines.value);
+    const rootStyle=getComputedStyle(document.documentElement);
+    const background=cssToken(rootStyle,'--ql-color-bg-surface-strong','#ffffff');
+    const accent=cssToken(rootStyle,'--ql-accent','#2563eb');
+    const nextKey = JSON.stringify([priceLines.value,background,accent]);
     if (nextKey === priceLineKey) return;
     for (const id of priceLineIds) current.removeOverlay(id);
     priceLineIds = []; priceLineKey = nextKey;
-    for (const line of priceLines.value) {
+    for (const [tagIndex,line] of priceLines.value.entries()) {
       const id = current.createOverlay({ name: REPLAY_PRICE_LINE_OVERLAY.name, id: line.id,
-        groupId: REPLAY_PRICE_LINE_GROUP, lock: true, points: [{ value: Number(line.price) }], extendData: line }, CANDLE_PANE_ID);
+        groupId: REPLAY_PRICE_LINE_GROUP, lock: true, points: [{ value: Number(line.price) }], extendData: {...line,color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price})=>({id,price}))} }, CANDLE_PANE_ID);
       if (id) priceLineIds.push(id);
     }
   }
@@ -522,9 +525,10 @@ export function useReplayKlineChart({
     chart.value.subscribeAction(ActionType.OnCrosshairChange, crosshairChanged);
     resizeObserver = new ResizeObserver(() => chart.value?.resize());
     resizeObserver.observe(host.value);
-    themeObserver = new MutationObserver(() =>
-      chart.value?.setStyles(resolveChartStyles(mainIndicatorLegends, model.value?.colors, model.value?.compact))
-    );
+    themeObserver = new MutationObserver(() => {
+      chart.value?.setStyles(resolveChartStyles(mainIndicatorLegends, model.value?.colors, model.value?.compact));
+      syncPriceLines();
+    });
     themeObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["data-theme"],

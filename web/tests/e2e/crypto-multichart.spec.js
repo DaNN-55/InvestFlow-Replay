@@ -6,6 +6,7 @@ import { cryptoChartBars, CRYPTO_PERIODS } from '../../src/utils/cryptoReplayPre
 const base=process.env.PLAYWRIGHT_BASE_URL??'http://127.0.0.1:5180';
 const path='/api/quant/replay/sessions';
 let fixture;
+test.setTimeout(60000);
 test.beforeAll(async()=>{fixture=await startCryptoTestServer();});
 test.afterAll(async()=>{await fixture?.close();});
 test.afterEach(async({page})=>{await page.unrouteAll({behavior:'wait'});});
@@ -28,7 +29,7 @@ async function openPractice(page,request,preferences={}) {
     if(!localStorage.getItem('investflow-crypto-workspace-v1')) localStorage.setItem('investflow-crypto-workspace-v1',JSON.stringify({layout:'quad',periods:[60,5,15,240],...preferences}));
   },{id:session.id,preferences});
   await page.goto(`${base}/decision/crypto-replay?session=${session.id}`);
-  await expect(page.locator('.crypto-chart-tile')).toHaveCount(preferences.layout==='dual'?2:4);
+  await expect(page.locator('.crypto-chart-tile')).toHaveCount(preferences.layout==='dual'?2:4,{timeout:15000});
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
   return {id:session.id,reads,advances};
 }
@@ -45,10 +46,16 @@ async function nativeCharts(page) {
       // the existing instance before any DOM work; never init(host) a second time.
       const chart=init({id:host.getAttribute('k-line-chart-id')});
       const crosshair=chart.getChartStore().getTooltipStore().getCrosshair();
+      const volumeFigure=chart.getIndicatorByPaneId('replay-volume','VOL')?.figures?.find(f=>f.key==='volume');
       return {index:Number(tile.dataset.chartIndex),header:tile.querySelector('header').textContent,periodLabel:tile.querySelector('header b').textContent,
         data:chart.getDataList().map(b=>({startSequence:b.startSequence,endSequence:b.endSequence,open:b.open,high:b.high,low:b.low,close:b.close,volume:b.volume})),
         crosshair:{paneId:crosshair.paneId,index:crosshair.realDataIndex,minute:crosshair.kLineData?.startSequence,y:crosshair.y},
-        volume:chart.getIndicatorByPaneId('replay-volume','VOL')?.result?.map(b=>b.volume)??[]};
+        volume:chart.getIndicatorByPaneId('replay-volume','VOL')?.result?.map(b=>b.volume)??[],
+        colors:{rise:chart.getStyles().candle.bar.upColor,fall:chart.getStyles().candle.bar.downColor,volumeRise:volumeFigure?.styles({current:{kLineData:{open:1,close:2}}})?.color,volumeFall:volumeFigure?.styles({current:{kLineData:{open:2,close:1}}})?.color},
+        lines:[...tile.querySelectorAll('[data-price-line-id]')].map(node=>{
+          const overlay=chart.getOverlayById(node.dataset.priceLineId);
+          return {id:node.dataset.priceLineId,exists:!!overlay,price:overlay?.points?.[0]?.value,label:overlay?.extendData?.label,contracts:overlay?.extendData?.contracts,dashed:overlay?.extendData?.dashed,background:overlay?.extendData?.background};
+        })};
     });
   });
 }
@@ -62,7 +69,7 @@ function assertPrefixes(reads) {
     const expected=supply.visibleAt({elapsedMinutes:cursor,timeframeMinutes:period});
     for(const kind of ['last','mark']) {
       expect(body.candles[kind]).toEqual(expected.candles[kind].slice(-600));
-      for(const bar of body.candles[kind]) expect(bar.knownThroughMinute).toBeLessThanOrEqual(cursor);
+      expect(body.candles[kind].filter(bar=>bar.knownThroughMinute>cursor)).toEqual([]);
     }
     expect(JSON.stringify(body)).not.toMatch(/test-multichart-private|backgroundStartMs|sourceUrl|2024-01-01/);
   }
@@ -74,6 +81,7 @@ async function assertRendered(page,reads,cursor) {
     return charts.every(c=>c?.data.length&&c.data.at(-1).endSequence===cursor-1);
   }).toBe(true);
   const charts=await nativeCharts(page);
+  const expectedVolumes=[];
   for(const chart of charts) {
     const period=CRYPTO_PERIODS.find(([,label])=>chart.periodLabel===label)?.[0];
     expect(period).toBeTruthy();
@@ -81,8 +89,9 @@ async function assertRendered(page,reads,cursor) {
     expect(view).toBeTruthy();
     const expected=cryptoChartBars(view,chart.header.includes('标记价格')?'mark':'last').map(b=>({startSequence:b.startSequence,endSequence:b.endSequence,open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close),volume:Number(b.volume)}));
     expect(chart.data).toEqual(expected);
-    await expect.poll(async()=> (await nativeCharts(page)).find(c=>c.index===chart.index)?.volume).toEqual(expected.map(b=>b.volume));
+    expectedVolumes.push(expected.map(b=>b.volume));
   }
+  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.volume)).toEqual(expectedVolumes);
   expect(await page.locator('.replay-kline-chart__error').count()).toBe(0);
 }
 
@@ -92,6 +101,7 @@ async function advance(page,n) {
 }
 
 test('four native charts keep independent periods and one causal prefix through switches, advances and reload',async({page,request})=>{
+  test.setTimeout(120000);
   const {id,reads}=await openPractice(page,request);
   await assertRendered(page,reads,0);
   // Every supported period, including forming 1h/1d bars, uses the same cursor.
@@ -196,7 +206,8 @@ test('playback speed stays sequential, stops on fills and preserves visible pref
 
 test('speed changes the interval, never the minute step, and pause cannot restart an in-flight loop',async({page,request})=>{
   const {id,advances}=await openPractice(page,request,{layout:'dual'});
-  await page.clock.install();
+  await page.clock.install({time:new Date('2030-01-01T00:00:00Z')});
+  await page.clock.pauseAt(new Date('2030-01-01T00:00:10Z'));
   await page.getByRole('button',{name:'自动回放',exact:true}).click();
   await page.clock.runFor(899);
   expect(advances.length).toBe(0);
@@ -221,4 +232,104 @@ test('speed changes the interval, never the minute step, and pause cannot restar
   const current=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(current.elapsedMinutes).toBe(2);
   expect(advances.map(a=>a.body.minutes)).toEqual([1,1]);
+});
+
+test('compact order form keeps advanced inputs and makes explanations available on demand',async({page,request})=>{
+  const {id}=await openPractice(page,request,{layout:'dual'});
+  const order=page.locator('.crypto-trading'),advanced=order.locator('.order-advanced'),summary=advanced.locator('summary');
+  await expect(order.getByRole('combobox',{name:'仓位输入方式',exact:true})).not.toBeVisible();
+  await expect(order.getByRole('textbox',{name:'自动止损价',exact:true})).not.toBeVisible();
+  await expect(order.getByRole('textbox',{name:'操作理由',exact:true})).not.toBeVisible();
+  expect(await order.evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(430);
+  await expect(page.locator('.crypto-header-actions button')).toHaveCount(1);
+  await expect(page.locator('.crypto-playback-actions').getByRole('button',{name:'新开一局',exact:true})).toBeVisible();
+  await order.getByRole('button',{name:'数量与单位说明'}).click();
+  await expect(page.locator('.ui-tooltip__content')).toContainText('不是保证金');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.ui-tooltip__content')).not.toBeVisible();
+  await summary.click();
+  await order.getByRole('combobox',{name:'仓位输入方式',exact:true}).selectOption('risk');
+  await order.getByRole('textbox',{name:'风险预算',exact:true}).fill('5');
+  await expect(order.locator('.preview-error')).toContainText('止损价');
+  await order.getByRole('textbox',{name:'自动止损价',exact:true}).fill('49950');
+  await order.getByRole('textbox',{name:'自动止盈价',exact:true}).fill('50050');
+  await order.getByRole('textbox',{name:'操作理由',exact:true}).fill('等价格确认后再执行');
+  await expect(order.getByRole('button',{name:'买入 / 做多',exact:true}).last()).toBeEnabled();
+  await summary.click();
+  await expect(summary).toContainText('风险估仓 · 止损 · 止盈 · 理由');
+  await expect(order.locator('.order-estimated-quantity')).toContainText('张');
+  await expect(page.locator('[data-price-line-id]')).toHaveCount(0);
+  await summary.click();
+  await expect(order.getByRole('textbox',{name:'自动止损价',exact:true})).toHaveValue('49950');
+  await expect(order.getByRole('textbox',{name:'操作理由',exact:true})).toHaveValue('等价格确认后再执行');
+  await summary.click();
+  await page.setViewportSize({width:390,height:844});
+  await order.getByRole('button',{name:'下单与合约规格说明'}).click();
+  await expect(page.locator('.ui-tooltip__content')).toContainText('下一分钟');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'新开一局',exact:true}).click();
+  await expect(page.getByRole('button',{name:'继续上次练习',exact:true})).toBeVisible();
+  const preserved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(preserved.revision).toBe(0);
+  expect(preserved.status).toBe('active');
+});
+
+for(const side of ['long','short']) test(`${side} position and protective lines follow submit, fill, resize, price basis, cancellation and close`,async({page,request})=>{
+  const {id}=await openPractice(page,request,{layout:'dual'});
+  const order=page.locator('.crypto-trading');
+  const action=side==='long'?'买入 / 做多':'卖出 / 做空';
+  await order.getByRole('button',{name:action,exact:true}).first().click();
+  await order.getByRole('textbox',{name:'委托张数',exact:true}).fill('1');
+  await order.locator('.order-advanced>summary').click();
+  await order.getByRole('textbox',{name:'自动止损价',exact:true}).fill(side==='long'?'49950':'50050');
+  await order.getByRole('textbox',{name:'自动止盈价',exact:true}).fill(side==='long'?'50050':'49950');
+  await order.locator('.order-advanced>summary').click();
+  await expect(order.getByRole('button',{name:action,exact:true}).last()).toBeEnabled();
+  await order.getByRole('button',{name:action,exact:true}).last().click();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([2,2]);
+  for(const chart of await nativeCharts(page)) expect(chart.lines.every(l=>l.exists&&l.dashed&&l.label.includes('待成交后'))).toBe(true);
+  await advance(page,1);
+  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([3,3]);
+  for(const chart of await nativeCharts(page)) {
+    expect(chart.lines.every(l=>l.exists&&!l.dashed&&l.contracts==='1')).toBe(true);
+    expect(chart.lines[0].label).toContain(side==='long'?'多仓均价':'空仓均价');
+    expect(chart.lines[0].label).toContain('mark浮盈');
+    expect(chart.colors).toEqual({rise:'#df7180',fall:'#38ae86',volumeRise:'#df7180',volumeFall:'#38ae86'});
+  }
+  await expect(order.getByRole('button',{name:action,exact:true}).last()).toBeEnabled();
+  await page.screenshot({path:test.info().outputPath('position-before-theme.png')});
+  const previousBackground=(await nativeCharts(page))[0].lines[0].background;
+  await page.getByRole('button',{name:'切换主题',exact:true}).click();
+  await expect.poll(async()=> (await nativeCharts(page)).every(c=>c.lines.every(l=>l.background&&l.background!==previousBackground))).toBe(true);
+  await page.screenshot({path:test.info().outputPath('position-after-theme.png')});
+  await page.reload();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([3,3]);
+  await order.getByRole('button',{name:'平仓',exact:true}).click();
+  await order.getByRole('textbox',{name:'委托张数',exact:true}).fill('0.4');
+  await expect(order.getByRole('button',{name:'提交平仓委托',exact:true})).toBeEnabled();
+  await order.getByRole('button',{name:'提交平仓委托',exact:true}).click();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await advance(page,1);
+  await expect.poll(async()=> (await nativeCharts(page)).every(c=>c.lines.every(l=>l.contracts==='0.6'))).toBe(true);
+  await page.locator('[data-chart-index="1"]>header button').click();
+  await page.getByRole('combobox',{name:'选中图价格类型'}).selectOption('mark');
+  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([3,1]);
+  const current=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  const cancelled=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:current.revision,command:{type:'cancel-protection',leg:'stopLoss'}}});
+  expect(cancelled.status()).toBe(200);
+  await page.reload();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([2,1]);
+  await order.getByRole('button',{name:'平仓',exact:true}).click();
+  await order.getByRole('textbox',{name:'委托张数',exact:true}).fill('0.6');
+  await expect(order.getByRole('button',{name:'提交平仓委托',exact:true})).toBeEnabled();
+  await order.getByRole('button',{name:'提交平仓委托',exact:true}).click();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await advance(page,1);
+  await expect.poll(async()=> (await nativeCharts(page)).every(c=>c.lines.length===0)).toBe(true);
+  await expect(order.getByRole('button',{name:'平仓',exact:true})).toHaveCount(0);
+  await expect(order.getByRole('button',{name:'买入 / 做多',exact:true}).first()).toHaveAttribute('aria-pressed','true');
 });

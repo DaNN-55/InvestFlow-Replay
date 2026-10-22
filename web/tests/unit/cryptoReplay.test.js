@@ -133,6 +133,42 @@ test('F1 preview loader rejects late and mismatched session responses', async ()
   const c = loader.load({ sessionId: 'b', expectedRevision: 3 }); waiting[2]({ preview: { sessionId: 'b', revision: 2 } }); await c;
   assert.match(values.at(-1).error, /会话已变化/); assert.equal(values.at(-1).preview, null);
 });
+test('chart distinguishes filled long/short positions, active protection and pending attached protection', async()=>{
+  const {cryptoChartLines}=await import('../../src/utils/cryptoReplayPresentation.js');
+  const s=session();
+  s.account.position={side:'long',entryPrice:'50000',contracts:'3'};
+  s.risk={unrealizedPnl:'12.50'};
+  s.orders=[{id:'waiting',type:'limit',side:'long',remainingContracts:'2',limitPrice:'49900',attachedProtection:{stopLoss:{price:'49000',reference:'last'}}}];
+  s.protection={contracts:'3',stopLoss:{price:'49500',reference:'last'},takeProfit:{price:'51000',reference:'mark'}};
+  const last=cryptoChartLines(s,'last'),mark=cryptoChartLines(s,'mark');
+  assert.match(last[0].label,/多仓均价.*\+12.50 USDT.*3张/);
+  assert.equal(mark[0].price,'50000');
+  assert.ok(last.some(l=>l.label.includes('待成交后止损')&&l.dashed&&l.contracts==='2'));
+  assert.ok(last.some(l=>l.id.endsWith(':stopLoss')&&!l.dashed&&l.contracts==='3'));
+  assert.ok(mark.some(l=>l.id.endsWith(':takeProfit')));
+  assert.ok(!last.some(l=>l.id.endsWith(':takeProfit')));
+  s.orders[0].protectionApplied=true;
+  assert.ok(!cryptoChartLines(s,'last').some(l=>l.label.includes('待成交后止损')));
+  s.account.position.side='short';s.risk.unrealizedPnl='-2';
+  assert.match(cryptoChartLines(s,'last')[0].label,/空仓均价.*-2.00/);
+  s.account.position=null;s.orders=[];s.protection=null;
+  assert.deepEqual(cryptoChartLines(s,'last'),[]);
+});
+test('price tags have axis prices and honest off-screen arrows without a clamped price line',async()=>{
+  const {REPLAY_PRICE_LINE_OVERLAY:overlay}=await import('../../src/utils/replayPriceLines.js');
+  const context={coordinates:[{y:30}],bounding:{width:400,height:200},overlay:{extendData:{color:'green',label:'自动止盈',price:'51000',background:'#101828'}}};
+  assert.equal(overlay.createPointFigures(context)[1].styles.backgroundColor,'#101828');
+  assert.equal(overlay.createYAxisFigures(context)[0].attrs.text,'51000');
+  const outside={...context,coordinates:[{y:-50}]};
+  const figures=overlay.createPointFigures(outside);
+  assert.equal(figures.length,1);assert.equal(figures[0].type,'text');
+  assert.match(figures[0].attrs.text,/↑.*51000/);
+  assert.deepEqual(overlay.createYAxisFigures(outside),[]);
+  const levels=[{id:'a',price:10},{id:'b',price:11},{id:'c',price:12}];
+  const tags=levels.map(level=>overlay.createPointFigures({...context,yAxis:{convertToPixel:p=>p},coordinates:[{y:level.price}],overlay:{extendData:{...context.overlay.extendData,...level,levels}}})[1]);
+  assert.ok(tags[1].attrs.y-tags[0].attrs.y>=22);
+  assert.ok(tags[2].attrs.y-tags[1].attrs.y>=22);
+});
 test('F4 price overlay is locked, uses full chart width and distinguishes dashed plans from protection', async () => {
   const { REPLAY_PRICE_LINE_OVERLAY: overlay } = await import('../../src/utils/replayPriceLines.js');
   const figures = overlay.createPointFigures({ coordinates: [{ x: 50, y: 30 }], bounding: { width: 500, height: 200 }, overlay: { extendData: { color: '#a16207', dashed: true, label: '手动计划（不执行）' } } });

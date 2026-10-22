@@ -56,15 +56,28 @@ export function cryptoRiskDetails(session) {
 export function cryptoChartLines(session, kind) {
   if (!session) return [];
   const lines = [], add = (id, price, label, reference, style, contracts = null) => {
-    if (price == null || !Number.isFinite(Number(price)) || (kind && reference !== kind)) return;
-    lines.push({ id: `${session.id}:${id}`, price, label: `${label}${contracts ? ` · ${contracts}张` : ''} · ${reference}`, reference, contracts, ...style });
+    if (price == null || price === '' || !Number.isFinite(Number(price)) || (kind && reference !== 'entry' && reference !== kind)) return;
+    const basis=reference==='entry'?'':` · ${reference}`;
+    lines.push({ id: `${session.id}:${id}`, price, label: `${label}${contracts ? ` · ${contracts}张` : ''}${basis}`, reference, contracts, ...style });
   };
+  const position=session.account?.position;
+  if(position) {
+    const pnl=session.risk?.unrealizedPnl;
+    const floating=pnl==null?'':` · mark浮盈 ${Number(pnl)>0?'+':''}${amount(pnl)} USDT`;
+    add('position',position.entryPrice,`${position.side==='long'?'多仓':'空仓'}均价${floating}`,'entry',{color:'#2563eb',dashed:false},position.contracts);
+  }
   const plan = session.trainingJournal?.plan;
   if (plan?.mode === 'manual') add('manual', plan.manualExitPrice, '手动计划（不执行）', 'last', { color: '#a16207', dashed: true });
-  for (const order of session.orders ?? []) if (order.type === 'limit') add(`order-${order.id}`, order.limitPrice, `限价${order.intent === 'reduce' ? '减仓' : order.side === 'long' ? '开多' : '开空'}`, 'last', { color: '#2563eb', dashed: true }, order.remainingContracts);
+  for (const order of session.orders ?? []) {
+    if (order.type === 'limit') add(`order-${order.id}`, order.limitPrice, `待成交 · ${order.intent === 'reduce' ? '减仓' : order.side === 'long' ? '开多' : '开空'}`, 'last', { color: '#2563eb', dashed: true }, order.remainingContracts);
+    if(!order.protectionApplied) for(const [leg,label] of [['stopLoss','止损'],['takeProfit','止盈']]) {
+      const protection=order.attachedProtection?.[leg];
+      if(protection) add(`order-${order.id}-${leg}`,protection.price,`待成交后${label}`,protection.reference,{color:leg==='stopLoss'?'#d55d70':'#159875',dashed:true},order.remainingContracts);
+    }
+  }
   for (const [leg, label] of [['stopLoss', '自动止损'], ['takeProfit', '自动止盈']]) {
     const protection = session.protection?.[leg];
-    if (protection) add(leg, protection.price, `${label}${session.protection.triggeredLeg === leg ? '（已触发待退出）' : ''}`, protection.reference, { color: leg === 'stopLoss' ? '#b91c1c' : '#15803d', dashed: false }, session.protection.contracts);
+    if (protection) add(leg, protection.price, `${label}${session.protection.triggeredLeg === leg ? ' · 已触发待退出' : ''}`, protection.reference, { color: leg === 'stopLoss' ? '#d55d70' : '#159875', dashed: false }, session.protection.contracts);
   }
   return lines;
 }

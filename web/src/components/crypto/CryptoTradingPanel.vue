@@ -4,26 +4,28 @@ import UiButton from '../ui/UiButton.vue';
 import UiInput from '../ui/UiInput.vue';
 import UiSelect from '../ui/UiSelect.vue';
 import UiTextarea from '../ui/UiTextarea.vue';
-import { amount, riskPlan } from '../../utils/cryptoReplayPresentation.js';
+import UiTooltip from '../ui/UiTooltip.vue';
+import { amount } from '../../utils/cryptoReplayPresentation.js';
 import { createCryptoPreviewLoader } from '../../utils/cryptoOrderPreview.js';
 import { cryptoQuantityToContracts } from '../../utils/cryptoQuantity.js';
 const props = defineProps({ session: { type: Object, required: true }, busy: Boolean, blocked: Boolean, previewOrder: { type: Function, required: true } });
 const emit = defineEmits(['command', 'advance', 'finish']);
 const form = reactive({ intent: 'long', type: 'market', contracts: '', unit:'contracts', sizingMode: 'contracts', sizingAmount: '', limitPrice: '', stopLoss: '', takeProfit: '', reference: 'last', note: '' });
 const position = computed(() => props.session.account.position);
-const plan = computed(() => riskPlan(props.session));
+const advancedSummary = computed(() => [form.sizingMode === 'margin' ? '保证金估仓' : form.sizingMode === 'risk' ? '风险估仓' : '', ...(form.intent === 'reduce' ? [] : [form.stopLoss ? '止损' : '', form.takeProfit ? '止盈' : '']), form.note ? '理由' : ''].filter(Boolean).join(' · '));
 const protectionWarning = computed(() => {
   if (!form.stopLoss) return false;
-  const side = position.value?.side ?? form.intent;
+  const side = form.intent;
   const current = Number(props.session.currentPrices[form.reference]);
   return side === "long" ? Number(form.stopLoss) >= current : side === "short" && Number(form.stopLoss) <= current;
 });
 const inactive = computed(() => props.busy || props.blocked || props.session.status !== 'active' || props.session.ending);
+watch(position,value=>{if(!value&&form.intent==='reduce') form.intent='long';});
 watch(() => props.session.id, () => { form.stopLoss = ''; form.takeProfit = ''; form.note = ''; }, { immediate: true });
 const previewState = shallowRef({ busy: false, preview: null, error: '', key: '' });
 const previewLoader = createCryptoPreviewLoader({ request: (id, body) => props.previewOrder(id, body), changed: value => { previewState.value = value; } });
 const estimateExit = computed(() => {
-  if (form.stopLoss) return { price: form.stopLoss, reference: form.reference };
+  if (form.intent !== 'reduce' && form.stopLoss) return { price: form.stopLoss, reference: form.reference };
   if (!form.takeProfit && props.session.protection?.stopLoss) return props.session.protection.stopLoss;
   const saved = props.session.trainingJournal.plan;
   return saved.mode === 'manual' ? { price: saved.manualExitPrice, reference: 'last' } : null;
@@ -57,74 +59,87 @@ onBeforeUnmount(()=>previewLoader.cancel());
 <template>
   <aside class="crypto-trading">
     <section>
-      <h2>下单</h2>
+      <div class="order-heading"><h2>下单</h2><UiTooltip clickable label="下单与合约规格说明" :content="`每张 ${session.contract.ctVal} ${session.instrumentId.startsWith('BTC')?'BTC':'ETH'}；数量步长 ${session.contract.lotSz}，价格步长 ${session.contract.tickSz}。提交后从下一分钟起撮合；市价未成交余量撤销，限价余量继续等待。`" /></div>
       <form @submit.prevent="submit">
-        <div class="crypto-segments" aria-label="开仓或平仓"><button type="button" :aria-pressed="form.intent !== 'reduce'" :disabled="inactive" @click="form.intent=position?.side??'long'">开仓</button><button type="button" :aria-pressed="form.intent === 'reduce'" :disabled="inactive || !position" @click="form.intent='reduce'">平仓</button></div>
-        <div v-if="form.intent !== 'reduce'" class="crypto-segments order-directions"><button type="button" :aria-pressed="form.intent==='long'" :disabled="inactive" @click="form.intent='long'">买入 / 做多</button><button type="button" :aria-pressed="form.intent==='short'" :disabled="inactive" @click="form.intent='short'">卖出 / 做空</button></div>
-        <p v-else class="muted">仅减仓，不会反向开仓；当前 {{ position?.contracts }} 张。</p>
-        <div class="crypto-section-tabs" aria-label="委托类型"><button type="button" :aria-pressed="form.type==='market'" :disabled="inactive" @click="form.type='market'">市价</button><button type="button" :aria-pressed="form.type==='limit'" :disabled="inactive" @click="form.type='limit'">限价</button></div>
-        <label>仓位输入方式<UiSelect v-model="form.sizingMode" aria-label="仓位输入方式" :disabled="inactive || form.intent === 'reduce'"><option value="contracts">直接输入张数</option><option value="margin">按本单保证金估仓</option><option value="risk">按计划风险预算估仓</option></UiSelect></label>
-        <label v-if="form.sizingMode === 'contracts'">委托数量<div class="crypto-quantity-row"><UiInput v-model="form.contracts" aria-label="委托张数" inputmode="decimal" required placeholder="自行填写，不预选仓位" :disabled="inactive" /><UiSelect v-model="form.unit" aria-label="数量单位" :disabled="inactive"><option value="contracts">张</option><option value="base">{{ session.instrumentId.startsWith('BTC')?'BTC':'ETH' }}</option><option value="quote">USDT</option></UiSelect></div></label>
-        <label v-else>{{ form.sizingMode === 'margin' ? '本单保证金预算（不含手续费）' : '计划风险预算（USDT）' }}<UiInput v-model="form.sizingAmount" :aria-label="form.sizingMode === 'margin' ? '保证金预算' : '风险预算'" inputmode="decimal" required :disabled="inactive" /></label>
-        <p v-if="form.sizingMode==='contracts'&&form.unit!=='contracts'" class="muted">按{{ form.type==='limit'?'委托限价':'当前最新价' }}换算张数并向下取整；USDT为名义金额，不是保证金或保证成交金额。</p>
-        <label v-if="form.type === 'limit'">限价（USDT）<UiInput v-model="form.limitPrice" aria-label="委托限价" inputmode="decimal" required :disabled="inactive" /></label>
-        <details>
-<summary>合约规格与成交规则</summary>        <p class="muted">每张 {{ session.contract.ctVal }} {{ session.instrumentId.startsWith('BTC') ? 'BTC' : 'ETH' }}；张数步长 {{ session.contract.lotSz }}，价格步长 {{ session.contract.tickSz }}。委托下一未展示分钟起生效；市价余量撤销，限价余量等待。</p>
-</details>
-        <details>
-<summary>记录本次判断（可选）</summary>        <label>这次操作的理由<UiTextarea v-model="form.note" aria-label="操作理由" maxlength="2000" :disabled="inactive" /></label>
-</details>
-        <details>
-<summary>自动止盈止损（可选）</summary>
-        <div class="two-fields"><label>自动止损价（可空）<UiInput v-model="form.stopLoss" aria-label="自动止损价" inputmode="decimal" :disabled="inactive" /></label><label>自动止盈价（可空）<UiInput v-model="form.takeProfit" aria-label="自动止盈价" inputmode="decimal" :disabled="inactive" /></label></div>
-        <label>保护触发参考<UiSelect v-model="form.reference" aria-label="保护触发参考" :disabled="inactive"><option value="last">普通价格 last</option><option value="mark">标记价格 mark</option></UiSelect></label>
-        <p v-if="protectionWarning" class="muted" role="status">止损价已处于当前触发侧，下一执行分钟可能立即退出；触发价不保证成交。</p>
+        <div class="crypto-segments order-directions" aria-label="交易方向">
+          <button type="button" :aria-pressed="form.intent==='long'" :disabled="inactive" @click="form.intent='long'">买入 / 做多</button>
+          <button type="button" :aria-pressed="form.intent==='short'" :disabled="inactive" @click="form.intent='short'">卖出 / 做空</button>
+          <button v-if="position" type="button" :aria-pressed="form.intent==='reduce'" :disabled="inactive" @click="form.intent='reduce'">平仓</button>
+        </div>
+        <div class="order-type-row"><div class="crypto-section-tabs" aria-label="委托类型"><button type="button" :aria-pressed="form.type==='market'" :disabled="inactive" @click="form.type='market'">市价</button><button type="button" :aria-pressed="form.type==='limit'" :disabled="inactive" @click="form.type='limit'">限价</button></div><UiTooltip clickable label="委托类型说明" content="市价：从下一分钟起按可用容量成交，可能滑点或部分成交。限价：只在符合指定价格时成交，余量继续等待。平仓只减仓，不反向开仓。" /></div>
+        <label v-if="form.type === 'limit'" class="order-field">限价 · USDT<UiInput v-model="form.limitPrice" aria-label="委托限价" inputmode="decimal" required :disabled="inactive" /></label>
+        <div class="order-field">
+<div class="order-field-title"><label :for="`order-quantity-${session.id}`">{{ form.intent==='reduce'?`平仓数量 · 持有 ${position?.contracts??0} 张`:'委托数量' }}</label><UiTooltip clickable label="数量与单位说明" content="张：合约数量。BTC/ETH：对应币数。USDT：名义金额，不是保证金；按当前最新价或委托限价换算张数，并按步长向下取整。预算估仓可在高级设置中选择。" /></div>
+          <div v-if="form.sizingMode === 'contracts'" class="crypto-quantity-row"><UiInput :id="`order-quantity-${session.id}`" v-model="form.contracts" aria-label="委托张数" inputmode="decimal" required placeholder="填写数量" :disabled="inactive" /><UiSelect v-model="form.unit" aria-label="数量单位" :disabled="inactive"><option value="contracts">张</option><option value="base">{{ session.instrumentId.startsWith('BTC')?'BTC':'ETH' }}</option><option value="quote">USDT</option></UiSelect></div>
+          <div v-else class="order-estimated-quantity" role="status">{{ readyPreview?`${readyPreview.contracts} 张`:'等待预算估算' }}<small>{{ form.sizingMode==='margin'?'按保证金':'按风险预算' }}</small></div>
+        </div>
+        <details class="order-advanced">
+          <summary><span>高级设置</span><small v-if="advancedSummary">{{ advancedSummary }}</small></summary>
+          <div class="order-advanced-content">
+            <div class="order-field"><div class="order-field-title"><label :for="`order-sizing-${session.id}`">仓位输入方式</label><UiTooltip clickable label="预算估仓说明" content="保证金预算：按本单保证金估算张数，手续费另计。风险预算：按退出价、双边手续费和教学滑点估算张数，需先填止损价或保存手动退出计划；未知资金费未计入，不保证最大损失。" /></div><UiSelect :id="`order-sizing-${session.id}`" v-model="form.sizingMode" aria-label="仓位输入方式" :disabled="inactive || form.intent === 'reduce'"><option value="contracts">直接输入数量</option><option value="margin">按保证金预算</option><option value="risk">按风险预算</option></UiSelect></div>
+            <label v-if="form.sizingMode !== 'contracts'" class="order-field">{{ form.sizingMode==='margin'?'保证金预算 · USDT':'风险预算 · USDT' }}<UiInput v-model="form.sizingAmount" :aria-label="form.sizingMode==='margin'?'保证金预算':'风险预算'" inputmode="decimal" required :disabled="inactive" /></label>
+            <template v-if="form.intent!=='reduce'">
+              <div class="order-field-title"><span>自动止盈止损</span><UiTooltip clickable label="止盈止损说明" content="可只填一项。随开仓委托提交，成交后生效；触发后按市价减仓，可能滑点或部分成交。一腿触发取消另一腿。已生效保护显示在相同触发价格类型的图上，待成交保护以虚线标注。" /></div>
+              <div class="two-fields"><label class="order-field">止损价<UiInput v-model="form.stopLoss" aria-label="自动止损价" inputmode="decimal" placeholder="可选" :disabled="inactive" /></label><label class="order-field">止盈价<UiInput v-model="form.takeProfit" aria-label="自动止盈价" inputmode="decimal" placeholder="可选" :disabled="inactive" /></label></div>
+              <label class="order-field">触发参考<UiSelect v-model="form.reference" aria-label="保护触发参考" :disabled="inactive"><option value="last">最新价</option><option value="mark">标记价格</option></UiSelect></label>
+            </template>
+            <label class="order-field">操作理由 · 可选<UiTextarea v-model="form.note" aria-label="操作理由" maxlength="2000" :disabled="inactive" placeholder="记录这次判断" /></label>
+          </div>
         </details>
         <div class="order-preview" data-testid="crypto-order-preview" aria-live="polite">
-          <h3>提交前核对</h3>
-          <p v-if="session.status !== 'active' || session.ending" class="muted">本次已结束或正在退出，不再接受新委托。</p>
-          <p v-else-if="previewState.busy" class="muted">正在按当前已知价格估算…</p>
+          <div class="order-heading"><h3>提交前核对</h3><UiTooltip clickable wide label="预览估算说明" :content="`预览不扣款，按本单全部成交估算，其他待成交委托未计入。实际可能滑点或部分成交；限价按委托价估算，冻结按 Taker 费预留。无退出价时计划损失未定义。${readyPreview?.markBasisUnknown?'退出参考为 mark，本次估算暂按 last=mark，实际基差未知。':''}`" /></div>
+          <p v-if="session.status !== 'active' || session.ending" class="muted">本次不再接受新委托。</p>
+          <p v-else-if="previewState.busy" class="muted">估算中…</p>
           <p v-else-if="previewState.error" class="preview-error" role="status">{{ previewState.error }}</p>
           <template v-else-if="readyPreview">
-            <p>预计 {{ readyPreview.contracts }} 张 · 保证金 {{ amount(readyPreview.initialMargin) }} USDT</p><details>
-<summary>完整估算与风险说明</summary><dl class="facts">
-              <div><dt>本单张数 / 币数</dt><dd data-testid="crypto-preview-quantity">{{ readyPreview.contracts }} 张 / {{ readyPreview.baseQuantity }} {{ session.instrumentId.startsWith('BTC') ? 'BTC' : 'ETH' }}</dd></div>
+            <dl class="order-preview-summary"><div><dt>保证金 · USDT</dt><dd>{{ amount(readyPreview.initialMargin) }}</dd></div><div><dt>预留资金 · USDT</dt><dd>{{ amount(readyPreview.requiredAvailable) }}</dd></div></dl>
+            <details class="order-estimates">
+<summary>更多估算</summary><dl class="facts">
+              <div><dt>数量</dt><dd data-testid="crypto-preview-quantity">{{ readyPreview.contracts }} 张 / {{ readyPreview.baseQuantity }} {{ session.instrumentId.startsWith('BTC')?'BTC':'ETH' }}</dd></div>
               <div><dt>估算成交价</dt><dd>{{ readyPreview.fillPrice }}</dd></div>
-              <div><dt>名义金额</dt><dd>{{ readyPreview.notional }} USDT</dd></div>
-              <div><dt>本单逐仓保证金</dt><dd data-testid="crypto-preview-margin">{{ readyPreview.initialMargin }}</dd></div>
+              <div><dt>名义金额 · USDT</dt><dd>{{ readyPreview.notional }}</dd></div>
+              <div><dt>逐仓保证金</dt><dd data-testid="crypto-preview-margin">{{ readyPreview.initialMargin }}</dd></div>
               <div><dt>Maker / Taker 费用</dt><dd>{{ readyPreview.makerFee }} / {{ readyPreview.takerFee }}</dd></div>
-              <div><dt>预计委托冻结</dt><dd>{{ readyPreview.requiredAvailable }}</dd></div>
-              <div><dt>计划估算损失 · 含双边费用/滑点</dt><dd data-testid="crypto-preview-loss">{{ readyPreview.estimatedPlanLoss ?? '未定义' }}</dd></div>
-              <div><dt>本单成交后估算强平价 · mark</dt><dd>{{ amount(readyPreview.projectedRisk?.estimatedLiquidationPrice, 4) }}</dd></div>
-            </dl>
-            <p v-if="readyPreview.projectedRisk?.liquidationRequired" class="preview-error">按当前 mark 估算，成交后可能立即达到教学接管阈值。</p>
-            <p v-if="readyPreview.roundedDown" class="muted">已按合约步长向下取整为 {{ readyPreview.contracts }} 张；输入金额为上限，不暗中扩大仓位。</p>
-            <p class="muted">按本单全部成交估算，其他待成交委托未计入预计持仓。实际从下一分钟起执行，可能滑点或部分成交；预览不扣款。限价按输入限价估算，Maker/Taker 取决于实际撮合，冻结按 Taker 保守预留。保证金预算固定本单保证金，风险预算固定计划估算损失，杠杆均沿用本会话。</p>
-            <p class="muted">风险预算使用已保存手动计划或本单止损价，计双边 Taker 费和教学滑点；未知资金费未计入，不是最大损失保证。{{ readyPreview.markBasisUnknown ? '本次退出参考为 mark，估算暂按 last=mark，实际基差和触发成交差异未知。' : '' }}</p>
+              <div><dt>计划估算损失</dt><dd data-testid="crypto-preview-loss">{{ readyPreview.estimatedPlanLoss??'未定义' }}</dd></div>
+              <div><dt>估算强平价 · mark</dt><dd>{{ amount(readyPreview.projectedRisk?.estimatedLiquidationPrice,4) }}</dd></div>
+            </dl><p v-if="readyPreview.roundedDown" class="muted">已按步长向下取整为 {{ readyPreview.contracts }} 张。</p>
 </details>
+            <p v-if="readyPreview.projectedRisk?.liquidationRequired" class="preview-error" role="status">成交后可能立即达到教学接管阈值。</p>
           </template>
-          <p v-else class="muted">填写张数或预算后显示预览；不自动选择仓位。无退出价时损失未定义，仍可按张数或保证金下单。</p>
+          <p v-else class="muted">{{ previewRequest.amount?'估算中…':'填写数量后显示估算。' }}</p>
+          <p v-if="form.intent!=='reduce'&&protectionWarning" class="preview-error" role="status">止损已在触发侧，下一分钟可能立即退出。</p>
         </div>
         <UiButton type="submit" :disabled="inactive || !readyPreview || previewState.busy" block>{{ form.intent==='reduce'?'提交平仓委托':form.intent==='long'?'买入 / 做多':'卖出 / 做空' }}</UiButton>
       </form>
     </section>
-    <p class="muted order-risk-summary">{{ plan.label }} · {{ position ? '当前有持仓' : '当前空仓' }}。持仓、保护与手动计划在图表下方管理。</p>
   </aside>
 </template>
 <style scoped>
-.crypto-trading { min-width: 0; background: var(--ql-panel); border: 1px solid var(--ql-line-strong); border-radius: 10px; }
-section { padding: 18px; border-bottom: 1px solid var(--ql-line); } section:last-child { border-bottom: 0; }
-h2 { margin: 0 0 12px; font-size: 15px; }.section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }.section-heading h2 { margin: 0; }
-.risk-badge { font-size: 12px; color: var(--ql-ink); border-bottom: 2px solid #d97706; }.risk-badge[data-risk-mode="automatic"] { border-color: #16a34a; }
-.facts { margin: 14px 0; font-size: 12px; }.facts > div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }dt { color: var(--ql-color-text-muted); }dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
-label { display: block; font-size: 12px; margin: 10px 0; line-height: 2; } .two-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.two-fields label { min-width: 0; }
-.muted { color: var(--ql-color-text-muted); font-size: 11px; line-height: 1.8; margin: 10px 0; }.actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
-.orders { list-style: none; padding: 0; font-size: 12px; }.orders li { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--ql-line); padding: 10px 0; }
-textarea { min-height: 64px; }
-</style>
-
-<style scoped>
-.order-preview { margin: 16px 0; padding: 12px; border-left: 3px solid var(--ql-accent); background: var(--ql-paper-soft); }
-.order-preview h3 { margin: 0; font-size: 13px; }
-.preview-error { color: #b91c1c; font-size: 12px; line-height: 1.7; }
+.crypto-trading { min-width:0;background:var(--ql-panel);border:1px solid var(--ql-line-strong);border-radius:7px; }
+section { padding:14px; }
+h2,h3 { margin:0;font-size:13px;font-weight:500; }
+.order-heading,.order-field-title,.order-type-row { display:flex;align-items:center;justify-content:space-between;gap:6px; }
+.order-heading { margin-bottom:8px; }
+.order-type-row { border-bottom:1px solid var(--ql-line); }
+.order-type-row .crypto-section-tabs { border:0;gap:20px; }
+.order-type-row .crypto-section-tabs>button { min-height:34px;padding:7px 0; }
+.order-field { display:block;font-size:11px;line-height:1.7;margin:10px 0; }
+.order-field>.ql-ui-control,.order-field>.ql-relative { margin-top:4px; }
+.order-field-title { font-size:11px;line-height:1.7;margin-bottom:4px; }
+.two-fields { display:grid;grid-template-columns:1fr 1fr;gap:8px; }.two-fields label { min-width:0;margin:0 0 10px; }
+.order-advanced { margin:12px 0!important;border-top:1px solid var(--ql-line);border-bottom:1px solid var(--ql-line); }
+.order-advanced>summary { padding:9px 0;font-size:11px;cursor:pointer; }
+.order-advanced>summary small { float:right;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ql-accent);font-size:10px; }
+.order-advanced-content { padding:0 0 2px; }
+.order-advanced-content>.order-field:first-child { margin-top:0; }
+.order-estimated-quantity { display:flex;justify-content:space-between;align-items:center;min-height:40px;padding:0 10px;border:1px solid var(--ql-line-strong);border-radius:8px;font-variant-numeric:tabular-nums; }
+.order-estimated-quantity small { color:var(--ql-color-text-muted);font-size:10px; }
+.order-preview { margin:10px 0;padding:10px;background:var(--ql-paper-soft);border-radius:5px; }
+.order-preview .order-heading { margin-bottom:5px; }.order-preview h3 { font-size:11px; }
+.order-preview-summary { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0;font-size:11px; }
+.order-preview-summary dd { font-size:13px;margin-top:4px;text-align:left;color:var(--ql-ink); }
+.order-estimates { margin:8px 0 0!important; }.order-estimates summary { font-size:10px;cursor:pointer;color:var(--ql-color-text-muted); }
+.facts { margin:8px 0;font-size:11px; }.facts>div { display:flex;justify-content:space-between;gap:10px;padding:4px 0; }dt { color:var(--ql-color-text-muted); }dd { margin:0;font-variant-numeric:tabular-nums;text-align:right; }
+.muted,.preview-error { font-size:11px;line-height:1.6;margin:6px 0; }.muted { color:var(--ql-color-text-muted); }.preview-error { color:var(--ql-color-danger); }
+textarea { min-height:56px; }
 </style>

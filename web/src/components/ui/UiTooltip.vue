@@ -1,5 +1,6 @@
 <script setup>
 import { CircleHelp } from "lucide-vue-next";
+import { ref } from "vue";
 import {
   TooltipArrow,
   TooltipContent,
@@ -22,16 +23,20 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  clickable: Boolean,
 });
+const open = ref(false);
 </script>
 
 <template>
   <TooltipProvider :delay-duration="250">
-    <TooltipRoot>
+    <TooltipRoot v-model:open="open" :disable-closing-trigger="clickable">
       <TooltipTrigger
         type="button"
         class="ui-tooltip__trigger"
         :aria-label="label"
+        :aria-expanded="clickable ? open : undefined"
+        @click="clickable && (open = true)"
       >
         <CircleHelp :size="13" aria-hidden="true" />
       </TooltipTrigger>
