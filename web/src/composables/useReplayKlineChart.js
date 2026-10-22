@@ -1,4 +1,5 @@
 import { REPLAY_PRICE_LINE_GROUP, REPLAY_PRICE_LINE_OVERLAY } from '../utils/replayPriceLines.js';
+import { snapProtectionPrice } from '../utils/cryptoProtectionDraft.js';
 import { findReplayMinuteIndex, replayRange } from '../utils/cryptoChartSync.js';
 import {
   ActionType,
@@ -93,6 +94,7 @@ export function useReplayKlineChart({
   model,
   onCrosshair = () => {},
   onRange = () => {},
+  onPriceLineDrag = () => {},
 }) {
   const chart = shallowRef(null);
   const activeDrawingTool = shallowRef("");
@@ -119,6 +121,7 @@ export function useReplayKlineChart({
   let indicatorInstances = [];
   let indicatorStructureKey = "";
   let priceLineIds = [], priceLineKey = '';
+  let priceDrag = null;
   let overlayIds = [];
   let tradeOverlayKey = "";
   let drawingIds = [];
@@ -279,9 +282,53 @@ export function useReplayKlineChart({
     }
   }
 
+  function endPriceDrag(cancel=false) {
+    if(!priceDrag) return;
+    const drag=priceDrag;priceDrag=null;
+    chart.value?.removeOverlay(drag.backupId);
+    priceLineKey='';syncPriceLines();
+    onPriceLineDrag({phase:cancel?'cancel':'end',leg:drag.line.protectionLeg,price:drag.moved?Number(drag.price):Number(drag.line.price)});
+  }
+
+  function cancelPriceDrag(event) {
+    if(!event||event.type==='blur'||event.type==='pointercancel'||event.key==='Escape') endPriceDrag(true);
+  }
+  function outsidePriceRelease(event) {if(priceDrag&&!host.value?.contains(event.target)) endPriceDrag(true);}
+
+  function priceDragHandlers(line,current) {
+    return {
+      onPressedMoveStart:({overlay,y})=>{
+        if(priceDrag||!line.draggable) return true;
+        const original={...overlay.extendData,draggable:false};
+        const backupId=`${line.id}:drag-original`;
+        priceDrag={line,original,backupId,startY:y,anchorY:current.convertToPixel({value:Number(line.price)},{paneId:CANDLE_PANE_ID}).y,price:line.price,moved:false};
+        current.createOverlay({name:REPLAY_PRICE_LINE_OVERLAY.name,id:backupId,groupId:REPLAY_PRICE_LINE_GROUP,lock:true,points:[{value:Number(line.price)}],extendData:original},CANDLE_PANE_ID);
+        onPriceLineDrag({phase:'start',leg:line.protectionLeg});
+        return true;
+      },
+      onPressedMoving:({overlay,y})=>{
+        if(!priceDrag||priceDrag.line.id!==overlay.id) return true;
+        const delta=y-priceDrag.startY;
+        if(Math.abs(delta)<3&&!priceDrag.moved) return true;
+        const value=current.convertFromPixel({y:priceDrag.anchorY+delta},{paneId:CANDLE_PANE_ID}).value;
+        const price=snapProtectionPrice(value,model.value?.priceStep);
+        if(!price) return true;
+        priceDrag.price=price;priceDrag.moved=true;
+        current.overrideOverlay({id:overlay.id,points:[{value:Number(price)}],extendData:{...priceDrag.original,draggable:true,preview:true,dashed:true,price,label:`待确认${line.protectionLeg==='stopLoss'?'止损':'止盈'}`,levels:priceDrag.original.levels?.map(level=>level.id===line.id?{...level,price}:level)}});
+        return true; // The native default must not add hidden time/index offsets.
+      },
+      onPressedMoveEnd:()=>{endPriceDrag();return true;},
+    };
+  }
+
   function syncPriceLines() {
     const current = chart.value;
     if (!current || !appliedData.length) return;
+    if(priceDrag) {
+      const original=priceLines.value.find(line=>line.id===priceDrag.line.id);
+      if(original?.draggable&&original.price===priceDrag.line.price) return;
+      endPriceDrag(true);return;
+    }
     const rootStyle=getComputedStyle(document.documentElement);
     const background=cssToken(rootStyle,'--ql-color-bg-surface-strong','#ffffff');
     const accent=cssToken(rootStyle,'--ql-accent','#2563eb');
@@ -291,7 +338,8 @@ export function useReplayKlineChart({
     priceLineIds = []; priceLineKey = nextKey;
     for (const [tagIndex,line] of priceLines.value.entries()) {
       const id = current.createOverlay({ name: REPLAY_PRICE_LINE_OVERLAY.name, id: line.id,
-        groupId: REPLAY_PRICE_LINE_GROUP, lock: true, points: [{ value: Number(line.price) }], extendData: {...line,color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price})=>({id,price}))} }, CANDLE_PANE_ID);
+        groupId: REPLAY_PRICE_LINE_GROUP, lock: !line.draggable, points: [{ value: Number(line.price) }], extendData: {...line,color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price})=>({id,price}))},
+        ...(line.draggable?priceDragHandlers(line,current):{}) }, CANDLE_PANE_ID);
       if (id) priceLineIds.push(id);
     }
   }
@@ -537,10 +585,19 @@ export function useReplayKlineChart({
       capture: true,
       passive: false,
     });
+    document.addEventListener('keydown',cancelPriceDrag);
+    window.addEventListener('blur',cancelPriceDrag);
+    window.addEventListener('pointercancel',cancelPriceDrag);
+    window.addEventListener('pointerup',outsidePriceRelease);
     applyBars();
   }
 
   function unmountChart() {
+    endPriceDrag(true);
+    document.removeEventListener('keydown',cancelPriceDrag);
+    window.removeEventListener('blur',cancelPriceDrag);
+    window.removeEventListener('pointercancel',cancelPriceDrag);
+    window.removeEventListener('pointerup',outsidePriceRelease);
     host.value?.removeEventListener("wheel", handleWheel, true);
     resizeObserver?.disconnect();
     themeObserver?.disconnect();

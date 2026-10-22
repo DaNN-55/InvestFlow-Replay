@@ -19,13 +19,13 @@ export const REPLAY_PRICE_LINE_OVERLAY = {
     const edgeY=outside?(point.y<0?14+(line.tagIndex??0)*22:bounding.height-14-(line.tagIndex??0)*22):point.y;
     const y=Math.max(12,Math.min(bounding.height-12,tagPosition(line,yAxis,bounding.height,edgeY)));
     const displaced=Math.abs(y-point.y)>2;
-    const tag={ type:'text',attrs:{x:8,y,text:`${outside?(point.y<0?'↑ ':'↓ '):''}${line.label}${outside||displaced?` @ ${line.price}`:''}`,align:'left',baseline:'middle'},
-      styles:{style:'stroke_fill',color:line.color,size:11,backgroundColor:line.background??'#ffffff',borderColor:line.color,borderSize:1,borderRadius:3,paddingLeft:5,paddingRight:5,paddingTop:3,paddingBottom:3},ignoreEvent:true };
+    const tag={ key:'price-tag',type:'text',attrs:{x:8,y,text:`${line.draggable?'↕ ':''}${outside?(point.y<0?'↑ ':'↓ '):''}${line.label}${outside||displaced||line.preview?` @ ${line.price}`:''}`,align:'left',baseline:'middle'},
+      styles:{style:'stroke_fill',color:line.color,size:11,backgroundColor:line.background??'#ffffff',borderColor:line.color,borderSize:1,borderRadius:3,paddingLeft:5,paddingRight:5,paddingTop:3,paddingBottom:3},ignoreEvent:!line.draggable };
     // An out-of-range tag names the actual price; never draw a line at a fake
     // clamped price or stretch the candle scale to fit a distant protective stop.
     if(outside) return [tag];
-    return [{ type: 'line', attrs: { coordinates: [{ x: 0, y: point.y }, { x: bounding.width, y: point.y }] },
-      styles: { color: line.color, size: 1.5, style: line.dashed ? 'dashed' : 'solid', dashedValue: [6, 4] }, ignoreEvent: true },
+    return [{ key:'price-line',type: 'line', attrs: { coordinates: [{ x: 0, y: point.y }, { x: bounding.width, y: point.y }] },
+      styles: { color: line.color, size: 1.5, style: line.dashed ? 'dashed' : 'solid', dashedValue: [6, 4] }, ignoreEvent: !line.draggable },
     tag,...(displaced?[{type:'line',attrs:{coordinates:[{x:5,y},{x:5,y:point.y}]},styles:{color:line.color,size:1},ignoreEvent:true}]:[])];
   },
   createYAxisFigures({coordinates=[],bounding={},overlay,yAxis}) {

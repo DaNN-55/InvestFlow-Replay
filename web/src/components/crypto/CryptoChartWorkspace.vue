@@ -3,10 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Grid2X2, LocateFixed, Maximize2, PanelRightClose, PanelRightOpen } from 'lucide-vue-next';
 import CandlestickChart from '../CandlestickChart.vue';
 import UiSelect from '../ui/UiSelect.vue';
+import UiButton from '../ui/UiButton.vue';
+import { protectionDraftCurrent, protectionDraftTriggered } from '../../utils/cryptoProtectionDraft.js';
 import { CRYPTO_PERIODS, cryptoChartBars, cryptoChartLines } from '../../utils/cryptoReplayPresentation.js';
 import { REPLAY_RISE_COLOR, REPLAY_FALL_COLOR } from '../../utils/replayKlineConfig.js';
-const props=defineProps({session:{type:Object,required:true},markets:{type:Object,default:()=>({})},modelValue:{type:Object,required:true},busy:Boolean});
-const emit=defineEmits(['update:modelValue']);
+const props=defineProps({session:{type:Object,required:true},markets:{type:Object,default:()=>({})},modelValue:{type:Object,required:true},busy:Boolean,blocked:Boolean,protectionDraft:{type:Object,default:null}});
+const emit=defineEmits(['update:modelValue','protection-drag','confirm-protection','cancel-protection']);
+const draggingIndex=ref(null);
 const selected=ref(0), maximized=ref(null), menu=ref(false), root=ref(null);
 const charts=new Map();
 const colors=Object.freeze({rise:REPLAY_RISE_COLOR,fall:REPLAY_FALL_COLOR});
@@ -15,8 +18,14 @@ const visible=computed(()=>maximized.value==null?Array.from({length:count.value}
 const prefs=computed(()=>props.modelValue);
 const models=computed(()=>prefs.value.periods.map((period,i)=>{
   const bars=cryptoChartBars(props.markets[period],prefs.value.kinds[i]);
-  return { bars, lines:cryptoChartLines(props.session,prefs.value.kinds[i]), showVolume:bars.length>0&&bars.every(bar=>bar.volume!=null) };
+  const editable=!props.busy&&!props.blocked&&!props.protectionDraft&&props.session.status==='active'&&!props.session.ending&&props.session.account.position&&!props.session.protection?.triggeredLeg&&(draggingIndex.value==null||draggingIndex.value===i);
+  const lines=cryptoChartLines(props.session,prefs.value.kinds[i]).map(line=>({...line,draggable:Boolean(editable&&line.protectionLeg)}));
+  const base=props.protectionDraft&&lines.find(line=>line.protectionLeg===props.protectionDraft.leg);
+  if(base) lines.push({...base,id:`${base.id}:draft`,price:props.protectionDraft.price,label:`待确认${props.protectionDraft.leg==='stopLoss'?'止损':'止盈'}`,draggable:false,protectionLeg:null,dashed:true,preview:true});
+  return { bars, lines, showVolume:bars.length>0&&bars.every(bar=>bar.volume!=null) };
 }));
+function drag(index,event) {clearCrosshair();draggingIndex.value=event.phase==='start'?index:null;emit('protection-drag',event);}
+function escape() {menu.value=false;maximized.value=null;if(props.protectionDraft&&!props.busy) emit('cancel-protection');}
 function patch(value) { emit('update:modelValue',{...prefs.value,...value}); }
 function toggle(key,checked) { patch({[key]:checked,...(key==='period'&&checked?{periods:Array(4).fill(prefs.value.periods[selected.value])}:{})}); }
 function layout(value) { selected.value=0;maximized.value=null;patch({layout:value}); }
@@ -37,7 +46,7 @@ onMounted(()=>document.addEventListener('pointerdown',outside));
 onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside));
 </script>
 <template>
-  <section ref="root" class="crypto-charts" aria-label="合约多周期行情" @keydown.esc="menu=false;maximized=null">
+  <section ref="root" class="crypto-charts" aria-label="合约多周期行情" @keydown.esc="escape">
     <header class="crypto-chart-toolbar">
       <div class="crypto-period-shortcuts"><button v-for="p in [5,15,60,240]" :key="p" type="button" :aria-pressed="prefs.periods[selected]===p" :disabled="busy" @click="period(p)">{{ CRYPTO_PERIODS.find(([n])=>n===p)[1] }}</button></div>
       <UiSelect :model-value="prefs.periods[selected]" aria-label="选中图周期" :disabled="busy" @update:model-value="period"><option v-for="[v,label] in CRYPTO_PERIODS" :key="v" :value="v">{{ label }}</option></UiSelect>
@@ -52,10 +61,14 @@ onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside));
         <p>同一合约，各图独立周期。价格线只在同一价格类型间同步；范围联动限于已加载行情。</p><button type="button" class="crypto-text-button" @click="menu=false">收起布局设置</button>
       </div>
     </header>
+    <section v-if="protectionDraft" class="crypto-protection-confirm" aria-label="确认止盈止损调整">
+      <div><strong>{{ protectionDraft.leg==='stopLoss'?'止损':'止盈' }} {{ protectionDraft.oldPrice }} → {{ protectionDraft.price }}</strong><small>{{ protectionDraft.protection[protectionDraft.leg].reference==='mark'?'标记价格':'最新价' }}触发 · {{ protectionDraft.position.contracts }} 张 · 原保护在确认前仍有效</small><p v-if="protectionDraftTriggered(session,protectionDraft)" role="status">新价格已在触发侧，确认后下一分钟可能立即退出。</p></div>
+      <div class="crypto-protection-confirm-actions"><UiButton variant="secondary" :disabled="busy" @click="emit('cancel-protection')">取消调整</UiButton><UiButton :disabled="busy||blocked||!protectionDraftCurrent(session,protectionDraft)" @click="emit('confirm-protection')">确认生效</UiButton></div>
+    </section>
     <div class="crypto-chart-grid" :class="maximized==null?prefs.layout:'single'" @pointerleave="clearCrosshair">
       <section v-for="i in visible" :key="`${session.id}:${i}`" class="crypto-chart-tile" :class="{'is-selected':i===selected}" :data-chart-index="i" tabindex="0" :aria-label="`图${i+1}，按回车选中`" @pointerdown.capture="selected=i" @wheel.capture="selected=i" @focusin="selected=i" @keydown.enter="selected=i">
         <header><button type="button" :aria-pressed="i===selected" @click="selected=i">{{ session.instrumentId }} <b>{{ CRYPTO_PERIODS.find(([v])=>v===prefs.periods[i])[1] }}</b><span>{{ prefs.kinds[i]==='last'?'最新价':'标记价格' }}</span></button><small v-if="i===selected">当前图</small></header>
-        <CandlestickChart v-if="markets[prefs.periods[i]]" :key="`${prefs.periods[i]}:${prefs.kinds[i]}`" :ref="value=>value?charts.set(i,value):charts.delete(i)" :bars="models[i].bars" :price-lines="models[i].lines" :colors="colors" compact :show-volume="models[i].showVolume" :height="count===4||prefs.layout==='rows'?280:400" @crosshair="link(i,$event)" @range="range(i,$event)" />
+        <CandlestickChart v-if="markets[prefs.periods[i]]" :key="`${prefs.periods[i]}:${prefs.kinds[i]}`" :ref="value=>value?charts.set(i,value):charts.delete(i)" :bars="models[i].bars" :price-lines="models[i].lines" :price-step="session.contract.tickSz" :colors="colors" compact :show-volume="models[i].showVolume" :height="count===4||prefs.layout==='rows'?280:400" @crosshair="link(i,$event)" @range="range(i,$event)" @price-line-drag="drag(i,$event)" />
         <p v-else class="crypto-chart-loading" role="status">行情加载中…</p>
       </section>
     </div>

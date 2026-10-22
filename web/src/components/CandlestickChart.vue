@@ -20,6 +20,7 @@ const props = defineProps({
     default: () => [],
   },
   priceLines: { type: Array, default: () => [] },
+  priceStep: { type:String, default:'' },
   height: { type: Number, default: 0 },
   colors: { type: Object, default: () => ({}) },
   compact: Boolean,
@@ -45,7 +46,7 @@ const subPaneCount = computed(() =>
   ).length ?? 0),
 );
 const chartHeight = computed(() => props.height || 330 + (props.showVolume ? 92 : 0) + subPaneCount.value * 126 + 24);
-const emit = defineEmits(['crosshair','range']);
+const emit = defineEmits(['crosshair','range','price-line-drag']);
 const drawingIcons = Object.freeze({
   trend: TrendingUp,
   horizontal: Minus,
@@ -57,6 +58,7 @@ const drawingIcons = Object.freeze({
 const chartModel = computed(() => ({
   bars: props.bars,
   priceLines: props.priceLines,
+  priceStep: props.priceStep,
   trades: props.trades,
   indicators: props.indicators,
   colors: props.colors,
@@ -68,6 +70,7 @@ const { state, drawing, commands } = useReplayKlineChart({
   model: chartModel,
   onCrosshair: value => emit('crosshair',value),
   onRange: value => emit('range',value),
+  onPriceLineDrag: value => emit('price-line-drag',value),
 });
 defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(value,dateRange)=>commands.syncRange(value,dateRange), latest:()=>commands.latest() });
 </script>
