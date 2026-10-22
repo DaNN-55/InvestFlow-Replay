@@ -49,6 +49,7 @@ export function createReplayChartStyles({
       vertical: { color: grid },
     },
     candle: {
+      priceMark: { last: { upColor:rise, downColor:fall, noChangeColor:text } },
       bar: {
         upColor: rise,
         downColor: fall,

@@ -30,6 +30,7 @@
 .crypto-playback-steps { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px; }
 .crypto-playback .ql-ui-button { height:32px;min-height:32px;font-size:10px;padding:0 6px; }
 .crypto-playback .crypto-finish { color:var(--ql-color-danger); }
+.crypto-playback-actions { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
 .crypto-playback .crypto-icon { width:32px;height:32px;min-height:32px; }
 .order-collapsed .crypto-terminal-side { grid-column:1;grid-row:1; }
 .order-collapsed .crypto-playback { grid-template-columns:minmax(140px,1fr) minmax(100px,1fr) minmax(240px,2fr) auto;align-items:center; }

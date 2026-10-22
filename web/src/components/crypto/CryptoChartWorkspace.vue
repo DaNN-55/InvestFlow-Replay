@@ -4,11 +4,12 @@ import { Grid2X2, LocateFixed, Maximize2, PanelRightClose, PanelRightOpen } from
 import CandlestickChart from '../CandlestickChart.vue';
 import UiSelect from '../ui/UiSelect.vue';
 import { CRYPTO_PERIODS, cryptoChartBars, cryptoChartLines } from '../../utils/cryptoReplayPresentation.js';
+import { REPLAY_RISE_COLOR, REPLAY_FALL_COLOR } from '../../utils/replayKlineConfig.js';
 const props=defineProps({session:{type:Object,required:true},markets:{type:Object,default:()=>({})},modelValue:{type:Object,required:true},busy:Boolean});
 const emit=defineEmits(['update:modelValue']);
 const selected=ref(0), maximized=ref(null), menu=ref(false), root=ref(null);
 const charts=new Map();
-const colors=Object.freeze({rise:'#38ae86',fall:'#df7180'});
+const colors=Object.freeze({rise:REPLAY_RISE_COLOR,fall:REPLAY_FALL_COLOR});
 const count=computed(()=>props.modelValue.layout==='quad'?4:props.modelValue.layout==='single'?1:2);
 const visible=computed(()=>maximized.value==null?Array.from({length:count.value},(_,i)=>i):[maximized.value]);
 const prefs=computed(()=>props.modelValue);
