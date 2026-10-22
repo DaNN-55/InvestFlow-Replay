@@ -20,6 +20,11 @@ from .replay_cache_policy import (
 TDX_PAGE_SIZE = 800
 TDX_MAX_DAILY_BARS = 8000
 TDX_HOSTS = (
+    # Verified with index/stock daily bars and stock 5-minute bars, 2026-10-01.
+    # The legacy nodes below can accept connections while returning no bar data.
+    "139.9.52.158",
+    "103.221.142.82",
+    "103.251.85.94",
     "180.153.18.170",
     "115.238.56.198",
     "111.229.247.189",

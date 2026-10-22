@@ -288,7 +288,7 @@ class MinuteReplayScenarioTest(unittest.TestCase):
                 type(first_two_calls[0].args[0]).__name__,
                 "_FailoverTdxClient",
             )
-            self.assertEqual(first_two_calls[0].args[0].hosts[:3], TDX_HOSTS)
+            self.assertEqual(first_two_calls[0].args[0].hosts[:len(TDX_HOSTS)], TDX_HOSTS)
             self.assertEqual(
                 [call.kwargs.get("bar_time") for call in first_two_calls],
                 ["start", "start"],

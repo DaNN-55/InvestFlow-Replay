@@ -94,6 +94,16 @@ class TdxClient:
                 raise RuntimeError("通达信客户端未连接")
             method = self._data.get_index_kline if index else self._data.get_kline
             bars = await method(market, code, category, start=start, count=count)
+            # pytdxdata 0.3.2 returns the latest start+count prefix, and may
+            # overfetch small requests to 100 bars. Its pages are individually
+            # chronological but concatenated newest page first. Restore the
+            # offset-from-latest contract before daily/minute cache consumers
+            # decide whether they have reached the end of history.
+            bars = sorted(bars, key=lambda bar: (
+                bar.year, bar.month, bar.day, bar.hour, bar.minute,
+            ))
+            end = max(0, len(bars) - start)
+            bars = bars[max(0, end - count):end]
             return [{
                 "datetime": datetime(bar.year, bar.month, bar.day, bar.hour, bar.minute),
                 "open": bar.open, "high": bar.high, "low": bar.low, "close": bar.close,
