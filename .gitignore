@@ -16,4 +16,6 @@ storage/**/*.duckdb.wal
 storage/**/*.sqlite
 storage/**/*.sqlite-*
 storage/trade-records/*.json
+storage/crypto-samples/
+storage/crypto-pool/
 !.gitkeep
