@@ -218,6 +218,30 @@ describe("replay attempt workflow", () => {
     assert.match(attempt.messages.value.status, /已刷新到最新进度/u);
   });
 
+  it("resumes the selected unfinished practice with one read and locks writes while restoring", async () => {
+    const calls = [];
+    const pending = deferred();
+    const original = { id: "unfinished-2", status: "active", revision: 7, revealedFutureBars: 12, account: { cash: 87500 }, position: { quantity: 100 } };
+    const storage = createMemoryStorage();
+    const sessionController = useReplaySession({
+      client: { async getReplaySession(id) { calls.push(["get", id]); return pending.promise; } },
+      storage,
+      restoreOnMount: false,
+    });
+    const attempt = useReplayAttempt({ sessionController, reviewDraftController: createDraftController(calls), autoplayController: createAutoplayController(calls) });
+    const restoring = attempt.commands.resume(original.id);
+    assert.equal(attempt.state.value.activity, "restoring");
+    assert.equal(await attempt.commands.resume(original.id), null);
+    assert.equal(await attempt.commands.advance("day"), null);
+    assert.equal(storage.getItem(SESSION_STORAGE_KEY), null);
+    pending.resolve({ session: original });
+    assert.deepEqual(await restoring, original);
+    assert.deepEqual(attempt.session.value, original);
+    assert.equal(storage.getItem(SESSION_STORAGE_KEY), original.id);
+    assert.equal(attempt.state.value.isBusy, false);
+    assert.deepEqual(calls, [["pause"], ["get", original.id]]);
+  });
+
   it("deletes an accidental retrain and restores its source session", async () => {
     const calls = [];
     const client = {

@@ -9,6 +9,8 @@ import {
   shallowRef,
 } from "vue";
 
+import { useRouter } from "vue-router";
+
 import ReplayAccountSummary from "../components/replay/ReplayAccountSummary.vue";
 import ReplayAttemptContext from "../components/replay/ReplayAttemptContext.vue";
 import ReplayChartPanel from "../components/replay/ReplayChartPanel.vue";
@@ -31,6 +33,27 @@ const {
   autoplay,
   commands,
 } = useReplayAttempt();
+
+const router = useRouter();
+const resumable = shallowRef(null);
+const historyError = shallowRef("");
+let historyRequestSequence = 0;
+async function loadUnfinishedPractice() {
+  const sequence = ++historyRequestSequence;
+  historyError.value = "";
+  try {
+    const result = await api.listReplaySessions({ market: "ashare", state: "active", page: 1, pageSize: 1 });
+    if (sequence !== historyRequestSequence) return;
+    resumable.value = result.items?.find(item => item.status === "active" && item.market !== "crypto-perpetual") ?? null;
+  } catch {
+    if (sequence !== historyRequestSequence) return;
+    resumable.value = null;
+    historyError.value = "未完成练习暂未读取成功";
+  }
+}
+function openPracticeRecords() {
+  router.push({ path: "/decision/trade-records", query: { tab: "replay", market: "ashare" } });
+}
 
 const playbooks = shallowRef([]);
 const playbooksLoading = shallowRef(false);
@@ -176,6 +199,7 @@ function handleStartNewSession() {
   orderPanelOpen.value = false;
   orderDraftResetToken.value += 1;
   commands.startNew();
+  loadUnfinishedPractice();
 }
 
 function handleManualAdvance(mode = "minute") {
@@ -220,6 +244,7 @@ onActivated(attachShortcut);
 onActivated(loadReplayPlaybooks);
 onActivated(loadReplayBenchmarks);
 onActivated(commands.sync);
+onActivated(loadUnfinishedPractice);
 onDeactivated(() => {
   detachShortcut();
   stopBenchmarkPolling();
@@ -259,8 +284,13 @@ onBeforeUnmount(() => {
         :benchmarks-error="benchmarksError"
         :benchmark-initialization="benchmarkInitialization"
         :market-provider="marketProvider"
+        :resumable="resumable"
+        :history-error="historyError"
         @create="commands.create"
         @retry-benchmarks="retryReplayBenchmarks"
+        @resume="commands.resume"
+        @records="openPracticeRecords"
+        @retry-history="loadUnfinishedPractice"
       />
 
       <template v-else>

@@ -9,6 +9,7 @@ import {
 import { computed, reactive, ref, watch } from "vue";
 
 import "./replay-start.css";
+import ReplayResumeCard from "./ReplayResumeCard.vue";
 
 import UiButton from "../ui/UiButton.vue";
 import UiCard from "../ui/UiCard.vue";
@@ -17,6 +18,8 @@ import UiInput from "../ui/UiInput.vue";
 import { formatReplayBenchmarkLabel } from "../../utils/replayMarket.js";
 
 const props = defineProps({
+  resumable: { type: Object, default: null },
+  historyError: { type: String, default: "" },
   loading: {
     type: Boolean,
     default: false,
@@ -46,6 +49,9 @@ const props = defineProps({
 const emit = defineEmits([
   "create",
   "retryBenchmarks",
+  "resume",
+  "records",
+  "retryHistory",
 ]);
 const configurationOpen = ref(false);
 
@@ -186,6 +192,7 @@ function submit() {
         <form class="replay-setup__form" @submit.prevent="submit">
           <div class="replay-setup__choice-heading">
             <h2>这次怎么练？</h2>
+            <button type="button" class="replay-setup__configuration-trigger" aria-label="调整资金与成本" title="调整资金与成本" aria-haspopup="dialog" :aria-expanded="configurationOpen" @click="configurationOpen=true"><Settings2 :size="16" /></button>
           </div>
 
           <fieldset class="replay-setup__choice-card">
@@ -270,6 +277,14 @@ function submit() {
             </div>
           </section>
 
+          <ReplayResumeCard
+            v-if="resumable"
+            :session-id="resumable.id"
+            :description="`${resumable.interval === 'hybrid' ? '日内模拟' : resumable.interval === '1m' ? '分钟盲测' : '日线盲测'} · 已推进 ${resumable.progress?.current ?? 0}/${resumable.progress?.total ?? resumable.gameLength} ${resumable.interval === '1m' ? '分钟' : '交易日'}`"
+            :busy="loading"
+            @resume="emit('resume',$event)"
+          />
+          <div v-if="historyError" class="replay-setup__playbook-state" role="status"><span>{{ historyError }}</span><button type="button" @click="emit('retryHistory')">重试</button></div>
           <UiButton
             type="submit"
             block
@@ -282,14 +297,7 @@ function submit() {
             </template>
             开始{{ form.barInterval === "hybrid" ? "日内模拟" : "日线盲测" }}
           </UiButton>
-          <button
-            type="button"
-            class="replay-setup__configuration-trigger"
-            @click="configurationOpen = true"
-          >
-            <span>调整资金与成本</span>
-            <Settings2 :size="16" />
-          </button>
+          <button type="button" class="replay-setup__records" @click="emit('records')">查看全部演练记录 ↗</button>
         </form>
       </UiCard>
     </div>
@@ -371,6 +379,10 @@ function submit() {
   gap: 10px;
 }
 
+.replay-setup__choice-heading { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.replay-setup__configuration-trigger { display:grid;place-items:center;flex:0 0 auto;width:32px;height:32px;min-height:32px;padding:0;border:1px solid var(--ql-line);border-radius:8px;background:transparent;color:var(--ql-color-text-muted);cursor:pointer; }
+.replay-setup__configuration-trigger:hover { color:var(--ql-accent);border-color:var(--ql-accent); }
+.replay-setup__configuration-trigger:focus-visible { outline:2px solid var(--ql-accent);outline-offset:2px; }
 .replay-setup__choice-heading h2 {
   margin: 0;
   color: var(--ql-ink);
@@ -522,7 +534,6 @@ function submit() {
   background: var(--ql-color-primary-strong);
 }
 
-.replay-setup__configuration-trigger,
 .replay-setup__advanced-trigger {
   display: flex;
   width: 100%;
