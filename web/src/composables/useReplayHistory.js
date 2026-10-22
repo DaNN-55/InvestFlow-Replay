@@ -8,17 +8,18 @@ import {
 
 import { api } from "../services/api";
 
-export function useReplayHistory() {
+export function useReplayHistory(initial = {}) {
   const items = shallowRef([]);
   const total = ref(0);
   const page = ref(1);
   const pageSize = ref(10);
   const state = ref("all");
   const attemptKind = ref("all");
-  const keyword = ref("");
+  const keyword = ref(initial.keyword ?? "");
+  const market = ref(initial.market ?? "all");
   const loading = ref(false);
   const error = ref("");
-  const selectedId = ref("");
+  const selectedId = ref(initial.selectedId ?? "");
   const selectedDetail = shallowRef(null);
   const detailLoading = ref(false);
   const detailError = ref("");
@@ -61,6 +62,7 @@ export function useReplayHistory() {
 
     try {
       const result = await api.listReplaySessions({
+        market: market.value,
         state: state.value,
         attemptKind: attemptKind.value,
         keyword: keyword.value,
@@ -98,6 +100,7 @@ export function useReplayHistory() {
   }
 
   async function applyFilters(filters = {}) {
+    market.value = filters.market ?? market.value;
     state.value = filters.state ?? state.value;
     attemptKind.value = filters.attemptKind ?? attemptKind.value;
     keyword.value = String(filters.keyword ?? keyword.value).trim();
@@ -178,6 +181,7 @@ export function useReplayHistory() {
     page: readonly(page),
     pageSize: readonly(pageSize),
     state: readonly(state),
+    market: readonly(market),
     attemptKind: readonly(attemptKind),
     keyword: readonly(keyword),
     loading: readonly(loading),

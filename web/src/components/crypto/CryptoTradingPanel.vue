@@ -1,17 +1,16 @@
 <script setup>
-import { computed, reactive, shallowRef, watch } from 'vue';
+import { computed, reactive, shallowRef, watch, onBeforeUnmount } from 'vue';
 import UiButton from '../ui/UiButton.vue';
 import UiInput from '../ui/UiInput.vue';
 import UiSelect from '../ui/UiSelect.vue';
 import UiTextarea from '../ui/UiTextarea.vue';
-import CryptoModelNotice from './CryptoModelNotice.vue';
-import { amount, riskPlan, plannedPricePnl, cryptoRiskDetails } from '../../utils/cryptoReplayPresentation.js';
+import { amount, riskPlan } from '../../utils/cryptoReplayPresentation.js';
 import { createCryptoPreviewLoader } from '../../utils/cryptoOrderPreview.js';
+import { cryptoQuantityToContracts } from '../../utils/cryptoQuantity.js';
 const props = defineProps({ session: { type: Object, required: true }, busy: Boolean, blocked: Boolean, previewOrder: { type: Function, required: true } });
 const emit = defineEmits(['command', 'advance', 'finish']);
-const form = reactive({ intent: 'long', type: 'market', contracts: '', sizingMode: 'contracts', sizingAmount: '', limitPrice: '', stopLoss: '', takeProfit: '', reference: 'last', note: '', planMode: 'none', manualPrice: '', planReason: '', topup: '500' });
+const form = reactive({ intent: 'long', type: 'market', contracts: '', unit:'contracts', sizingMode: 'contracts', sizingAmount: '', limitPrice: '', stopLoss: '', takeProfit: '', reference: 'last', note: '' });
 const position = computed(() => props.session.account.position);
-const riskDetails = computed(() => cryptoRiskDetails(props.session));
 const plan = computed(() => riskPlan(props.session));
 const protectionWarning = computed(() => {
   if (!form.stopLoss) return false;
@@ -20,7 +19,7 @@ const protectionWarning = computed(() => {
   return side === "long" ? Number(form.stopLoss) >= current : side === "short" && Number(form.stopLoss) <= current;
 });
 const inactive = computed(() => props.busy || props.blocked || props.session.status !== 'active' || props.session.ending);
-watch(() => props.session.id, () => { form.stopLoss = ''; form.takeProfit = ''; form.note = ''; form.planMode = props.session.trainingJournal.plan.mode; form.manualPrice = props.session.trainingJournal.plan.manualExitPrice ?? ''; form.planReason = props.session.trainingJournal.plan.reason; }, { immediate: true });
+watch(() => props.session.id, () => { form.stopLoss = ''; form.takeProfit = ''; form.note = ''; }, { immediate: true });
 const previewState = shallowRef({ busy: false, preview: null, error: '', key: '' });
 const previewLoader = createCryptoPreviewLoader({ request: (id, body) => props.previewOrder(id, body), changed: value => { previewState.value = value; } });
 const estimateExit = computed(() => {
@@ -30,12 +29,13 @@ const estimateExit = computed(() => {
   return saved.mode === 'manual' ? { price: saved.manualExitPrice, reference: 'last' } : null;
 });
 const previewRequest = computed(() => ({ sessionId: props.session.id, expectedRevision: props.session.revision,
-  intent: form.intent, orderType: form.type, sizingMode: form.sizingMode, amount: form.sizingMode === 'contracts' ? form.contracts : form.sizingAmount,
+  intent: form.intent, orderType: form.type, sizingMode: form.sizingMode, amount: form.sizingMode === 'contracts' ? cryptoQuantityToContracts(form.contracts,form.unit,props.session.contract,form.type==='limit'?form.limitPrice:props.session.currentPrices.last) : form.sizingAmount,
   ...(form.type === 'limit' ? { limitPrice: form.limitPrice } : {}),
   ...(estimateExit.value ? { exitPrice: estimateExit.value.price, exitReference: estimateExit.value.reference } : {}) }));
 const readyPreview = computed(() => previewState.value.key === JSON.stringify(previewRequest.value) ? previewState.value.preview : null);
 watch(() => form.intent, value => { if (value === 'reduce') form.sizingMode = 'contracts'; });
 watch(() => form.sizingMode, () => { form.sizingAmount = ''; });
+watch(() => form.unit,()=>{form.contracts='';});
 watch(previewRequest, (input, _old, onCleanup) => {
   previewLoader.cancel(); previewState.value = { busy: false, preview: null, error: '', key: '' };
   if (props.session.status !== 'active' || props.session.ending || !input.amount || (input.orderType === 'limit' && !input.limitPrice)) return;
@@ -52,61 +52,42 @@ function submit() {
   emit('command', { type: `${form.type}-${reduce ? 'close' : 'open'}`, ...(reduce ? {} : { side: form.intent }), contracts: readyPreview.value.contracts,
     ...(form.type === 'limit' ? { limitPrice: form.limitPrice } : {}), ...(!reduce && (form.stopLoss || form.takeProfit) ? { protection: protection() } : {}) }, form.note);
 }
+onBeforeUnmount(()=>previewLoader.cancel());
 </script>
 <template>
   <aside class="crypto-trading">
-    <section class="crypto-risk" data-testid="crypto-risk">
-      <div class="section-heading"><h2>持仓与退出</h2><span class="risk-badge" :data-risk-mode="plan.mode">{{ plan.label }}</span></div>
-      <p class="muted">{{ plan.detail }}</p>
-      <dl class="facts">
-        <div><dt>当前持仓</dt><dd>{{ position ? `${position.side === 'long' ? '多' : '空'} ${position.contracts} 张` : '空仓' }}</dd></div>
-        <div><dt>对应币数</dt><dd data-testid="crypto-base-quantity">{{ amount(riskDetails.baseQuantity, 8) }} {{ session.instrumentId.startsWith('BTC') ? 'BTC' : 'ETH' }}</dd></div>
-        <div><dt>名义仓位 · mark</dt><dd data-testid="crypto-notional">{{ amount(riskDetails.notional, 8) }} USDT</dd></div>
-        <div><dt>入场均价</dt><dd>{{ amount(position?.entryPrice, 4) }}</dd></div>
-        <div><dt>逐仓保证金 M</dt><dd data-testid="crypto-margin">{{ amount(position?.marginBalance, 8) }}</dd></div>
-        <div><dt>mark 浮动盈亏</dt><dd>{{ amount(session.risk?.unrealizedPnl, 8) }}</dd></div>
-        <div><dt>浮盈亏 / 账户权益</dt><dd>{{ riskDetails.unrealizedEquityPercent == null ? '未定义' : amount(riskDetails.unrealizedEquityPercent, 4) + '%' }}</dd></div>
-        <div><dt>当前标记价格</dt><dd>{{ amount(session.currentPrices.mark, 4) }}</dd></div>
-        <div><dt>风险率（≤100% 触发）</dt><dd>{{ session.risk ? amount(Number(session.risk.riskRatio)*100) + '%' : '—' }}</dd></div>
-        <div><dt>估算强平价 · mark</dt><dd>{{ amount(session.risk?.estimatedLiquidationPrice, 4) }}</dd></div>
-        <div><dt>距离估算强平价</dt><dd data-testid="crypto-liquidation-distance">{{ riskDetails.liquidationDistancePercent == null ? '未定义' : amount(riskDetails.liquidationDistancePercent, 4) + '%' }}</dd></div>
-        <div><dt>计划退出价 · {{ plan.reference ?? '无' }}</dt><dd>{{ amount(plan.price, 4) }}</dd></div>
-        <div><dt>计划价格盈亏估算</dt><dd>{{ plan.price == null ? '未定义' : position ? amount(plannedPricePnl(session), 4) : '成交后估算' }}</dd></div>
-      </dl>
-      <p v-if="position && session.risk?.estimatedLiquidationPrice == null" class="muted">当前参数无正强平价估算，不能理解为没有风险。</p>
-      <p class="muted">计划估算未含手续费、资金费、滑点与实际触发价差，不是保证损失。无退出价时不提供零损失估算。</p>
-      <CryptoModelNotice location="risk" />
-    </section>
-    <section>
-      <h2>手动退出计划</h2>
-      <form @submit.prevent="emit('command', { type: 'set-plan', mode: form.planMode, manualExitPrice: form.planMode === 'manual' ? form.manualPrice : null, reason: form.planReason })">
-        <label>计划方式<UiSelect v-model="form.planMode" aria-label="计划方式" :disabled="inactive"><option value="none">未设退出价</option><option value="manual">手动退出计划</option></UiSelect></label>
-        <label v-if="form.planMode === 'manual'">手动退出价<UiInput v-model="form.manualPrice" aria-label="手动退出价" inputmode="decimal" required :disabled="inactive" /></label>
-        <label>计划原因<UiInput v-model="form.planReason" aria-label="计划原因" maxlength="2000" :disabled="inactive" /></label>
-        <UiButton type="submit" variant="secondary" :disabled="inactive">保存退出计划</UiButton>
-      </form>
-      <p class="muted">{{ session.trainingJournal.plan.reason || '尚未记录计划原因。' }} 自动止损生效时优先显示自动状态，手动计划仍保留。</p>
-    </section>
     <section>
       <h2>下单</h2>
       <form @submit.prevent="submit">
-        <div class="two-fields"><label>操作<UiSelect v-model="form.intent" :disabled="inactive" aria-label="合约操作"><option value="long">开多 / 同向加多</option><option value="short">开空 / 同向加空</option><option value="reduce">仅减仓 / 平仓</option></UiSelect></label><label>委托类型<UiSelect v-model="form.type" :disabled="inactive" aria-label="委托类型"><option value="market">市价</option><option value="limit">限价 GTC</option></UiSelect></label></div>
+        <div class="crypto-segments" aria-label="开仓或平仓"><button type="button" :aria-pressed="form.intent !== 'reduce'" :disabled="inactive" @click="form.intent=position?.side??'long'">开仓</button><button type="button" :aria-pressed="form.intent === 'reduce'" :disabled="inactive || !position" @click="form.intent='reduce'">平仓</button></div>
+        <div v-if="form.intent !== 'reduce'" class="crypto-segments order-directions"><button type="button" :aria-pressed="form.intent==='long'" :disabled="inactive" @click="form.intent='long'">买入 / 做多</button><button type="button" :aria-pressed="form.intent==='short'" :disabled="inactive" @click="form.intent='short'">卖出 / 做空</button></div>
+        <p v-else class="muted">仅减仓，不会反向开仓；当前 {{ position?.contracts }} 张。</p>
+        <div class="crypto-section-tabs" aria-label="委托类型"><button type="button" :aria-pressed="form.type==='market'" :disabled="inactive" @click="form.type='market'">市价</button><button type="button" :aria-pressed="form.type==='limit'" :disabled="inactive" @click="form.type='limit'">限价</button></div>
         <label>仓位输入方式<UiSelect v-model="form.sizingMode" aria-label="仓位输入方式" :disabled="inactive || form.intent === 'reduce'"><option value="contracts">直接输入张数</option><option value="margin">按本单保证金估仓</option><option value="risk">按计划风险预算估仓</option></UiSelect></label>
-        <label v-if="form.sizingMode === 'contracts'">委托张数<UiInput v-model="form.contracts" aria-label="委托张数" inputmode="decimal" required placeholder="自行填写，不预选仓位" :disabled="inactive" /></label>
+        <label v-if="form.sizingMode === 'contracts'">委托数量<div class="crypto-quantity-row"><UiInput v-model="form.contracts" aria-label="委托张数" inputmode="decimal" required placeholder="自行填写，不预选仓位" :disabled="inactive" /><UiSelect v-model="form.unit" aria-label="数量单位" :disabled="inactive"><option value="contracts">张</option><option value="base">{{ session.instrumentId.startsWith('BTC')?'BTC':'ETH' }}</option><option value="quote">USDT</option></UiSelect></div></label>
         <label v-else>{{ form.sizingMode === 'margin' ? '本单保证金预算（不含手续费）' : '计划风险预算（USDT）' }}<UiInput v-model="form.sizingAmount" :aria-label="form.sizingMode === 'margin' ? '保证金预算' : '风险预算'" inputmode="decimal" required :disabled="inactive" /></label>
+        <p v-if="form.sizingMode==='contracts'&&form.unit!=='contracts'" class="muted">按{{ form.type==='limit'?'委托限价':'当前最新价' }}换算张数并向下取整；USDT为名义金额，不是保证金或保证成交金额。</p>
         <label v-if="form.type === 'limit'">限价（USDT）<UiInput v-model="form.limitPrice" aria-label="委托限价" inputmode="decimal" required :disabled="inactive" /></label>
-        <p class="muted">每张 {{ session.contract.ctVal }} {{ session.instrumentId.startsWith('BTC') ? 'BTC' : 'ETH' }}；张数步长 {{ session.contract.lotSz }}，价格步长 {{ session.contract.tickSz }}。委托下一未展示分钟起生效；市价余量撤销，限价余量等待。</p>
-        <label>这次操作的理由<UiTextarea v-model="form.note" aria-label="操作理由" maxlength="2000" :disabled="inactive" /></label>
+        <details>
+<summary>合约规格与成交规则</summary>        <p class="muted">每张 {{ session.contract.ctVal }} {{ session.instrumentId.startsWith('BTC') ? 'BTC' : 'ETH' }}；张数步长 {{ session.contract.lotSz }}，价格步长 {{ session.contract.tickSz }}。委托下一未展示分钟起生效；市价余量撤销，限价余量等待。</p>
+</details>
+        <details>
+<summary>记录本次判断（可选）</summary>        <label>这次操作的理由<UiTextarea v-model="form.note" aria-label="操作理由" maxlength="2000" :disabled="inactive" /></label>
+</details>
+        <details>
+<summary>自动止盈止损（可选）</summary>
         <div class="two-fields"><label>自动止损价（可空）<UiInput v-model="form.stopLoss" aria-label="自动止损价" inputmode="decimal" :disabled="inactive" /></label><label>自动止盈价（可空）<UiInput v-model="form.takeProfit" aria-label="自动止盈价" inputmode="decimal" :disabled="inactive" /></label></div>
         <label>保护触发参考<UiSelect v-model="form.reference" aria-label="保护触发参考" :disabled="inactive"><option value="last">普通价格 last</option><option value="mark">标记价格 mark</option></UiSelect></label>
         <p v-if="protectionWarning" class="muted" role="status">止损价已处于当前触发侧，下一执行分钟可能立即退出；触发价不保证成交。</p>
+        </details>
         <div class="order-preview" data-testid="crypto-order-preview" aria-live="polite">
           <h3>提交前核对</h3>
           <p v-if="session.status !== 'active' || session.ending" class="muted">本次已结束或正在退出，不再接受新委托。</p>
           <p v-else-if="previewState.busy" class="muted">正在按当前已知价格估算…</p>
           <p v-else-if="previewState.error" class="preview-error" role="status">{{ previewState.error }}</p>
           <template v-else-if="readyPreview">
-            <dl class="facts">
+            <p>预计 {{ readyPreview.contracts }} 张 · 保证金 {{ amount(readyPreview.initialMargin) }} USDT</p><details>
+<summary>完整估算与风险说明</summary><dl class="facts">
               <div><dt>本单张数 / 币数</dt><dd data-testid="crypto-preview-quantity">{{ readyPreview.contracts }} 张 / {{ readyPreview.baseQuantity }} {{ session.instrumentId.startsWith('BTC') ? 'BTC' : 'ETH' }}</dd></div>
               <div><dt>估算成交价</dt><dd>{{ readyPreview.fillPrice }}</dd></div>
               <div><dt>名义金额</dt><dd>{{ readyPreview.notional }} USDT</dd></div>
@@ -120,24 +101,14 @@ function submit() {
             <p v-if="readyPreview.roundedDown" class="muted">已按合约步长向下取整为 {{ readyPreview.contracts }} 张；输入金额为上限，不暗中扩大仓位。</p>
             <p class="muted">按本单全部成交估算，其他待成交委托未计入预计持仓。实际从下一分钟起执行，可能滑点或部分成交；预览不扣款。限价按输入限价估算，Maker/Taker 取决于实际撮合，冻结按 Taker 保守预留。保证金预算固定本单保证金，风险预算固定计划估算损失，杠杆均沿用本会话。</p>
             <p class="muted">风险预算使用已保存手动计划或本单止损价，计双边 Taker 费和教学滑点；未知资金费未计入，不是最大损失保证。{{ readyPreview.markBasisUnknown ? '本次退出参考为 mark，估算暂按 last=mark，实际基差和触发成交差异未知。' : '' }}</p>
+</details>
           </template>
           <p v-else class="muted">填写张数或预算后显示预览；不自动选择仓位。无退出价时损失未定义，仍可按张数或保证金下单。</p>
         </div>
-        <UiButton type="submit" variant="secondary" :disabled="inactive || !readyPreview || previewState.busy" block>提交委托</UiButton>
+        <UiButton type="submit" :disabled="inactive || !readyPreview || previewState.busy" block>{{ form.intent==='reduce'?'提交平仓委托':form.intent==='long'?'买入 / 做多':'卖出 / 做空' }}</UiButton>
       </form>
-      <div v-if="position" class="actions">
-        <UiButton variant="secondary" :disabled="inactive || (!form.stopLoss && !form.takeProfit)" @click="emit('command', { type: 'set-protection', ...protection() }, form.note)">更新持仓保护</UiButton>
-        <UiButton variant="secondary" :disabled="inactive" @click="emit('command', { type: 'market-close' }, form.note)">市价平全部</UiButton>
-      </div>
-      <p v-if="session.protection" class="muted" data-testid="crypto-protection">保护 {{ session.protection.contracts }} 张；止损 {{ session.protection.stopLoss?.price ?? '无' }} / 止盈 {{ session.protection.takeProfit?.price ?? '无' }}。一腿触发取消另一腿；部分退出按剩余量继续。</p>
-      <div v-if="session.protection" class="actions"><UiButton variant="secondary" :disabled="inactive" @click="emit('command', { type: 'cancel-protection' }, form.note)">取消全部保护</UiButton><UiButton v-if="session.protection.stopLoss" variant="secondary" :disabled="inactive" @click="emit('command', { type: 'cancel-protection', leg: 'stopLoss' }, form.note)">仅取消止损</UiButton><UiButton v-if="session.protection.takeProfit" variant="secondary" :disabled="inactive" @click="emit('command', { type: 'cancel-protection', leg: 'takeProfit' }, form.note)">仅取消止盈</UiButton></div>
-      <ul v-if="session.orders.length" class="orders"><li v-for="o in session.orders" :key="o.id"><span>{{ o.type === 'limit' ? '限价' : '市价' }} {{ o.intent === 'reduce' ? '减仓' : o.side === 'long' ? '开多' : '开空' }} · 余 {{ o.remainingContracts }} 张 <small>{{ o.limitPrice ?? '' }}</small></span><UiButton variant="secondary" :disabled="inactive" @click="emit('command', { type: 'cancel-order', orderId: o.id }, form.note)">撤单</UiButton></li></ul>
     </section>
-    <section v-if="position">
-      <h2>手动追加保证金</h2>
-      <form @submit.prevent="emit('command', { type: 'add-margin', amount: form.topup }, form.note)"><label>追加金额（USDT）<UiInput v-model="form.topup" aria-label="追加金额" inputmode="decimal" required :disabled="inactive" /></label><UiButton type="submit" variant="secondary" :disabled="inactive">追加保证金</UiButton></form>
-      <p class="muted">只划转可用资金，不增加张数或收入；不会自动补仓，已经发生的接管不可被事后追加撤销。</p>
-    </section>
+    <p class="muted order-risk-summary">{{ plan.label }} · {{ position ? '当前有持仓' : '当前空仓' }}。持仓、保护与手动计划在图表下方管理。</p>
   </aside>
 </template>
 <style scoped>

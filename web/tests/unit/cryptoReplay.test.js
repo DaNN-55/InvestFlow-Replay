@@ -4,6 +4,17 @@ import { createCryptoReplayController, CRYPTO_STORAGE_KEY } from '../../src/util
 import { riskPlan, plannedPricePnl, cryptoChartBars } from '../../src/utils/cryptoReplayPresentation.js';
 const memory = () => { const map = new Map(); return { getItem: (key) => map.get(key), setItem: (key, value) => map.set(key, value) }; };
 const session = () => ({ id: 'test', revision: 0, account: { position: null }, trainingJournal: { plan: { mode: 'none' } } });
+test('all chart periods use one explicit visible cursor, publish atomically, and preserve unknown-action retry state', async()=>{
+ const c=context(), apiCalls=[];
+ const api={getReplaySession:async()=>({session:{...session(),elapsedMinutes:17,gameLength:120,revision:3}}),cryptoMarket:async(_id,params)=>{apiCalls.push(params);return {candles:{last:[],mark:[]},elapsedMinutes:params.elapsedMinutes};},cryptoAudit:async()=>({items:[]}),listReplaySessions:async()=>({items:[]})};
+ const ui=createCryptoReplayController({api,storage:c.storage});
+ ui.state.timeframes=[60,5,15,240];ui.state.timeframe=60;
+ await ui.sync('test');assert.equal(apiCalls.length,4);assert.ok(apiCalls.every(p=>p.elapsedMinutes===17));
+ assert.deepEqual(Object.keys(ui.state.markets).map(Number).sort((a,b)=>a-b),[5,15,60,240]);
+ assert.equal(ui.state.market,ui.state.markets[60]);
+ api.cryptoMarket=async(_id,params)=>{if(params.timeframeMinutes===15) throw new Error('frame failed');return {candles:{last:[],mark:[]},cursor:18};};
+ const previous=ui.state.markets;assert.equal(await ui.sync(),false);assert.equal(ui.state.markets,previous);assert.match(ui.state.error,/frame failed/);
+});
 function context() {
   const storage = memory(); let current = session(), calls = 0, lose = false; const committed = new Map();
   const api = { getReplaySession: async () => ({ session: structuredClone(current) }), cryptoMarket: async () => ({ candles: { last: [], mark: [] } }), cryptoAudit: async () => ({ items: [] }), listReplaySessions: async () => ({ items: [] }),

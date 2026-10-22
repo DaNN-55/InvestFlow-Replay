@@ -55,6 +55,14 @@ test('G1 mixed ledger isolates stock analytics and novelty context from crypto s
  assert.equal(before.cacheContext.benchmarkCode, '000001.SH');
  assert.deepEqual(c.interaction.list({}).items.map(s => s.id), ['stock']);
  assert.deepEqual(c.interaction.list({ market: 'crypto-perpetual' }).items.map(s => s.id), [crypto.id]);
+ const all=c.interaction.list({market:'all',pageSize:1});
+ assert.equal(all.total,2);assert.equal(all.items.length,1);
+ const second=c.interaction.list({market:'all',pageSize:1,page:2});
+ assert.equal(new Set([all.items[0].id,second.items[0].id]).size,2);
+ const found=c.interaction.list({market:'all',keyword:'BTC-USDT-SWAP'});
+ assert.equal(found.total,1);assert.equal(found.items[0].id,crypto.id);
+ assert.equal(found.items[0].reveal,undefined);
+ assert.throws(()=>c.interaction.list({market:'unsupported'}),e=>e.code==='INVALID_REPLAY_COMMAND');
 });
 test('G1 cross-market comparison and stock mutation refuse crypto without changing money or revision', t => {
  const c = context(t), s = c.crypto.create({ market: 'crypto-perpetual', actionId: 'crypto', instrumentId: 'BTC-USDT-SWAP' }).session;

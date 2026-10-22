@@ -1290,7 +1290,7 @@ export function createReplayInteraction({
   function list(rawQuery) {
     const query = rawQuery && typeof rawQuery === "object" ? rawQuery : {};
     const market = query.market ?? "ashare";
-    assertInteractionCondition(["ashare", "crypto-perpetual"].includes(market), "不支持该市场");
+    assertInteractionCondition(["all", "ashare", "crypto-perpetual"].includes(market), "不支持该市场");
     return store.listSessions({ ...normalizeReplayHistoryQuery(query), ...(query.market == null ? {} : { market }) });
   }
 

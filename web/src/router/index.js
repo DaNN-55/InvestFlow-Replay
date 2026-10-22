@@ -8,7 +8,7 @@ export const router = createRouter({
   routes: [
     { path: "/", redirect: "/decision/market-replay" },
     { path: "/decision/market-replay", name: "quant-market-replay", component: MarketReplayView },
-    { path: "/decision/crypto-replay", name: "crypto-market-replay", component: () => import("../views/CryptoReplayEntry.vue") },
+    { path: "/decision/crypto-replay", name: "crypto-market-replay", component: () => import("../views/CryptoReplayView.vue") },
     { path: "/decision/trade-records", name: "quant-trade-records", component: TradeRecordsView },
     { path: "/:pathMatch(.*)*", redirect: "/decision/market-replay" },
   ],

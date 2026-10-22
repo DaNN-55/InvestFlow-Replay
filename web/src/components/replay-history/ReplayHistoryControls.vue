@@ -4,14 +4,14 @@ import UiCard from "../ui/UiCard.vue";
 
 defineProps({ activeView: { type: String, default: "records" } });
 const emit = defineEmits(["viewChange"]);
-const views = [{ key: "records", label: "演练记录" }, { key: "first", label: "首次分析" }, { key: "retrain", label: "复练分析" }];
+const views = [{ key: "records", label: "演练记录" }, { key: "first", label: "A股首次分析" }, { key: "retrain", label: "A股复练分析" }];
 </script>
 
 <template>
   <UiCard body-class="replay-history-records__controls">
       <div class="replay-history-records__toolbar">
-        <h2>历史演练</h2>
-        <div class="replay-history-records__view-switch" role="group" aria-label="历史演练视图">
+        <h2>演练记录</h2>
+        <div class="replay-history-records__view-switch" role="group" aria-label="演练记录视图">
           <UiButton
             v-for="view in views"
             :key="view.key"

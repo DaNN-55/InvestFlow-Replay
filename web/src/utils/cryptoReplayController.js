@@ -3,7 +3,7 @@ export const CRYPTO_STORAGE_KEY = 'investflow-crypto-attempt-v1';
 export function createCryptoReplayController({ api, storage, uuid = () => crypto.randomUUID(), changed = () => {} }) {
   let saved = {};
   try { saved = JSON.parse(storage.getItem(CRYPTO_STORAGE_KEY) ?? '{}'); } catch { /* Storage may have an old or interrupted record. */ }
-  const state = { session: null, busy: false, error: '', notice: '', pending: saved.pending ?? null, timeframe: 5, market: null, traces: [], ledger: [], history: [], analysis: null, analysisError: '', pool: null, poolError: '' };
+  const state = { session: null, busy: false, error: '', notice: '', pending: saved.pending ?? null, timeframe: 5, timeframes: [5], markets: {}, market: null, traces: [], ledger: [], history: [], analysis: null, analysisError: '', pool: null, poolError: '' };
   const publish = () => changed({ ...state });
   const persist = () => storage.setItem(CRYPTO_STORAGE_KEY, JSON.stringify({ sessionId: state.session?.id ?? saved.sessionId ?? null, pending: state.pending }));
   async function poolSummary() {
@@ -16,7 +16,7 @@ export function createCryptoReplayController({ api, storage, uuid = () => crypto
   }
   function clearSession() {
     saved.sessionId = null;
-    Object.assign(state, { session: null, market: null, traces: [], ledger: [], analysis: null, analysisError: '' });
+    Object.assign(state, { session: null, market: null, markets: {}, traces: [], ledger: [], analysis: null, analysisError: '' });
     persist();
   }
   async function data() {
@@ -30,7 +30,9 @@ export function createCryptoReplayController({ api, storage, uuid = () => crypto
         after = kind === 'ledger' ? r.items.at(-1).revision : r.items.at(-1).sequence;
       }
     };
-    const [market, traces, ledger, history, pool] = await Promise.all([api.cryptoMarket(id, { timeframeMinutes: state.timeframe, limit: 600 }), readAll('traces'), readAll('ledger'), api.listReplaySessions({ market: 'crypto-perpetual', pageSize: 30 }), poolSummary()]);
+    const elapsedMinutes = state.session.revealed ? state.session.gameLength : state.session.elapsedMinutes;
+    const [views, traces, ledger, history, pool] = await Promise.all([Promise.all(state.timeframes.map(async period => [period, await api.cryptoMarket(id, { timeframeMinutes: period, limit: 600, ...(elapsedMinutes == null ? {} : { elapsedMinutes }) })])), readAll('traces'), readAll('ledger'), api.listReplaySessions({ market: 'crypto-perpetual', pageSize: 30 }), poolSummary()]);
+    const markets = Object.fromEntries(views);
     let analysis = null; state.analysisError = '';
     if (state.session.revealed && api.cryptoAnalysis) {
       try {
@@ -39,7 +41,7 @@ export function createCryptoReplayController({ api, storage, uuid = () => crypto
       }
       catch (error) { analysis = null; state.analysisError = `派生复盘暂不可用：${errorText(error)}。原资金结果已保留。`; }
     }
-    Object.assign(state, { market, traces, ledger, history: history.items ?? [], pool, analysis });
+    Object.assign(state, { market: markets[state.timeframe], markets, traces, ledger, history: history.items ?? [], pool, analysis });
   }
   async function sync(id = state.session?.id ?? saved.sessionId) {
     if (state.busy) return false;
@@ -54,7 +56,7 @@ export function createCryptoReplayController({ api, storage, uuid = () => crypto
           state.notice = '原练习已删除或不在当前存储中，请从历史练习恢复。';
           return true;
         }
-        if (state.session?.id !== id) Object.assign(state, { market: null, traces: [], ledger: [], analysis: null, analysisError: '' });
+        if (state.session?.id !== id) Object.assign(state, { market: null, markets: {}, traces: [], ledger: [], analysis: null, analysisError: '' });
         state.session = result.session; saved.sessionId = id; persist(); await data();
       } else await overview();
       return true;
@@ -86,8 +88,9 @@ export function createCryptoReplayController({ api, storage, uuid = () => crypto
     return send({ kind, id: state.session?.id, body: { actionId: uuid(), ...(kind === 'create' ? {} : { expectedRevision: state.session.revision }), ...body } });
   }
   return { state, sync, act, retry: () => state.pending ? send(state.pending) : sync(),
-    async period(value) { if (state.busy) return; state.timeframe = Number(value); return sync(); },
-    async select(id) { if (state.busy) return; state.market = null; return sync(id); },
+    async period(value) { if (state.busy) return; state.timeframe = Number(value); state.timeframes = [state.timeframe]; return sync(); },
+    async periods(values) { if (state.busy) return false; state.timeframes = [...new Set(values.map(Number))]; state.timeframe = state.timeframes[0] ?? 5; return sync(); },
+    async select(id) { if (state.busy) return; state.market = null; state.markets = {}; return sync(id); },
     async fresh() { if (state.busy || state.pending) return; saved = {}; clearSession(); state.error = ''; state.notice = ''; publish(); },
   };
 }

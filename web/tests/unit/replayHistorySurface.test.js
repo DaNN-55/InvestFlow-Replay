@@ -48,7 +48,7 @@ describe("replay history tracking surface", () => {
     assert.match(viewSource, /const primaryTab = ref\("records"\)/u);
     assert.match(viewSource, /aria-label="交易追踪分类"/u);
     assert.match(viewSource, /实盘与模拟/u);
-    assert.match(viewSource, /历史演练/u);
+    assert.match(viewSource, /演练记录/u);
     assert.match(viewSource, /战法库/u);
     assert.match(viewSource, /primaryTab === 'records'/u);
     assert.match(viewSource, /primaryTab === 'replay'/u);

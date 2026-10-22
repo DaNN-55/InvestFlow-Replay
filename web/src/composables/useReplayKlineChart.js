@@ -1,4 +1,5 @@
 import { REPLAY_PRICE_LINE_GROUP, REPLAY_PRICE_LINE_OVERLAY } from '../utils/replayPriceLines.js';
+import { findReplayMinuteIndex, replayRange } from '../utils/cryptoChartSync.js';
 import {
   ActionType,
   dispose,
@@ -74,19 +75,22 @@ function cssToken(style, name, fallback) {
   return style.getPropertyValue(name).trim() || fallback;
 }
 
-function resolveChartStyles(mainIndicatorLegends) {
+function resolveChartStyles(mainIndicatorLegends, colors = {}) {
   const rootStyle = getComputedStyle(document.documentElement);
   return createReplayChartStyles({
     background: cssToken(rootStyle, "--ql-color-bg-surface-strong", "#ffffff"),
     grid: cssToken(rootStyle, "--ql-line", "#e5e7eb"),
     text: cssToken(rootStyle, "--ql-color-text-muted", "#64748b"),
     mainIndicatorLegends,
+    ...colors,
   });
 }
 
 export function useReplayKlineChart({
   host,
   model,
+  onCrosshair = () => {},
+  onRange = () => {},
 }) {
   const chart = shallowRef(null);
   const activeDrawingTool = shallowRef("");
@@ -117,6 +121,36 @@ export function useReplayKlineChart({
   let tradeOverlayKey = "";
   let drawingIds = [];
   let pendingDrawingId = "";
+  let synchronizing = false;
+  function crosshairChanged(value) {
+    if(synchronizing) return;
+    const bar = appliedData[value?.realDataIndex ?? value?.dataIndex];
+    const point = value?.paneId===CANDLE_PANE_ID ? chart.value?.convertFromPixel({ y:value.y }, { paneId:CANDLE_PANE_ID }) : null;
+    onCrosshair(bar ? { minute:bar.startSequence, price:point?.value } : null);
+  }
+  function syncCrosshair(value) {
+    const current = chart.value;
+    if(!current) return;
+    const index = value ? findReplayMinuteIndex(appliedData,value.minute) : -1;
+    // v9 defaults an absent paneId back to candle_pane. A non-string sentinel
+    // clears the linked cursor instead of drawing a fake cursor on the last bar.
+    if(index < 0) { current.executeAction(ActionType.OnCrosshairChange, {paneId:false}); return; }
+    const point=current.convertToPixel({dataIndex:index,...(Number.isFinite(value.price)?{value:value.price}:{})}, {paneId:CANDLE_PANE_ID});
+    current.executeAction(ActionType.OnCrosshairChange, {x:point.x,y:point.y,paneId:CANDLE_PANE_ID});
+  }
+  function syncRange(value, dateRange=false) {
+    const current=chart.value;
+    if(!current || !value || !appliedData.length) return;
+    const clamp = minute => minute < appliedData[0].startSequence ? 0 : minute > appliedData.at(-1).endSequence ? appliedData.length-1 : findReplayMinuteIndex(appliedData,minute);
+    const from=clamp(value.fromMinute), to=clamp(value.toMinute);
+    if(from<0 || to<0) return;
+    synchronizing=true;
+    try {
+      if(dateRange) current.setBarSpace(Math.max(1, Math.min(50,(current.getSize(CANDLE_PANE_ID,'main')?.width ?? host.value.clientWidth) / Math.max(5,to-from+1))));
+      current.scrollToDataIndex(to,0);
+    } finally { synchronizing=false; }
+  }
+  function latest() { chart.value?.scrollToRealTime(0); }
 
   function reportError(cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
@@ -139,6 +173,7 @@ export function useReplayKlineChart({
       startLabel: labelByTimestamp.get(appliedData[start]?.timestamp) ?? "",
       endLabel: labelByTimestamp.get(appliedData[endExclusive - 1]?.timestamp) ?? "",
     };
+    if(!synchronizing) onRange(replayRange(appliedData,range));
   }
 
   function removeIndicators() {
@@ -457,7 +492,7 @@ export function useReplayKlineChart({
     ensureDrawingOverlaysRegistered();
     chart.value = init(host.value, {
       locale: "zh-CN",
-      styles: resolveChartStyles(mainIndicatorLegends),
+      styles: resolveChartStyles(mainIndicatorLegends, model.value?.colors),
     });
     if (!chart.value) {
       reportError(new Error("KLineChart 初始化失败。"));
@@ -471,10 +506,11 @@ export function useReplayKlineChart({
       dragEnabled: false,
     });
     chart.value.subscribeAction(ActionType.OnVisibleRangeChange, emitVisibleRange);
+    chart.value.subscribeAction(ActionType.OnCrosshairChange, crosshairChanged);
     resizeObserver = new ResizeObserver(() => chart.value?.resize());
     resizeObserver.observe(host.value);
     themeObserver = new MutationObserver(() =>
-      chart.value?.setStyles(resolveChartStyles(mainIndicatorLegends))
+      chart.value?.setStyles(resolveChartStyles(mainIndicatorLegends, model.value?.colors))
     );
     themeObserver.observe(document.documentElement, {
       attributes: true,
@@ -493,6 +529,7 @@ export function useReplayKlineChart({
     themeObserver?.disconnect();
     if (chart.value) {
       chart.value.unsubscribeAction(ActionType.OnVisibleRangeChange, emitVisibleRange);
+      chart.value.unsubscribeAction(ActionType.OnCrosshairChange, crosshairChanged);
       dispose(chart.value);
       chart.value = null;
     }
@@ -531,6 +568,9 @@ export function useReplayKlineChart({
       undoDrawing,
       deleteSelectedDrawing,
       clearDrawings,
+      syncCrosshair,
+      syncRange,
+      latest,
     },
   };
 }
