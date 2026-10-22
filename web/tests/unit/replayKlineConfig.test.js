@@ -31,6 +31,15 @@ describe("replay KLineChart configuration", () => {
     assert.equal(styles.crosshair.horizontal.text.color, "#ffffff");
   });
 
+  it("shows compact crypto OHLC on hover without duplicated volume or empty percentage change", () => {
+    const styles = createReplayChartStyles({background:"white",grid:"gray",text:"black",compact:true});
+    assert.equal(styles.candle.tooltip.showRule,"follow_cross");
+    assert.equal(styles.candle.tooltip.showType,"rect");
+    assert.deepEqual(styles.candle.tooltip.rect,{color:"white",borderColor:"gray"});
+    assert.equal(styles.candle.tooltip.text.color,"black");
+    assert.deepEqual(styles.candle.tooltip.custom({current:{}}).map(item=>item.title),["time","open","high","low","close"]);
+  });
+
   it("appends main-chart indicator values to the candle data row", () => {
     const styles = createReplayChartStyles({
       background: "#ffffff",

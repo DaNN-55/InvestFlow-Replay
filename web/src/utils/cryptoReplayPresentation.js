@@ -2,10 +2,25 @@ export const CRYPTO_PERIODS = [[1, '1min'], [3, '3min'], [5, '5min'], [15, '15mi
 export const amount = (value, digits = 2) => value == null || value === '' || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 export const exact = (value) => value == null ? '未知' : String(value);
 export const relativeTime = (minute) => minute < 0 ? `背景 ${Math.ceil(-minute / 1440)}天前` : `第${Math.floor(minute / 1440) + 1}天 ${String(Math.floor(minute % 1440 / 60)).padStart(2,'0')}:${String(minute % 60).padStart(2,'0')}`;
-export function cryptoChartBars(view, kind = 'last') {
-  return (view?.candles?.[kind] ?? []).map((b) => ({ ...b, period: 'minute', volume: b.volumeContracts ?? 0, amount: b.volumeQuote ?? 0,
-    startSequence: b.startMinute, endSequence: b.knownThroughMinute - 1, displayLabel: `${relativeTime(b.startMinute)}${b.complete ? '' : ' · 形成中'}` }));
+export function cryptoChartTime(minute) {
+  const day = Math.floor(minute / 1440);
+  const withinDay = ((minute % 1440) + 1440) % 1440;
+  const clock = `${String(Math.floor(withinDay / 60)).padStart(2,'0')}:${String(withinDay % 60).padStart(2,'0')}`;
+  return { day: minute < 0 ? `${day}D` : `D${day + 1}`, clock };
 }
+export function cryptoChartBars(view, kind = 'last') {
+  const trades = new Map((view?.candles?.last ?? []).map(bar => [bar.startMinute,bar]));
+  return (view?.candles?.[kind] ?? []).map(bar => {
+    const trade = kind === 'last' ? bar : trades.get(bar.startMinute);
+    const matched = Boolean(trade) && trade.knownThroughMinute === bar.knownThroughMinute;
+    const time = cryptoChartTime(bar.startMinute);
+    return { ...bar, period:'minute', volume:matched ? trade.volumeContracts ?? null : null, amount:matched ? trade.volumeQuote ?? null : null,
+      startSequence:bar.startMinute, endSequence:bar.knownThroughMinute - 1,
+      displayLabel:`${time.day} ${time.clock}${bar.complete ? '' : ' · 形成中'}`,
+      axisLabel:view.timeframeMinutes >= 1440 ? time.day : view.timeframeMinutes >= 60 ? `${time.day} ${time.clock}` : time.clock === '00:00' ? time.day : time.clock };
+  });
+}
+
 export function riskPlan(session) {
   const position = session?.account?.position;
   const stop = session?.protection?.stopLoss;

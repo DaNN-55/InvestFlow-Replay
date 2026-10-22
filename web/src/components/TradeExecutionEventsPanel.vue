@@ -275,8 +275,6 @@ function formatSigned(value, suffix = "") {
 .trade-execution-events__list {
   display: grid;
   gap: 6px;
-  max-height: 280px;
-  overflow: auto;
 }
 
 .trade-execution-events__ledger {

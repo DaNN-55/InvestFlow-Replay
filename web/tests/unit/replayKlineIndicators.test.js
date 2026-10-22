@@ -22,6 +22,19 @@ describe("replay KLineChart custom indicators", () => {
     assert.equal(macdBar.styles({ prev: { indicatorData: { macd: -1 } }, current: { indicatorData: { macd: -2 } } }).color, "#38ae86");
   });
 
+  it("keeps compact crypto volume on the matching candle colors without changing stock defaults", () => {
+    const volume = createReplayBuiltinIndicatorConfig("VOL", "sub", {compact:true,rise:"green",fall:"red"});
+    assert.deepEqual(volume.figures.map(figure=>figure.key),["volume"]);
+    assert.deepEqual(volume.calcParams,[]);
+    assert.deepEqual(volume.regenerateFigures().map(figure=>figure.key),["volume"]);
+    assert.equal(volume.figures[0].styles({current:{kLineData:{open:10,close:11}}}).color,"green");
+    const data = volume.createTooltipDataSource({kLineDataList:[{volume:12500.5}],crosshair:{dataIndex:0}});
+    assert.equal(data.name,"成交量 · 张");
+    assert.equal(data.calcParamsText,"");
+    assert.equal(data.values[0].value,"12,500.5");
+    assert.equal(createReplayBuiltinIndicatorConfig("VOL").figures.length,4);
+  });
+
   it("uses a stable registration name derived from the custom id", () => {
     assert.equal(replayCustomIndicatorName("alpha / beta"), "REPLAY_CUSTOM_alpha_beta");
   });

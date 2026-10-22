@@ -75,7 +75,7 @@ onBeforeUnmount(() => {
       </template>
       <details class="crypto-data-details">
         <summary>数据来源与冻结版本<ChevronDown :size="14" /></summary>
-        <p>OKX 历史归档：最新价、标记价和资金费分别校验。继续与复练沿用开局版本；本局日期在揭晓后显示。</p>
+        <p>OKX 历史归档：最新价、标记价和资金费分别校验。继续与复练沿用开局版本；本局日期在揭晓后显示。两种价格图下方均显示同时间段的真实成交量（张）。</p>
       </details>
       <details class="crypto-data-details">
         <summary>训练规则与教学结算<ChevronDown :size="14" /></summary>

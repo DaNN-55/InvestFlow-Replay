@@ -2,6 +2,7 @@ import { REPLAY_PRICE_LINE_GROUP, REPLAY_PRICE_LINE_OVERLAY } from '../utils/rep
 import { findReplayMinuteIndex, replayRange } from '../utils/cryptoChartSync.js';
 import {
   ActionType,
+  FormatDateType,
   dispose,
   init,
   registerIndicator,
@@ -75,13 +76,14 @@ function cssToken(style, name, fallback) {
   return style.getPropertyValue(name).trim() || fallback;
 }
 
-function resolveChartStyles(mainIndicatorLegends, colors = {}) {
+function resolveChartStyles(mainIndicatorLegends, colors = {}, compact = false) {
   const rootStyle = getComputedStyle(document.documentElement);
   return createReplayChartStyles({
     background: cssToken(rootStyle, "--ql-color-bg-surface-strong", "#ffffff"),
     grid: cssToken(rootStyle, "--ql-line", "#e5e7eb"),
     text: cssToken(rootStyle, "--ql-color-text-muted", "#64748b"),
     mainIndicatorLegends,
+    compact,
     ...colors,
   });
 }
@@ -448,8 +450,11 @@ export function useReplayKlineChart({
       }
       appliedData = adapted.data;
       labelByTimestamp = adapted.labelByTimestamp;
+      const axisLabels = new Map(adapted.data.map((bar,index) => [bar.timestamp,bars.value[index]?.axisLabel ?? bar.replayLabel]));
       current.setCustomApi({
-        formatDate: (_formatter, timestamp) => labelByTimestamp.get(timestamp) ?? "",
+        formatDate: (_formatter, timestamp, _format, type) => type === FormatDateType.XAxis
+          ? axisLabels.get(timestamp) ?? labelByTimestamp.get(timestamp) ?? ""
+          : labelByTimestamp.get(timestamp) ?? "",
       });
       if (update === "replace") {
         showLatestHundred();
@@ -483,6 +488,16 @@ export function useReplayKlineChart({
     }, 0);
   }
 
+  function syncVolume() {
+    const current = chart.value;
+    if (!current) return;
+    current.removeIndicator("replay-volume", "VOL");
+    if (model.value?.showVolume === false) return;
+    current.createIndicator(createReplayBuiltinIndicatorConfig("VOL", "sub", { compact:model.value?.compact, ...model.value?.colors }), false, {
+      id:"replay-volume", height:92, minHeight:72, dragEnabled:false,
+    });
+  }
+
   function mountChart() {
     if (!host.value || chart.value) {
       return;
@@ -492,25 +507,20 @@ export function useReplayKlineChart({
     ensureDrawingOverlaysRegistered();
     chart.value = init(host.value, {
       locale: "zh-CN",
-      styles: resolveChartStyles(mainIndicatorLegends, model.value?.colors),
+      styles: resolveChartStyles(mainIndicatorLegends, model.value?.colors, model.value?.compact),
     });
     if (!chart.value) {
       reportError(new Error("KLineChart 初始化失败。"));
       return;
     }
     chart.value.setPaneOptions(REPLAY_CANDLE_PANE_OPTIONS);
-    chart.value.createIndicator(createReplayBuiltinIndicatorConfig("VOL"), false, {
-      id: "replay-volume",
-      height: 92,
-      minHeight: 72,
-      dragEnabled: false,
-    });
+    syncVolume();
     chart.value.subscribeAction(ActionType.OnVisibleRangeChange, emitVisibleRange);
     chart.value.subscribeAction(ActionType.OnCrosshairChange, crosshairChanged);
     resizeObserver = new ResizeObserver(() => chart.value?.resize());
     resizeObserver.observe(host.value);
     themeObserver = new MutationObserver(() =>
-      chart.value?.setStyles(resolveChartStyles(mainIndicatorLegends, model.value?.colors))
+      chart.value?.setStyles(resolveChartStyles(mainIndicatorLegends, model.value?.colors, model.value?.compact))
     );
     themeObserver.observe(document.documentElement, {
       attributes: true,
@@ -546,6 +556,7 @@ export function useReplayKlineChart({
   onDeactivated(unmountChart);
   onBeforeUnmount(unmountChart);
   watch(bars, applyBars);
+  watch(() => model.value?.showVolume, syncVolume);
   watch(trades, syncTrades);
   watch(priceLines, syncPriceLines, { deep: true });
   watch(indicators, syncIndicators, { deep: true });

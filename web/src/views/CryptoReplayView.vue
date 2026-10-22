@@ -22,6 +22,7 @@ const state=shallowRef({}),preferences=ref(loadCryptoPreferences(localStorage));
 const controller=createCryptoReplayController({api,storage:localStorage,changed:value=>{state.value=value;}});
 controller.state.timeframes=cryptoVisiblePeriods(preferences.value);controller.state.timeframe=controller.state.timeframes[0];state.value={...controller.state};
 const s=computed(()=>state.value.session);
+const progress=computed(()=>Math.min(100,Math.max(0,Number(s.value?.elapsedMinutes??0)/Math.max(1,Number(s.value?.gameLength??1))*100)));
 const routeMismatch=computed(()=>route.name==='crypto-market-replay'&&typeof route.query.session==='string'&&route.query.session!==s.value?.id);
 const locked=computed(()=>state.value.busy||Boolean(state.value.pending)||routeMismatch.value);
 const finishOpen=ref(false),settingsOpen=ref(false),playing=ref(false);
@@ -83,13 +84,23 @@ async function retrain() {
       <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed}">
         <div class="crypto-terminal-main">
           <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" />
-          <div class="crypto-playback"><button type="button" class="crypto-icon" :aria-label="playing?'暂停回放':'自动回放'" :disabled="locked||s.status!=='active'||s.ending" @click="playing=!playing"><Pause v-if="playing" :size="16" /><Play v-else :size="16" /></button><div><strong>{{ relativeTime(s.elapsedMinutes) }}</strong><small>{{ s.attemptInfo.kind==='first'?'首次盲测':`复练 #${s.attemptInfo.attemptNumber}` }} · {{ s.config.leverage }}倍</small></div><progress :value="s.elapsedMinutes" :max="s.gameLength" aria-label="训练进度" /><UiButton v-for="n in [1,5,15]" :key="n" variant="secondary" :disabled="locked||s.status!=='active'" @click="advance(n)">推进 {{ n }} 分钟</UiButton><UiButton variant="secondary" class="crypto-finish" :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton></div>
           <p v-if="s.ending&&s.status!=='completed'" class="crypto-alert" role="status">{{ s.status==='end-blocked'?'结束受阻：预留分钟容量不足，仍有仓位；不能揭晓或复练。':'正在结束：继续推进以退出剩余仓位，不再新开仓。' }}</p>
           <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @command="command" @records="records" />
           <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
           <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
         </div>
-        <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @command="command" />
+        <div class="crypto-terminal-side">
+          <section class="crypto-playback" aria-label="回放控制">
+            <div class="crypto-playback-heading">
+              <button type="button" class="crypto-icon" :aria-label="playing?'暂停回放':'自动回放'" :disabled="locked||s.status!=='active'||s.ending" @click="playing=!playing"><Pause v-if="playing" :size="16" /><Play v-else :size="16" /></button>
+              <div><strong>{{ relativeTime(s.elapsedMinutes) }}</strong><small>{{ s.attemptInfo.kind==='first'?'首次盲测':`复练 #${s.attemptInfo.attemptNumber}` }} · {{ s.config.leverage }}倍</small></div>
+            </div>
+            <div class="crypto-playback-progress"><div><span>练习进度</span><span>{{ Math.round(progress*100)/100 }}%</span></div><progress :value="progress" max="100" aria-label="练习进度" /></div>
+            <div class="crypto-playback-steps"><UiButton v-for="n in [1,5,15]" :key="n" variant="secondary" :disabled="locked||s.status!=='active'" @click="advance(n)">推进 {{ n }} 分钟</UiButton></div>
+            <UiButton variant="secondary" class="crypto-finish" block :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton>
+          </section>
+          <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @command="command" />
+        </div>
       </div>
     </template>
     <UiDrawer :open="settingsOpen" title="交易与显示设置" description="交易参数开局后冻结；显示偏好可随时调整。" panel-class="crypto-controls crypto-data-drawer" @close="settingsOpen=false"><label>账户数字精度<UiSelect v-model="display.precision" aria-label="账户数字显示精度"><option value="auto">摘要 · 两位小数</option><option value="full">完整 · 八位小数</option></UiSelect></label><p>布局、各图周期和联动开关会在本浏览器记住。</p><template v-if="s"><dl class="crypto-detail-facts"><div><dt>杠杆 / 持仓</dt><dd>{{ s.config.leverage }}倍 · 逐仓单向</dd></div><div><dt>固定 Maker / Taker</dt><dd>{{ Number(s.frozenRules.makerRate)*100 }}% / {{ Number(s.frozenRules.takerRate)*100 }}%</dd></div><div><dt>单边教学滑点</dt><dd>{{ s.frozenRules.slippageBps }} bps</dd></div></dl></template><button type="button" class="crypto-text-button" @click="settingsOpen=false;openData()">查看数据来源与完整规则</button></UiDrawer>

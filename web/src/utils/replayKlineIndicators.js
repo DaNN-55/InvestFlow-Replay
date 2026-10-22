@@ -13,7 +13,7 @@ const BUILTIN_PARAMS = Object.freeze({
   KDJ: [9, 3, 3],
 });
 
-function volumeFigures() {
+function volumeFigures({ compact = false, rise = REPLAY_RISE_COLOR, fall = REPLAY_FALL_COLOR } = {}) {
   return [
     { key: "ma1", title: "MA5: ", type: "line" },
     { key: "ma2", title: "MA10: ", type: "line" },
@@ -27,12 +27,12 @@ function volumeFigures() {
         const row = current?.kLineData;
         return {
           color: Number(row?.close) >= Number(row?.open)
-            ? REPLAY_RISE_COLOR
-            : REPLAY_FALL_COLOR,
+            ? rise
+            : fall,
         };
       },
     },
-  ];
+  ].filter(figure => !compact || figure.key === "volume");
 }
 
 function macdFigures() {
@@ -65,11 +65,18 @@ function hiddenTooltipDataSource() {
   return { name: "", calcParamsText: "", values: [], icons: [] };
 }
 
-export function createReplayBuiltinIndicatorConfig(name, placement = "sub") {
+export function createReplayBuiltinIndicatorConfig(name, placement = "sub", options = {}) {
   return {
     name,
-    calcParams: BUILTIN_PARAMS[name],
-    ...(name === "VOL" ? { figures: volumeFigures() } : {}),
+    calcParams: name === "VOL" && options.compact ? [] : BUILTIN_PARAMS[name],
+    ...(name === "VOL" ? {
+      figures: volumeFigures(options),
+      ...(options.compact ? { regenerateFigures: () => volumeFigures(options), createTooltipDataSource: ({ kLineDataList, crosshair }) => {
+        const index = crosshair?.dataIndex ?? kLineDataList.length - 1;
+        const value = kLineDataList[index]?.volume;
+        return { name:"成交量 · 张", calcParamsText:"", icons:[], values:[{ title:"", value:value == null ? "—" : Number(value).toLocaleString("en-US", {maximumFractionDigits:2}) }] };
+      } } : {}),
+    } : {}),
     ...(name === "MACD" ? { figures: macdFigures() } : {}),
     ...(placement === "main"
       ? { createTooltipDataSource: hiddenTooltipDataSource }
