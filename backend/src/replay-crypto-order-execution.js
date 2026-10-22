@@ -364,6 +364,29 @@ export function createCryptoOrderReplay({ rules, scenario: input, dataVersion, s
           if (!reserve(s, order)) fail("INSUFFICIENT_CASH", "Cover the estimated margin and taker fee before submission");
           s.orders.push(order); emit(events, s, "order-submitted", { order: structuredClone(order), estimateIsNotAFill: true }); break;
         }
+        case "amend-limit": {
+          if (s.elapsedMinutes >= replayMinutes) fail("END_EXECUTION_ONLY", "No price changes in the reserved minute");
+          if (!Number.isSafeInteger(command.orderId) || command.orderId < 1) fail("INVALID_ORDER_ID", "Use an active order ID");
+          const o = s.orders.find((o) => o.id === command.orderId);
+          if (!o || o.type !== "limit") fail("ORDER_NOT_ACTIVE", "Only active limit orders can be amended");
+          if (o.intent === "increase" && s.protection?.triggeredLeg) fail("PROTECTION_EXIT_PENDING", "Finish the triggered exit before adding risk");
+          const price = decimal(command.limitPrice).toFixed();
+          calc.quoteFill({ contracts: o.remainingContracts, fillPrice: price, liquidityRole: "taker", leverage: o.intent === "increase" ? s.leverage : null });
+          if (new D(price).eq(o.limitPrice)) fail("UNCHANGED_LIMIT_PRICE", "The limit price has not changed");
+          if (o.intent === "increase") {
+            const pending = s.orders.filter((x) => x.intent === "increase").reduce((n, x) => n.plus(x.remainingContracts), new D(s.account.position?.contracts ?? 0));
+            calc.quoteFill({ contracts: pending.toFixed(), fillPrice: price, liquidityRole: "taker", leverage: s.leverage });
+          }
+          const oldPrice = o.limitPrice, oldReserve = o.reservedBalance;
+          // The entire command operates on a clone: failed reserve checks keep the old order intact.
+          release(s, o); o.limitPrice = price;
+          if (!reserve(s, o)) fail("INSUFFICIENT_CASH", "Cover the amended margin and taker fee before confirmation");
+          // A price change loses queue priority. Re-evaluate at the next unseen minute, never at the visible candle.
+          o.resting = false; o.blockedAtMinute = null; o.submittedMinute = s.elapsedMinutes;
+          s.orders = [...s.orders.filter((x) => x.id !== o.id), o];
+          emit(events, s, "order-amended", { orderId: o.id, oldPrice, limitPrice: price, remainingContracts: o.remainingContracts, oldReserve, reservedBalance: o.reservedBalance });
+          break;
+        }
         case "cancel-order": {
           const o = s.orders.find((o) => o.id === command.orderId); if (!o) fail("ORDER_NOT_ACTIVE", "Only active unfilled quantity can be cancelled");
           cancel(s, events, o, "user"); break;

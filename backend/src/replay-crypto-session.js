@@ -35,7 +35,7 @@ function protective(value) {
 }
 function normalizeCommand(input) {
   const schemas = { "market-open": ["side", "contracts", "protection"], "limit-open": ["side", "contracts", "limitPrice", "protection"],
-    "market-close": ["contracts"], "limit-close": ["contracts", "limitPrice"], "cancel-order": ["orderId"], "cancel-all-orders": [],
+    "market-close": ["contracts"], "limit-close": ["contracts", "limitPrice"], "amend-limit": ["orderId", "limitPrice"], "cancel-order": ["orderId"], "cancel-all-orders": [],
     "set-protection": ["stopLoss", "takeProfit"], "cancel-protection": ["leg"], "add-margin": ["amount"], "advance": ["minutes"], "finish": [], "set-plan": ["mode", "manualExitPrice", "reason"] };
   const allowed = schemas[input?.type]; if (!allowed) fail("INVALID_REQUEST", "不支持该合约动作");
   fields(input, ["type", ...allowed]);

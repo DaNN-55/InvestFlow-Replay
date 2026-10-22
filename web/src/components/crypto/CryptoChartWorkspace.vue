@@ -4,11 +4,11 @@ import { Grid2X2, LocateFixed, Maximize2, PanelRightClose, PanelRightOpen } from
 import CandlestickChart from '../CandlestickChart.vue';
 import UiSelect from '../ui/UiSelect.vue';
 import UiButton from '../ui/UiButton.vue';
-import { protectionDraftCurrent, protectionDraftTriggered } from '../../utils/cryptoProtectionDraft.js';
+import { priceDraftCurrent, priceDraftReached } from '../../utils/cryptoPriceDraft.js';
 import { CRYPTO_PERIODS, cryptoChartBars, cryptoChartLines } from '../../utils/cryptoReplayPresentation.js';
 import { REPLAY_RISE_COLOR, REPLAY_FALL_COLOR } from '../../utils/replayKlineConfig.js';
-const props=defineProps({session:{type:Object,required:true},markets:{type:Object,default:()=>({})},modelValue:{type:Object,required:true},busy:Boolean,blocked:Boolean,protectionDraft:{type:Object,default:null}});
-const emit=defineEmits(['update:modelValue','protection-drag','confirm-protection','cancel-protection']);
+const props=defineProps({session:{type:Object,required:true},markets:{type:Object,default:()=>({})},modelValue:{type:Object,required:true},busy:Boolean,blocked:Boolean,priceDraft:{type:Object,default:null}});
+const emit=defineEmits(['update:modelValue','price-drag','confirm-price','cancel-price']);
 const draggingIndex=ref(null);
 const selected=ref(0), maximized=ref(null), menu=ref(false), root=ref(null);
 const charts=new Map();
@@ -18,14 +18,14 @@ const visible=computed(()=>maximized.value==null?Array.from({length:count.value}
 const prefs=computed(()=>props.modelValue);
 const models=computed(()=>prefs.value.periods.map((period,i)=>{
   const bars=cryptoChartBars(props.markets[period],prefs.value.kinds[i]);
-  const editable=!props.busy&&!props.blocked&&!props.protectionDraft&&props.session.status==='active'&&!props.session.ending&&props.session.account.position&&!props.session.protection?.triggeredLeg&&(draggingIndex.value==null||draggingIndex.value===i);
-  const lines=cryptoChartLines(props.session,prefs.value.kinds[i]).map(line=>({...line,draggable:Boolean(editable&&line.protectionLeg)}));
-  const base=props.protectionDraft&&lines.find(line=>line.protectionLeg===props.protectionDraft.leg);
-  if(base) lines.push({...base,id:`${base.id}:draft`,price:props.protectionDraft.price,label:`待确认${props.protectionDraft.leg==='stopLoss'?'止损':'止盈'}`,draggable:false,protectionLeg:null,dashed:true,preview:true});
+  const editable=!props.busy&&!props.blocked&&!props.priceDraft&&props.session.status==='active'&&!props.session.ending&&(draggingIndex.value==null||draggingIndex.value===i);
+  const lines=cryptoChartLines(props.session,prefs.value.kinds[i]).map(line=>({...line,draggable:Boolean(editable&&(line.orderId!=null||(line.protectionLeg&&props.session.account.position&&!props.session.protection?.triggeredLeg)))}));
+  const base=props.priceDraft&&lines.find(line=>props.priceDraft.kind==='order'?line.orderId===props.priceDraft.orderId:line.protectionLeg===props.priceDraft.leg);
+  if(base) lines.push({...base,id:`${base.id}:draft`,price:props.priceDraft.price,label:`待确认${props.priceDraft.kind==='order'?'委托':props.priceDraft.leg==='stopLoss'?'止损':'止盈'}`,draggable:false,protectionLeg:null,orderId:null,dashed:true,preview:true});
   return { bars, lines, showVolume:bars.length>0&&bars.every(bar=>bar.volume!=null) };
 }));
-function drag(index,event) {clearCrosshair();draggingIndex.value=event.phase==='start'?index:null;emit('protection-drag',event);}
-function escape() {menu.value=false;maximized.value=null;if(props.protectionDraft&&!props.busy) emit('cancel-protection');}
+function drag(index,event) {clearCrosshair();draggingIndex.value=event.phase==='start'?index:null;emit('price-drag',event);}
+function escape() {menu.value=false;maximized.value=null;if(props.priceDraft&&!props.busy) emit('cancel-price');}
 function patch(value) { emit('update:modelValue',{...prefs.value,...value}); }
 function toggle(key,checked) { patch({[key]:checked,...(key==='period'&&checked?{periods:Array(4).fill(prefs.value.periods[selected.value])}:{})}); }
 function layout(value) { selected.value=0;maximized.value=null;patch({layout:value}); }
@@ -61,9 +61,9 @@ onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside));
         <p>同一合约，各图独立周期。价格线只在同一价格类型间同步；范围联动限于已加载行情。</p><button type="button" class="crypto-text-button" @click="menu=false">收起布局设置</button>
       </div>
     </header>
-    <section v-if="protectionDraft" class="crypto-protection-confirm" aria-label="确认止盈止损调整">
-      <div><strong>{{ protectionDraft.leg==='stopLoss'?'止损':'止盈' }} {{ protectionDraft.oldPrice }} → {{ protectionDraft.price }}</strong><small>{{ protectionDraft.protection[protectionDraft.leg].reference==='mark'?'标记价格':'最新价' }}触发 · {{ protectionDraft.position.contracts }} 张 · 原保护在确认前仍有效</small><p v-if="protectionDraftTriggered(session,protectionDraft)" role="status">新价格已在触发侧，确认后下一分钟可能立即退出。</p></div>
-      <div class="crypto-protection-confirm-actions"><UiButton variant="secondary" :disabled="busy" @click="emit('cancel-protection')">取消调整</UiButton><UiButton :disabled="busy||blocked||!protectionDraftCurrent(session,protectionDraft)" @click="emit('confirm-protection')">确认生效</UiButton></div>
+    <section v-if="priceDraft" class="crypto-protection-confirm" :aria-label="priceDraft.kind==='order'?'确认限价委托调整':'确认止盈止损调整'">
+      <div><strong>{{ priceDraft.kind==='order'?'委托价':priceDraft.leg==='stopLoss'?'止损':'止盈' }} {{ priceDraft.oldPrice }} → {{ priceDraft.price }}</strong><small v-if="priceDraft.kind!=='order'">{{ priceDraft.protection[priceDraft.leg].reference==='mark'?'标记价格':'最新价' }}触发 · {{ priceDraft.position.contracts }} 张 · 原保护在确认前仍有效</small><small v-else>委托 #{{ priceDraft.orderId }} · 未成交 {{ priceDraft.order.remainingContracts }} 张 · 确认前原委托仍有效</small><p v-if="priceDraftReached(session,priceDraft)" role="status">{{ priceDraft.kind==='order'?'新价格已越过当前价，下一分钟可能按吃单成交。':'新价格已在触发侧，确认后下一分钟可能立即退出。' }}</p></div>
+      <div class="crypto-protection-confirm-actions"><UiButton variant="secondary" :disabled="busy" @click="emit('cancel-price')">取消调整</UiButton><UiButton :disabled="busy||blocked||!priceDraftCurrent(session,priceDraft)" @click="emit('confirm-price')">确认生效</UiButton></div>
     </section>
     <div class="crypto-chart-grid" :class="maximized==null?prefs.layout:'single'" @pointerleave="clearCrosshair">
       <section v-for="i in visible" :key="`${session.id}:${i}`" class="crypto-chart-tile" :class="{'is-selected':i===selected}" :data-chart-index="i" tabindex="0" :aria-label="`图${i+1}，按回车选中`" @pointerdown.capture="selected=i" @wheel.capture="selected=i" @focusin="selected=i" @keydown.enter="selected=i">

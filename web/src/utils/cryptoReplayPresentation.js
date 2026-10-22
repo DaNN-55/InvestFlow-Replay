@@ -35,7 +35,7 @@ export function plannedPricePnl(session) {
   const base = Number(p.contracts) * Number(session.contract.ctVal) * Number(session.contract.ctMult);
   return (Number(plan.price) - Number(p.entryPrice)) * base * (p.side === 'long' ? 1 : -1);
 }
-export const eventName = (type) => ({ 'order-submitted': '委托已提交', 'order-filled': '普通成交', 'order-cancelled': '委托已撤销', 'order-rejected': '委托被拒绝', 'protection-triggered': '保护已触发', 'protection-filled': '保护成交', 'protection-armed': '保护已设置', 'protection-cancelled': '保护已取消', 'protection-leg-cancelled': '保护单腿已取消', 'protection-resized': '保护数量已联动', 'order-clipped': '减仓量已联动', 'limit-waiting': '限价等待', 'margin-added': '手动追加保证金', 'funding-settled': '资金费结算', 'funding-skipped': '空仓未收付资金费', 'risk-triggered': '风险阈值触发', 'risk-rechecked': '撤单后风险复核', 'teaching-liquidation': '教学强平接管', 'intraminute-ambiguity': '分钟内次序不明', 'end-filled': '结束平仓成交', 'training-ended': '练习已结束', 'end-blocked': '结束受阻，仍有仓位' })[type] ?? type;
+export const eventName = (type) => ({ 'order-amended': '委托价格已调整', 'order-submitted': '委托已提交', 'order-filled': '普通成交', 'order-cancelled': '委托已撤销', 'order-rejected': '委托被拒绝', 'protection-triggered': '保护已触发', 'protection-filled': '保护成交', 'protection-armed': '保护已设置', 'protection-cancelled': '保护已取消', 'protection-leg-cancelled': '保护单腿已取消', 'protection-resized': '保护数量已联动', 'order-clipped': '减仓量已联动', 'limit-waiting': '限价等待', 'margin-added': '手动追加保证金', 'funding-settled': '资金费结算', 'funding-skipped': '空仓未收付资金费', 'risk-triggered': '风险阈值触发', 'risk-rechecked': '撤单后风险复核', 'teaching-liquidation': '教学强平接管', 'intraminute-ambiguity': '分钟内次序不明', 'end-filled': '结束平仓成交', 'training-ended': '练习已结束', 'end-blocked': '结束受阻，仍有仓位' })[type] ?? type;
 export function errorText(error) {
   const msg = error?.message ?? '请求失败';
   if (/cash|afford|balance/i.test(msg)) return '可用资金不足，请减少张数或撤销待成交委托后再试。';
@@ -44,7 +44,7 @@ export function errorText(error) {
   return msg;
 }
 
-export const commandName = (type) => ({ 'market-open':'市价开仓或加仓', 'limit-open':'限价开仓或加仓', 'market-close':'市价减仓或平仓', 'limit-close':'限价减仓或平仓', 'set-protection':'更新持仓保护', 'cancel-protection':'取消保护', 'cancel-order':'撤销委托', 'cancel-all-orders':'撤销全部委托', 'add-margin':'手动追加保证金', 'set-plan':'更新手动退出计划', finish:'结束练习' })[type] ?? '操作记录';
+export const commandName = (type) => ({ 'market-open':'市价开仓或加仓', 'limit-open':'限价开仓或加仓', 'market-close':'市价减仓或平仓', 'limit-close':'限价减仓或平仓', 'set-protection':'更新持仓保护', 'cancel-protection':'取消保护', 'amend-limit':'调整限价委托', 'cancel-order':'撤销委托', 'cancel-all-orders':'撤销全部委托', 'add-margin':'手动追加保证金', 'set-plan':'更新手动退出计划', finish:'结束练习' })[type] ?? '操作记录';
 export const eventReason = (reason) => ({ 'user-cancelled':'手动撤销', 'user-cancel-all':'手动撤销全部', 'user-finish':'主动结束', 'window-expired':'回放窗口结束', 'IOC-unfilled-remainder':'市价单未成交余量已撤销', 'protective-exit-triggered':'保护触发，撤销相关普通委托', 'NO_MINUTE_CAPACITY':'该分钟没有足够成交容量', 'NO_AFFORDABLE_OR_TIER_CAPACITY':'资金或档位不足以继续成交', 'position-flat':'已空仓，清理相关保护', 'flat-at-source-event-time':'原始资金费时点为空仓', 'reduce-only-position-shrank':'持仓减少，仅减仓委托同步缩量' })[reason] ?? reason;
 
 export function cryptoRiskDetails(session) {
@@ -69,7 +69,7 @@ export function cryptoChartLines(session, kind) {
   const plan = session.trainingJournal?.plan;
   if (plan?.mode === 'manual') add('manual', plan.manualExitPrice, '手动计划（不执行）', 'last', { color: '#a16207', dashed: true });
   for (const order of session.orders ?? []) {
-    if (order.type === 'limit') add(`order-${order.id}`, order.limitPrice, `待成交 · ${order.intent === 'reduce' ? '减仓' : order.side === 'long' ? '开多' : '开空'}`, 'last', { color: '#2563eb', dashed: true }, order.remainingContracts);
+    if (order.type === 'limit') add(`order-${order.id}`, order.limitPrice, `待成交 · ${order.intent === 'reduce' ? '减仓' : order.side === 'long' ? '开多' : '开空'}`, 'last', { color: '#2563eb', dashed: true, orderId:order.id }, order.remainingContracts);
     if(!order.protectionApplied) for(const [leg,label] of [['stopLoss','止损'],['takeProfit','止盈']]) {
       const protection=order.attachedProtection?.[leg];
       if(protection) add(`order-${order.id}-${leg}`,protection.price,`待成交后${label}`,protection.reference,{color:leg==='stopLoss'?'#d55d70':'#159875',dashed:true},order.remainingContracts);

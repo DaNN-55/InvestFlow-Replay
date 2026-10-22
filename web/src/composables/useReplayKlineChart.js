@@ -1,5 +1,5 @@
 import { REPLAY_PRICE_LINE_GROUP, REPLAY_PRICE_LINE_OVERLAY } from '../utils/replayPriceLines.js';
-import { snapProtectionPrice } from '../utils/cryptoProtectionDraft.js';
+import { snapProtectionPrice } from '../utils/cryptoPriceDraft.js';
 import { findReplayMinuteIndex, replayRange } from '../utils/cryptoChartSync.js';
 import {
   ActionType,
@@ -287,7 +287,7 @@ export function useReplayKlineChart({
     const drag=priceDrag;priceDrag=null;
     chart.value?.removeOverlay(drag.backupId);
     priceLineKey='';syncPriceLines();
-    onPriceLineDrag({phase:cancel?'cancel':'end',leg:drag.line.protectionLeg,price:drag.moved?Number(drag.price):Number(drag.line.price)});
+    onPriceLineDrag({phase:cancel?'cancel':'end',leg:drag.line.protectionLeg,orderId:drag.line.orderId,price:drag.moved?Number(drag.price):Number(drag.line.price)});
   }
 
   function cancelPriceDrag(event) {
@@ -303,7 +303,7 @@ export function useReplayKlineChart({
         const backupId=`${line.id}:drag-original`;
         priceDrag={line,original,backupId,startY:y,anchorY:current.convertToPixel({value:Number(line.price)},{paneId:CANDLE_PANE_ID}).y,price:line.price,moved:false};
         current.createOverlay({name:REPLAY_PRICE_LINE_OVERLAY.name,id:backupId,groupId:REPLAY_PRICE_LINE_GROUP,lock:true,points:[{value:Number(line.price)}],extendData:original},CANDLE_PANE_ID);
-        onPriceLineDrag({phase:'start',leg:line.protectionLeg});
+        onPriceLineDrag({phase:'start',leg:line.protectionLeg,orderId:line.orderId});
         return true;
       },
       onPressedMoving:({overlay,y})=>{
@@ -314,7 +314,7 @@ export function useReplayKlineChart({
         const price=snapProtectionPrice(value,model.value?.priceStep);
         if(!price) return true;
         priceDrag.price=price;priceDrag.moved=true;
-        current.overrideOverlay({id:overlay.id,points:[{value:Number(price)}],extendData:{...priceDrag.original,draggable:true,preview:true,dashed:true,price,label:`待确认${line.protectionLeg==='stopLoss'?'止损':'止盈'}`,levels:priceDrag.original.levels?.map(level=>level.id===line.id?{...level,price}:level)}});
+        current.overrideOverlay({id:overlay.id,points:[{value:Number(price)}],extendData:{...priceDrag.original,draggable:true,preview:true,dashed:true,price,label:`待确认${line.orderId!=null?'委托':line.protectionLeg==='stopLoss'?'止损':'止盈'}`,levels:priceDrag.original.levels?.map(level=>level.id===line.id?{...level,price}:level)}});
         return true; // The native default must not add hidden time/index offsets.
       },
       onPressedMoveEnd:()=>{endPriceDrag();return true;},

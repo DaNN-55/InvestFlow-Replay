@@ -429,7 +429,7 @@ test('stale protection drag is rejected instead of overwriting a newer session r
   expect(changed.status()).toBe(200);
   await page.getByRole('button',{name:'确认生效',exact:true}).click();
   await expect(page.getByRole('region',{name:'确认止盈止损调整'})).toHaveCount(0);
-  await expect(page.getByText('已重新同步操作结果，请核对当前保护；继续调整请重新拖动。',{exact:true})).toBeVisible();
+  await expect(page.getByText('已重新同步操作结果，请核对当前委托或保护；继续调整请重新拖动。',{exact:true})).toBeVisible();
   expect(commands.length).toBe(1);expect(commands[0].expectedRevision).toBe(session.revision);
   const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(latest.protection).toEqual(session.protection);
@@ -461,4 +461,99 @@ test('lost response after confirming a drag retains the original action and retr
   expect(latest.revision).toBe(session.revision+1);
   expect(latest.protection.stopLoss.price).toBe(original.command.stopLoss.price);
   expect(latest.protection.takeProfit).toEqual(session.protection.takeProfit);
+});
+
+async function limitPractice(page,request,side='long',intent='increase') {
+  const practice=await openPractice(page,request,{layout:'dual',periods:[60,5,15,240],kinds:['last','last','last','last']});
+  let session=(await (await request.get(`${fixture.url}${path}/${practice.id}`)).json()).session;
+  const act=async command=>{
+    const response=await request.post(`${fixture.url}${path}/${practice.id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,command}});
+    expect(response.status()).toBe(200);session=(await response.json()).session;
+  };
+  if(intent==='reduce') {
+    await act({type:'market-open',side,contracts:'3'});
+    const response=await request.post(`${fixture.url}${path}/${practice.id}/advance`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,minutes:1}});
+    expect(response.status()).toBe(200);session=(await response.json()).session;
+  }
+  const buy=(side==='long')!==(intent==='reduce'),limitPrice=buy?'49950':'50050';
+  await act({type:intent==='reduce'?'limit-close':'limit-open',...(intent==='increase'?{side,protection:{stopLoss:{price:side==='long'?'49900':'50100',reference:'mark'}}}:{}),contracts:'1',limitPrice});
+  const order=session.orders.at(-1);
+  await act({type:intent==='reduce'?'limit-close':'limit-open',...(intent==='increase'?{side}:{}),contracts:'1',limitPrice:buy?'49910':'50090'});
+  await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await expect.poll(async()=> (await nativeCharts(page)).every(c=>c.lines.some(l=>l.id===`${practice.id}:order-${order.id}`&&l.draggable))).toBe(true);
+  return {...practice,session,order,buy};
+}
+
+for(const side of ['long','short']) for(const intent of ['increase','reduce']) test(`${side} ${intent} limit drag previews across periods, cancels and confirms only its own remaining order`,async({page,request})=>{
+  const {id,session,order,buy,commands,reads}=await limitPractice(page,request,side,intent);
+  const lineId=`${id}:order-${order.id}`,confirm=page.getByRole('region',{name:'确认限价委托调整'}),target=buy?49930:50030;
+  const current=async()=> (await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  await dragProtection(page,1,lineId,target,{release:false});
+  expect(commands.length).toBe(0);expect((await current()).orders).toEqual(session.orders);
+  await page.keyboard.press('Escape');await page.mouse.up();await expect(confirm).toHaveCount(0);
+  await dragProtection(page,1,lineId,target);await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText(`未成交 ${order.remainingContracts} 张`);
+  const price=(await nativeCharts(page))[1].lines.find(l=>l.id===`${lineId}:draft`).price;
+  expect((await nativeCharts(page)).every(c=>c.lines.some(l=>l.id===`${lineId}:draft`&&l.price===price&&l.preview))).toBe(true);
+  expect((await nativeCharts(page)).every(c=>c.lines.some(l=>l.id===lineId&&l.price===Number(order.limitPrice)))).toBe(true);
+  await expect(page.getByRole('button',{name:'自动回放',exact:true})).toBeDisabled();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeDisabled();
+  await page.getByRole('combobox',{name:'选中图周期',exact:true}).selectOption('15');
+  await expect(page.getByRole('button',{name:'确认生效',exact:true})).toBeEnabled();
+  await expect(confirm).toContainText(String(price));expect(commands.length).toBe(0);
+  await page.getByRole('button',{name:'取消调整',exact:true}).click();await expect(confirm).toHaveCount(0);
+  expect((await current()).orders).toEqual(session.orders);
+  await dragProtection(page,0,lineId,buy?49800:49900);await expect(confirm).toBeVisible();
+  const proposed=(await nativeCharts(page))[0].lines.find(l=>l.id===`${lineId}:draft`).price;
+  await page.screenshot({path:test.info().outputPath('limit-draft.png')});
+  await page.getByRole('button',{name:'确认生效',exact:true}).evaluate(button=>{button.click();button.click();});
+  await expect(confirm).toHaveCount(0);await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const saved=await current(),changed=saved.orders.find(o=>o.id===order.id);
+  expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'amend-limit',orderId:order.id,limitPrice:String(proposed)});
+  expect(commands[0].expectedRevision).toBe(session.revision);expect(saved.revision).toBe(session.revision+1);
+  expect(saved.elapsedMinutes).toBe(session.elapsedMinutes);expect(saved.account.position).toEqual(session.account.position);expect(saved.protection).toEqual(session.protection);
+  for(const key of ['contracts','remainingContracts','filledContracts','attachedProtection','protectionApplied','intent','side']) expect(changed[key]).toEqual(order[key]);
+  expect(Number(changed.limitPrice)).toBe(proposed);expect(saved.orders.filter(o=>o.id!==order.id)).toEqual(session.orders.filter(o=>o.id!==order.id));
+  await dragProtection(page,0,lineId,49600);await expect(confirm).toBeVisible();
+  await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await expect(confirm).toHaveCount(0);expect(commands).toHaveLength(1);expect((await current()).orders).toEqual(saved.orders);
+  // Limit execution uses trade price; mark panes never offer editable limit lines.
+  await page.getByRole('combobox',{name:'选中图价格类型'}).selectOption('mark');
+  await expect.poll(async()=> (await nativeCharts(page))[0].lines.some(l=>l.id===lineId)).toBe(false);
+  assertPrefixes(reads);
+});
+
+test('stale limit preview cannot restore an order cancelled by another writer',async({page,request})=>{
+  const {id,session,order,commands}=await limitPractice(page,request);
+  await dragProtection(page,0,`${id}:order-${order.id}`,49800);
+  await expect(page.getByRole('region',{name:'确认限价委托调整'})).toBeVisible();
+  const cancelled=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,command:{type:'cancel-order',orderId:order.id}}});
+  expect(cancelled.status()).toBe(200);
+  await page.getByRole('button',{name:'确认生效',exact:true}).click();
+  await expect(page.getByRole('region',{name:'确认限价委托调整'})).toHaveCount(0);
+  await expect(page.getByText('已重新同步操作结果，请核对当前委托或保护；继续调整请重新拖动。',{exact:true})).toBeVisible();
+  expect(commands).toHaveLength(1);
+  const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(latest.revision).toBe(session.revision+1);expect(latest.orders.some(o=>o.id===order.id)).toBe(false);
+});
+
+test('lost limit amendment response retries the original action without charging a second reserve',async({page,request})=>{
+  const {id,session,order}=await limitPractice(page,request);
+  await dragProtection(page,0,`${id}:order-${order.id}`,49800);
+  await expect(page.getByRole('region',{name:'确认限价委托调整'})).toBeVisible();
+  let original;
+  await page.route('**/api/quant/replay/sessions/*/actions',async route=>{
+    original=route.request().postDataJSON();
+    const response=await route.fetch({url:`${fixture.url}${path}/${id}/actions`});expect(response.status()).toBe(200);await route.abort('failed');
+  },{times:1});
+  await page.getByRole('button',{name:'确认生效',exact:true}).click();
+  await expect(page.getByRole('button',{name:'重试原动作',exact:true})).toBeVisible();
+  const committed=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  await page.reload();await expect(page.getByRole('button',{name:'重试原动作',exact:true})).toBeVisible();
+  const pending=await page.evaluate(()=>JSON.parse(localStorage.getItem('investflow-crypto-attempt-v1')).pending);expect(pending.body).toEqual(original);
+  await page.getByRole('button',{name:'重试原动作',exact:true}).click();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(latest).toEqual(committed);expect(latest.revision).toBe(session.revision+1);
+  expect(latest.orders.find(o=>o.id===order.id).limitPrice).toBe(original.command.limitPrice);
 });
