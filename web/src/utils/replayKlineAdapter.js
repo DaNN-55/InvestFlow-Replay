@@ -96,17 +96,21 @@ export function classifyReplayKlineUpdate(previous = [], next = []) {
     return "replace";
   }
   if (next.length === previous.length + 1) {
-    const prefixMatches = previous.every(
-      (item, index) => item.replayKey === next[index]?.replayKey,
+    const prefixMatches = previous.slice(0,-1).every(
+      (item, index) => JSON.stringify(item) === JSON.stringify(next[index]),
     );
-    return prefixMatches ? "append" : "replace";
+    const tail = next[previous.length-1];
+    if(!prefixMatches || previous.at(-1)?.replayKey !== tail?.replayKey) return 'replace';
+    // Crossing a coarse-period boundary both completes the old candle and
+    // adds a new one. Appending only the newest bar leaves the old OHLCV stale.
+    return JSON.stringify(previous.at(-1)) === JSON.stringify(tail) ? 'append' : 'tail-append';
   }
   if (next.length !== previous.length) {
     return "replace";
   }
   const stablePrefix = previous
     .slice(0, -1)
-    .every((item, index) => item.replayKey === next[index]?.replayKey);
+    .every((item, index) => JSON.stringify(item) === JSON.stringify(next[index]));
   if (
     stablePrefix &&
     previous.at(-1)?.replayKey === next.at(-1)?.replayKey

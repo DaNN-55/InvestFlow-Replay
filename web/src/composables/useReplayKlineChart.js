@@ -443,7 +443,10 @@ export function useReplayKlineChart({
       const update = classifyReplayKlineUpdate(appliedData, adapted.data);
       const wasAtRight =
         Math.ceil(current.getVisibleRange().to) >= appliedData.length - 1;
-      if (update === "append" || update === "tail-update") {
+      if (update === "tail-append") {
+        current.updateData(adapted.data.at(-2));
+        current.updateData(adapted.data.at(-1));
+      } else if (update === "append" || update === "tail-update") {
         current.updateData(adapted.data.at(-1));
       } else if (update === "replace") {
         current.applyNewData(adapted.data);
@@ -458,7 +461,7 @@ export function useReplayKlineChart({
       });
       if (update === "replace") {
         showLatestHundred();
-      } else if (update === "append" && wasAtRight) {
+      } else if ((update === "append" || update === "tail-append") && wasAtRight) {
         current.scrollToRealTime(0);
       }
       syncIndicators();

@@ -103,6 +103,14 @@ describe("replay KLineChart adapter", () => {
     assert.equal(classifyReplayKlineUpdate(initial, replaced), "replace");
   });
 
+  it("updates the previous forming candle before appending the next period", () => {
+    const old = adaptReplayBars(sourceBars).data;
+    const next = adaptReplayBars([...sourceBars.slice(0,-1), {...sourceBars.at(-1),close:13,high:14,volume:150}, {...sourceBars.at(-1),startSequence:251,endSequence:251}]).data;
+    assert.equal(classifyReplayKlineUpdate(old,next), 'tail-append');
+    const changedHistory=next.map((b,i)=>i===0?{...b,volume:999}:b);
+    assert.equal(classifyReplayKlineUpdate(old,changedHistory), 'replace');
+  });
+
   it("zooms only for an explicit Ctrl or Command wheel gesture", () => {
     assert.equal(getReplayWheelZoomScale({ deltaY: -100 }), null);
     assert.equal(
