@@ -77,7 +77,7 @@ export function cryptoChartLines(session, kind) {
   }
   for (const [leg, label] of [['stopLoss', '自动止损'], ['takeProfit', '自动止盈']]) {
     const protection = session.protection?.[leg];
-    if (protection) add(leg, protection.price, `${label}${session.protection.triggeredLeg === leg ? ' · 已触发待退出' : ''}`, protection.reference, { color: leg === 'stopLoss' ? '#d55d70' : '#159875', dashed: false }, session.protection.contracts);
+    if (protection) add(leg, protection.price, `${label}${session.protection.triggeredLeg === leg ? ' · 已触发待退出' : ''}`, protection.reference, { color: leg === 'stopLoss' ? '#d55d70' : '#159875', dashed: false, protectionLeg:leg }, session.protection.contracts);
   }
   return lines;
 }

@@ -14,6 +14,7 @@ import CryptoChartWorkspace from '../components/crypto/CryptoChartWorkspace.vue'
 import CryptoReviewPanel from '../components/crypto/CryptoReviewPanel.vue';
 import { createCryptoReplayController } from '../utils/cryptoReplayController.js';
 import { amount, relativeTime } from '../utils/cryptoReplayPresentation.js';
+import { createProtectionDraft, protectionDraftCurrent, protectionDraftCommand } from '../utils/cryptoProtectionDraft.js';
 import { loadCryptoPreferences, CRYPTO_WORKSPACE_KEY, CRYPTO_PLAYBACK_SPEEDS, cryptoVisiblePeriods } from '../utils/cryptoWorkspacePreferences.js';
 import '../components/crypto/crypto-terminal.css';
 const route=useRoute(),router=useRouter();
@@ -24,7 +25,9 @@ controller.state.timeframes=cryptoVisiblePeriods(preferences.value);controller.s
 const s=computed(()=>state.value.session);
 const progress=computed(()=>Math.min(100,Math.max(0,Number(s.value?.elapsedMinutes??0)/Math.max(1,Number(s.value?.gameLength??1))*100)));
 const routeMismatch=computed(()=>route.name==='crypto-market-replay'&&typeof route.query.session==='string'&&route.query.session!==s.value?.id);
-const locked=computed(()=>state.value.busy||Boolean(state.value.pending)||routeMismatch.value);
+const protectionDraft=shallowRef(null),protectionDragging=ref(false),protectionSaving=ref(false),protectionNotice=ref('');
+let protectionDragSession=null;
+const locked=computed(()=>state.value.busy||Boolean(state.value.pending)||routeMismatch.value||Boolean(protectionDraft.value)||protectionDragging.value);
 const finishOpen=ref(false),settingsOpen=ref(false),playing=ref(false);
 const retraining=ref(false);
 const display=reactive({precision:'auto'});
@@ -32,8 +35,41 @@ let playbackTimer;
 let playbackGeneration=0, playbackInFlight=false;
 let lastRequestedSession=null;
 function records(focusCurrent=false) { playing.value=false;router.push({path:'/decision/trade-records',query:{tab:'replay',market:'crypto-perpetual',...(focusCurrent===true&&s.value?{session:s.value.id}:{})}}); }
-function command(value,note='') {playing.value=false;return controller.act('command',{command:value,...(note?{note}:{})});}
-async function fresh() {playing.value=false;await controller.fresh();if(!state.value.session) await router.replace({query:{}});}
+function command(value,note='') {if(locked.value) return false;playing.value=false;return controller.act('command',{command:value,...(note?{note}:{})});}
+async function fresh() {if(locked.value) return;playing.value=false;await controller.fresh();if(!state.value.session) await router.replace({query:{}});}
+function cancelProtectionDraft() {protectionDraft.value=null;protectionDragging.value=false;protectionDragSession=null;}
+function protectionDrag(event) {
+  if(event.phase==='start') {
+    if(locked.value) return;
+    stop();protectionNotice.value='';protectionDragging.value=true;protectionDragSession=s.value;
+    return;
+  }
+  const base=protectionDragSession;
+  protectionDragging.value=false;protectionDragSession=null;
+  if(event.phase!=='end'||!base) return;
+  const draft=createProtectionDraft(base,event.leg,event.price);
+  if(!draft) return;
+  if(!protectionDraftCurrent(s.value,draft)) {protectionNotice.value='持仓或保护已变化，请重新拖动。';return;}
+  protectionDraft.value=draft;
+}
+async function confirmProtectionDraft() {
+  if(state.value.busy||state.value.pending||routeMismatch.value||protectionSaving.value) return;
+  const body=protectionDraftCommand(s.value,protectionDraft.value);
+  if(!body) {cancelProtectionDraft();protectionNotice.value='持仓或保护已变化，请重新拖动。';return;}
+  protectionSaving.value=true;stop();
+  try {
+    const ok=await controller.act('command',body);
+    cancelProtectionDraft();
+    if(!ok&&!state.value.pending) {
+      const synced=await controller.sync();
+      protectionNotice.value=synced?'已重新同步操作结果，请核对当前保护；继续调整请重新拖动。':'结果未能同步，请先核对当前保护。';
+    }
+  } finally {protectionSaving.value=false;}
+}
+watch(()=>[s.value?.id,s.value?.revision],()=>{
+  if(protectionSaving.value) return;
+  if(protectionDraft.value&&!protectionDraftCurrent(s.value,protectionDraft.value)) {cancelProtectionDraft();protectionNotice.value='持仓或保护已变化，未确认的调整已取消。';}
+});
 function ensurePeriods() {
   const wanted=cryptoVisiblePeriods(preferences.value);
   if(!state.value.busy && wanted.join(',')!==state.value.timeframes.join(',')) controller.periods(wanted);
@@ -53,7 +89,7 @@ function resync() {return typeof route.query.session==='string'?loadRequestedSes
 watch(()=>state.value.busy,value=>{if(!value) {syncRequestedSession();ensurePeriods();}});
 watch(()=>route.query.session,()=>{lastRequestedSession=null;syncRequestedSession();});
 onActivated(()=>typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync());
-async function advance(minutes=1) {playing.value=false;return controller.act('advance',{minutes});}
+async function advance(minutes=1) {if(locked.value) return false;playing.value=false;return controller.act('advance',{minutes});}
 function schedulePlayback(generation=playbackGeneration) {
   clearTimeout(playbackTimer);
   if(playing.value&&!playbackInFlight) playbackTimer=setTimeout(()=>tick(generation),900/preferences.value.playbackSpeed);
@@ -73,7 +109,7 @@ async function tick(generation) {
 watch(playing,()=>{playbackGeneration++;clearTimeout(playbackTimer);if(playing.value) schedulePlayback();});
 watch(()=>preferences.value.playbackSpeed,()=>{if(playing.value) schedulePlayback();});
 function stop() {playing.value=false;playbackGeneration++;clearTimeout(playbackTimer);}
-onDeactivated(stop);onBeforeUnmount(stop);
+onDeactivated(()=>{stop();cancelProtectionDraft();});onBeforeUnmount(()=>{stop();cancelProtectionDraft();});
 async function finish() {stop();if(await controller.act('finish')) finishOpen.value=false;}
 async function retrain() {
   stop();retraining.value=true;
@@ -88,14 +124,15 @@ async function retrain() {
     <div v-if="state.pending&&!state.busy" class="crypto-alert" role="status"><span>上次动作的结果待核对；核对前不能提交新动作。可以从演练记录查看历史。</span><UiButton variant="secondary" @click="controller.retry()">重试原动作</UiButton></div>
     <p v-if="state.busy" class="crypto-save-status" role="status">正在同步与保存…</p><p v-else-if="state.notice" class="crypto-save-status" role="status">{{ state.notice }}</p>
     <p v-if="state.poolError" class="crypto-muted" role="status">{{ state.poolError }}</p>
+    <p v-if="s&&protectionNotice" class="crypto-muted" role="status">{{ protectionNotice }}</p>
     <CryptoSetupPanel v-if="!s" :busy="state.busy" :pool="state.pool" :history="state.history" :blocked="Boolean(state.pending)||Boolean(state.poolError)" @create="controller.act('create',$event)" @resume="controller.select($event)" @records="records" />
     <template v-else>
       <div class="crypto-account" data-testid="crypto-account"><div v-for="[label,value,id] in [['账户权益 · USDT',s.summary.accountEquity,'crypto-equity'],['仓外可用',s.account.availableBalance,'crypto-available'],['委托冻结',s.reservedBalance,'crypto-reserved'],['本次净盈亏',s.summary.netPnl,'crypto-net-summary']]" :key="label"><span>{{ label }}</span><strong :data-testid="id" :title="String(value)">{{ amount(value,display.precision==='full'?8:2) }}</strong></div></div>
       <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed}">
         <div class="crypto-terminal-main">
-          <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" />
+          <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" :protection-draft="protectionDraft" @protection-drag="protectionDrag" @confirm-protection="confirmProtectionDraft" @cancel-protection="cancelProtectionDraft" />
           <p v-if="s.ending&&s.status!=='completed'" class="crypto-alert" role="status">{{ s.status==='end-blocked'?'结束受阻：预留分钟容量不足，仍有仓位；不能揭晓或复练。':'正在结束：继续推进以退出剩余仓位，不再新开仓。' }}</p>
-          <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @command="command" @records="records" />
+          <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(protectionDraft)||protectionDragging" @command="command" @records="records" />
           <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
           <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
         </div>
@@ -110,7 +147,7 @@ async function retrain() {
             <div class="crypto-playback-steps"><UiButton v-for="n in [1,5,15]" :key="n" variant="secondary" :disabled="locked||s.status!=='active'" @click="advance(n)">推进 {{ n }} 分钟</UiButton></div>
             <div class="crypto-playback-actions"><UiButton variant="secondary" class="crypto-finish" :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton><UiButton variant="secondary" :disabled="locked" @click="fresh">新开一局</UiButton></div>
           </section>
-          <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @command="command" />
+          <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(protectionDraft)||protectionDragging" @command="command" />
         </div>
       </div>
     </template>
