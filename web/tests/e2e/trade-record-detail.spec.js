@@ -148,78 +148,36 @@ for (const healthy of [true, false]) {
   });
 }
 
-test("执行参数可保存并立即更新许可预览，刷新后可重新读取", async ({ page }) => {
-  let settings = {
-    simulatedAccountEquity: 2000000,
-    liveAccountEquity: 100000,
-    defaultMaxAccountRiskPct: 0.5,
-    defaultMinRewardRiskRatio: 2,
-    lotSize: 100,
-  };
-  let savedPayload;
-  await page.route("**/api/quant/decision/execution-settings", async (route) => {
-    if (route.request().method() === "PUT") {
-      savedPayload = route.request().postDataJSON();
-      settings = { ...settings, ...savedPayload };
-    }
+test("交易追踪只读取现有执行参数，不再提供修改入口", async ({ page }) => {
+  let settings = { simulatedAccountEquity: 2000000, liveAccountEquity: 100000, defaultMaxAccountRiskPct: 0.5, defaultMinRewardRiskRatio: 2, lotSize: 100 };
+  const writes = [];
+  await page.route("**/api/quant/decision/execution-settings", async route => {
+    if (route.request().method() !== "GET") writes.push(route.request().method());
     await route.fulfill({ json: settings });
   });
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
+  await expect(page.getByRole("button", { name: "执行参数", exact: true })).toHaveCount(0);
   await page.getByText("交易计划与风控（可选）", { exact: true }).click();
   await expect(page.locator(".trade-license-metrics")).toContainText("0.5% / 10000");
-
-  await page.getByRole("button", { name: "执行参数", exact: true }).click();
-  const drawer = page.getByRole("dialog", { name: "执行参数设置", exact: true });
-  await expect(drawer.getByLabel("模拟账户本金")).toHaveValue("2000000");
-  await drawer.getByLabel("模拟账户本金").fill("4000000");
-  await drawer.getByLabel("单笔最大账户风险%").fill("0.75");
-  await drawer.getByRole("button", { name: "保存执行参数" }).click();
-  await expect(drawer).toContainText("执行参数已保存");
-  expect(savedPayload).toEqual({
-    simulatedAccountEquity: 4000000,
-    liveAccountEquity: 100000,
-    defaultMinRewardRiskRatio: 2,
-    defaultMaxAccountRiskPct: 0.75,
-  });
-  await drawer.getByRole("button", { name: "关闭", exact: true }).click();
-  await expect(drawer).toBeHidden();
-  await expect(page.locator(".trade-license-metrics")).toContainText("0.75% / 30000");
-  await expect(page).toHaveURL(new RegExp(`id=${recordId}`));
-
+  settings = { ...settings, simulatedAccountEquity: 4000000, defaultMaxAccountRiskPct: 0.75 };
   await page.reload();
-  await page.getByRole("button", { name: "执行参数", exact: true }).click();
-  await expect(drawer.getByLabel("模拟账户本金")).toHaveValue("4000000");
-  await expect(drawer.getByLabel("单笔最大账户风险%")).toHaveValue("0.75");
-  await page.keyboard.press("Escape");
-  await expect(drawer).toBeHidden();
+  await page.getByText("交易计划与风控（可选）", { exact: true }).click();
+  await expect(page.locator(".trade-license-metrics")).toContainText("0.75% / 30000");
+  expect(writes).toEqual([]);
 });
 
-test("执行参数保存失败时显示错误且不更新当前许可参数", async ({ page }) => {
-  await page.route("**/api/quant/decision/execution-settings", async (route) => {
-    if (route.request().method() !== "PUT") {
-      await route.fallback();
-      return;
-    }
-    await route.fulfill({ status: 400, json: { error: { message: "执行参数未能保存" } } });
-  });
+test("执行参数读取失败仍可查看成交记录，不提供修改入口", async ({ page }) => {
+  await page.route("**/api/quant/decision/execution-settings", route => route.fulfill({ status: 503, json: { error: { message: "执行参数暂不可用" } } }));
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
-  await page.getByRole("button", { name: "执行参数", exact: true }).click();
-  const drawer = page.getByRole("dialog", { name: "执行参数设置", exact: true });
-  await expect(drawer.getByLabel("单笔最大账户风险%")).toHaveValue("0.5");
-  await drawer.getByLabel("单笔最大账户风险%").fill("0.75");
-  await drawer.getByRole("button", { name: "保存执行参数" }).click();
-  await expect(drawer).toContainText("执行参数未能保存");
-  await expect(drawer.getByRole("button", { name: "保存执行参数" })).toBeEnabled();
-  await page.keyboard.press("Escape");
-  await page.getByText("交易计划与风控（可选）", { exact: true }).click();
-  await expect(page.locator(".trade-record-form__label-title")).toContainText("执行参数默认：0.5%");
+  await expect(page.getByRole("heading", { name: "成交与动作记录" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "执行参数", exact: true })).toHaveCount(0);
 });
 
 test("交易详情默认聚焦成交记录并按需展开交易计划", async ({ page }) => {
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
 
-  await expect(page.getByRole("button", { name: "执行参数", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "基本信息" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "基本信息" })).toHaveCount(0);
+  await expect(page.locator(".trade-record-detail .ql-ui-card__header")).toContainText("账户：模拟 · 阶段：草稿 · 类型：系统交易");
   await expect(page.getByText("交易追踪列表已刷新", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "成交与动作记录" })).toBeVisible();
   await expect(page.locator(".trade-record-tags")).toHaveCount(0);
@@ -401,7 +359,8 @@ test("已买入和持仓阶段不显示重复的通用保存按钮", async ({ pa
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
 
   const form = page.locator("form.trade-record-form");
-  await expect(form.getByRole("button", { name: "添加动作", exact: true })).toBeVisible();
+  await expect(page.locator(".trade-execution-events__composer summary")).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加动作", exact: true })).toBeHidden();
   await expect(form.getByRole("button", { name: "保存", exact: true })).toHaveCount(0);
 });
 
@@ -454,27 +413,43 @@ test("斜杠日期的成交动作可以在弹窗中保存", async ({ page }) => 
   await expect(dialog.getByRole("button", { name: "保存修改", exact: true })).toBeEnabled();
 });
 
-test("添加动作通过日期选择器仅提交年月日", async ({ page }) => {
-  await page.route(`**/api/quant/decision/trade-records/${recordId}/execution-events`, async (route) => {
+test("新增动作按需展开，失败保留输入，成功只提交动作并收起", async ({ page }) => {
+  let attempts = 0;
+  const parentWrites = [];
+  page.on("request", request => {
+    if (request.method() === "PATCH" && new URL(request.url()).pathname === `/api/quant/decision/trade-records/${recordId}`) parentWrites.push(request.url());
+  });
+  await page.route(`**/api/quant/decision/trade-records/${recordId}/execution-events`, async route => {
+    attempts += 1;
+    if (attempts === 1) {
+      await route.fulfill({ status: 400, json: { error: { message: "动作未保存" } } });
+      return;
+    }
     const event = route.request().postDataJSON();
     await route.fulfill({ json: { ...record, executionEvents: [...record.executionEvents, event] } });
   });
   await page.goto(`${baseUrl}/decision/trade-records?id=${recordId}`);
-
-  const eventForm = page.locator("form.trade-execution-events__form");
-  const eventAt = eventForm.getByLabel("时间", { exact: true });
-  await expect(eventAt).toHaveAttribute("type", "date");
-  await eventAt.fill("2026-08-07");
+  const composer = page.locator(".trade-execution-events__composer");
+  const eventForm = composer.locator("form");
+  await expect(eventForm).toBeHidden();
+  await composer.locator("summary").click();
+  await eventForm.getByLabel("时间", { exact: true }).fill("2026-08-07");
   await expect(eventForm.getByLabel("价格", { exact: true })).toHaveAttribute("step", "0.001");
   await eventForm.getByLabel("价格", { exact: true }).fill("44.234");
   await eventForm.getByLabel("数量", { exact: true }).fill("100");
-
-  const addRequest = page.waitForRequest((request) =>
-    request.method() === "POST"
-      && new URL(request.url()).pathname === `/api/quant/decision/trade-records/${recordId}/execution-events`,
-  );
+  await composer.locator("summary").click();
+  await expect(eventForm).toBeHidden();
+  await composer.locator("summary").click();
+  await expect(eventForm.getByLabel("价格", { exact: true })).toHaveValue("44.234");
   await eventForm.getByRole("button", { name: "添加动作", exact: true }).click();
-  expect((await addRequest).postDataJSON()).toMatchObject({ eventAt: "2026-08-07" });
+  await expect(page.getByText("动作未保存", { exact: true })).toBeVisible();
+  await expect(eventForm.getByLabel("时间", { exact: true })).toHaveValue("2026-08-07");
+  await expect(eventForm.getByLabel("价格", { exact: true })).toHaveValue("44.234");
+  const addRequest = page.waitForRequest(request => request.method() === "POST" && new URL(request.url()).pathname === `/api/quant/decision/trade-records/${recordId}/execution-events`);
+  await eventForm.getByRole("button", { name: "添加动作", exact: true }).click();
+  expect((await addRequest).postDataJSON()).toMatchObject({ eventAt: "2026-08-07", price: 44.234, quantity: 100 });
+  await expect(eventForm).toBeHidden();
+  expect(parentWrites).toEqual([]);
 });
 
 test("成交记录和交易追踪单删除前都使用应用内二次确认", async ({ page }) => {
@@ -525,7 +500,7 @@ test("同一页面的历史演练删除也使用应用内二次确认", async ({
   });
 
   await page.goto(`${baseUrl}/decision/trade-records`);
-  await page.getByRole("button", { name: "历史演练", exact: true }).click();
+  await page.locator(".trade-records-primary-tabs").getByRole("button", { name: "演练记录", exact: true }).click();
   await openReplayHistoryMenu(page);
   await page.getByRole("button", { name: "删除记录", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "删除演练记录" })).toBeVisible();

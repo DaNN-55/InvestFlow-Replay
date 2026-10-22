@@ -15,7 +15,6 @@ import UiAlert from "../components/ui/UiAlert.vue";
 import UiButton from "../components/ui/UiButton.vue";
 import UiCard from "../components/ui/UiCard.vue";
 import UiInput from "../components/ui/UiInput.vue";
-import UiSelect from "../components/ui/UiSelect.vue";
 import UiTextarea from "../components/ui/UiTextarea.vue";
 import UiTooltip from "../components/ui/UiTooltip.vue";
 import { useTradeRecordArchive } from "../composables/useTradeRecordArchive.js";
@@ -30,9 +29,7 @@ import {
   formatTradeRecordAccountType,
   formatTradeRecordStatus,
   formatTradeRecordStock,
-  TRADE_RECORD_ACCOUNT_TYPE_OPTIONS,
-  TRADE_RECORD_STATUS_OPTIONS,
-  TRADE_RECORD_TRADE_TYPE_OPTIONS,
+  formatTradeRecordTradeType,
 } from "../utils/tradeRecordPresentation.js";
 
 const route = useRoute();
@@ -87,9 +84,6 @@ const editableFields = [
   "exitReason",
 ];
 
-const accountTypeOptions = TRADE_RECORD_ACCOUNT_TYPE_OPTIONS;
-const tradeTypeOptions = TRADE_RECORD_TRADE_TYPE_OPTIONS;
-const statusOptions = TRADE_RECORD_STATUS_OPTIONS;
 
 const strategyProfile = reactive(createEmptyStrategyProfile());
 const executionEvents = ref([]);
@@ -442,7 +436,7 @@ async function saveSelectedRecord() {
 
 async function addExecutionEvent(event) {
   if (!selectedId.value) {
-    return;
+    return false;
   }
   const target = selectedWriteTarget();
   saving.value = true;
@@ -452,8 +446,10 @@ async function addExecutionEvent(event) {
     const record = extractApiRecord(await api.recordTradeExecutionEvent(target.id, event));
     applyUpdatedRecord(record, { targetId: target.id });
     statusText.value = "动作记录已添加";
+    return true;
   } catch (error) {
     errorText.value = error?.message ?? "动作记录添加失败";
+    return false;
   } finally {
     saving.value = false;
   }
@@ -719,7 +715,7 @@ onMounted(() => {
                 {{ selectedRecord ? formatTradeRecordStock(selectedRecord) : "详情表单" }}
               </h2>
               <p class="ql-mt-1 ql-text-xs ql-text-slate-500">
-                {{ selectedRecord ? `账户：${accountTypeLabel(form.accountType)} · 阶段：${statusLabel(form.status)}` : "请选择一条交易追踪单" }}
+                {{ selectedRecord ? `账户：${accountTypeLabel(form.accountType)} · 阶段：${statusLabel(form.status)} · 类型：${formatTradeRecordTradeType(form.tradeType)}` : "请选择一条交易追踪单" }}
               </p>
             </div>
             <UiActionMenu
@@ -740,34 +736,7 @@ onMounted(() => {
         <div v-if="detailLoading" class="trade-record-state">正在读取详情...</div>
         <div v-else-if="!selectedRecord" class="trade-record-state">暂无选中的交易追踪单。</div>
         <template v-else>
-          <form class="trade-record-form" @submit.prevent="saveSelectedRecord">
-            <section class="trade-record-form__section">
-              <h3>基本信息</h3>
-              <div class="trade-record-form__grid trade-record-form__grid--three">
-                <label>
-                  <span>账户类型</span>
-                  <UiSelect v-model="form.accountType" size="sm" :disabled="!stageIs('draft')">
-                    <option value="">未设置</option>
-                    <option v-for="option in accountTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                  </UiSelect>
-                </label>
-                <label>
-                  <span>交易类型</span>
-                  <UiSelect v-model="form.tradeType" size="sm" :disabled="!stageIs('draft')">
-                    <option value="">未设置</option>
-                    <option v-for="option in tradeTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                  </UiSelect>
-                </label>
-                <label>
-                  <span>当前阶段</span>
-                  <UiSelect :model-value="form.status" size="sm" disabled>
-                    <option value="">未设置</option>
-                    <option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                  </UiSelect>
-                </label>
-              </div>
-            </section>
-
+          <div class="trade-record-content">
             <div v-if="selectedViolations.length" class="trade-record-violation-alert" role="alert">
               <strong>纪律偏差：</strong>{{ selectedViolations.join("、") }}
             </div>
@@ -776,161 +745,164 @@ onMounted(() => {
             <div v-if="errorText" class="trade-record-message trade-record-message--error">{{ errorText }}</div>
 
             <TradeExecutionEventsPanel
+              :key="selectedId"
+              :add-event="addExecutionEvent"
               :events="executionEvents"
               :ledger="selectedRecord?.ledger"
               :saving="saving"
               :disabled="!selectedId"
-              @add="addExecutionEvent"
               @edit="openExecutionEventEditor"
               @delete="requestDeleteExecutionEvent"
             />
 
-            <details v-if="stageIs('draft')" class="trade-record-form__section trade-plan-details">
-              <summary>
-                <span>交易计划与风控（可选）</span>
-                <small>风险预算、仓位和 T / S / G</small>
-              </summary>
-              <div class="trade-plan-details__body">
-                <div class="trade-record-form__grid trade-record-form__grid--four">
-                  <label>
-                    <div class="trade-record-form__label-title">
-                      <span>单笔风险预算（%）</span>
-                      <small>{{ selectedAccountRiskSource }}：{{ selectedMaxAccountRiskPct ?? '--' }}%</small>
-                    </div>
-                    <UiInput v-model="form.manualMaxAccountRiskPct" size="sm" type="text" inputmode="decimal" placeholder="留空使用执行参数" />
-                  </label>
-                  <label>
-                    <span>单票最大仓位（%）</span>
-                    <UiInput v-model="form.manualMaxPositionPct" size="sm" type="text" inputmode="decimal" placeholder="必填，0-100" />
-                  </label>
-                  <label>
-                    <span>计划交易日</span>
-                    <UiInput v-model="form.validForTradeDate" size="sm" type="date" />
-                  </label>
-                  <label>
-                    <span>触发价 T</span>
-                    <UiInput v-model="form.triggerPrice" size="sm" type="text" inputmode="decimal" />
-                  </label>
-                  <label>
-                    <span>失败价 S</span>
-                    <UiInput v-model="form.failurePrice" size="sm" type="text" inputmode="decimal" />
-                  </label>
-                  <label>
-                    <span>目标价 G</span>
-                    <UiInput v-model="form.targetPrice" size="sm" type="text" inputmode="decimal" />
-                  </label>
+            <form class="trade-record-form" @submit.prevent="saveSelectedRecord">
+              <details v-if="stageIs('draft')" class="trade-record-form__section trade-plan-details">
+                <summary>
+                  <span>交易计划与风控（可选）</span>
+                  <small>风险预算、仓位和 T / S / G</small>
+                </summary>
+                <div class="trade-plan-details__body">
+                  <div class="trade-record-form__grid trade-record-form__grid--four">
+                    <label>
+                      <div class="trade-record-form__label-title">
+                        <span>单笔风险预算（%）</span>
+                        <small>{{ selectedAccountRiskSource }}：{{ selectedMaxAccountRiskPct ?? '--' }}%</small>
+                      </div>
+                      <UiInput v-model="form.manualMaxAccountRiskPct" size="sm" type="text" inputmode="decimal" placeholder="留空使用执行参数" />
+                    </label>
+                    <label>
+                      <span>单票最大仓位（%）</span>
+                      <UiInput v-model="form.manualMaxPositionPct" size="sm" type="text" inputmode="decimal" placeholder="必填，0-100" />
+                    </label>
+                    <label>
+                      <span>计划交易日</span>
+                      <UiInput v-model="form.validForTradeDate" size="sm" type="date" />
+                    </label>
+                    <label>
+                      <span>触发价 T</span>
+                      <UiInput v-model="form.triggerPrice" size="sm" type="text" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>失败价 S</span>
+                      <UiInput v-model="form.failurePrice" size="sm" type="text" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>目标价 G</span>
+                      <UiInput v-model="form.targetPrice" size="sm" type="text" inputmode="decimal" />
+                    </label>
+                  </div>
+                  <dl v-if="licensePreview.valid" class="trade-license-metrics">
+                    <div><dt>单笔风险预算</dt><dd>{{ selectedMaxAccountRiskPct }}% / {{ licensePreview.riskBudgetAmount }}</dd></div>
+                    <div><dt>允许买入区间</dt><dd>{{ formatRange(licensePreview.plannedEntryLow, licensePreview.plannedEntryHigh) }}</dd></div>
+                    <div><dt>不追价</dt><dd>{{ licensePreview.noChasePrice }}</dd></div>
+                    <div><dt>止损 / 止盈</dt><dd>{{ licensePreview.stopLossPrice }} / {{ licensePreview.takeProfitPrice }}</dd></div>
+                    <div><dt>建议股数</dt><dd>{{ licensePreview.plannedQuantity }} 股</dd></div>
+                    <div><dt>计划金额</dt><dd>{{ licensePreview.plannedAmount }}</dd></div>
+                    <div><dt>预计最大亏损</dt><dd>{{ licensePreview.estimatedMaxLossAmount }}</dd></div>
+                  </dl>
+                  <ul v-else class="trade-license-checks">
+                    <li v-for="item in licensePreview.errors" :key="item.code">{{ item.message }}</li>
+                  </ul>
+                  <ul v-if="!diagnosisAllowsLicense" class="trade-license-checks">
+                    <li>当前诊断结论不允许开仓，不能生成买入许可证。</li>
+                  </ul>
+                  <div class="trade-record-form__grid trade-record-form__grid--one trade-record-form__grid--spaced">
+                    <label>
+                      <span>结构判断备注</span>
+                      <UiTextarea v-model="form.entryNotes" />
+                    </label>
+                  </div>
+                  <div class="trade-license-actions">
+                    <UiButton type="button" :loading="saving" :disabled="!licensePreview.valid || !diagnosisAllowsLicense" @click="issueSelectedLicense">生成买入许可证</UiButton>
+                    <UiButton type="button" variant="danger" :disabled="saving" @click="cancelSelectedPlan">取消计划</UiButton>
+                  </div>
                 </div>
-                <dl v-if="licensePreview.valid" class="trade-license-metrics">
-                  <div><dt>单笔风险预算</dt><dd>{{ selectedMaxAccountRiskPct }}% / {{ licensePreview.riskBudgetAmount }}</dd></div>
-                  <div><dt>允许买入区间</dt><dd>{{ formatRange(licensePreview.plannedEntryLow, licensePreview.plannedEntryHigh) }}</dd></div>
-                  <div><dt>不追价</dt><dd>{{ licensePreview.noChasePrice }}</dd></div>
-                  <div><dt>止损 / 止盈</dt><dd>{{ licensePreview.stopLossPrice }} / {{ licensePreview.takeProfitPrice }}</dd></div>
-                  <div><dt>建议股数</dt><dd>{{ licensePreview.plannedQuantity }} 股</dd></div>
-                  <div><dt>计划金额</dt><dd>{{ licensePreview.plannedAmount }}</dd></div>
-                  <div><dt>预计最大亏损</dt><dd>{{ licensePreview.estimatedMaxLossAmount }}</dd></div>
+              </details>
+
+              <section v-else-if="stageIs('planned')" class="trade-record-form__section">
+                <h3>买入许可证</h3>
+                <div v-if="isLegacyLicense" class="trade-license-legacy">
+                  这是旧版计划，缺少许可证快照，不能直接记录为系统买入。请复制诊断信息创建新草稿。
+                </div>
+                <dl class="trade-license-metrics">
+                  <div><dt>允许买入区间</dt><dd>{{ formatRange(form.plannedEntryLow, form.plannedEntryHigh) }}</dd></div>
+                  <div><dt>超过即不追</dt><dd>{{ form.noChasePrice || '--' }}</dd></div>
+                  <div><dt>失败全仓止损</dt><dd>{{ form.stopLossPrice || '--' }}</dd></div>
+                  <div><dt>目标全仓止盈</dt><dd>{{ form.takeProfitPrice || '--' }}</dd></div>
+                  <div><dt>建议股数</dt><dd>{{ form.plannedQuantity || '--' }} 股</dd></div>
+                  <div><dt>计划金额</dt><dd>{{ form.plannedAmount || '--' }}</dd></div>
                 </dl>
-                <ul v-else class="trade-license-checks">
-                  <li v-for="item in licensePreview.errors" :key="item.code">{{ item.message }}</li>
-                </ul>
-                <ul v-if="!diagnosisAllowsLicense" class="trade-license-checks">
-                  <li>当前诊断结论不允许开仓，不能生成买入许可证。</li>
-                </ul>
-                <div class="trade-record-form__grid trade-record-form__grid--one trade-record-form__grid--spaced">
+                <div class="trade-record-form__grid trade-record-form__grid--three">
                   <label>
-                    <span>结构判断备注</span>
-                    <UiTextarea v-model="form.entryNotes" />
+                    <span>买入日期</span>
+                    <UiInput v-model="form.actualEntryDate" size="sm" type="date" />
+                  </label>
+                  <label>
+                    <span>买入价格</span>
+                    <UiInput v-model="form.actualEntryPrice" size="sm" type="text" />
+                  </label>
+                  <label>
+                    <span>买入数量</span>
+                    <UiInput v-model="form.actualEntryQuantity" size="sm" type="text" />
                   </label>
                 </div>
                 <div class="trade-license-actions">
-                  <UiButton type="button" :loading="saving" :disabled="!licensePreview.valid || !diagnosisAllowsLicense" @click="issueSelectedLicense">生成买入许可证</UiButton>
+                  <UiButton type="button" :loading="saving" :disabled="isLegacyLicense" @click="recordSelectedEntry">记录合规买入</UiButton>
                   <UiButton type="button" variant="danger" :disabled="saving" @click="cancelSelectedPlan">取消计划</UiButton>
                 </div>
-              </div>
-            </details>
+              </section>
 
-            <section v-else-if="stageIs('planned')" class="trade-record-form__section">
-              <h3>买入许可证</h3>
-              <div v-if="isLegacyLicense" class="trade-license-legacy">
-                这是旧版计划，缺少许可证快照，不能直接记录为系统买入。请复制诊断信息创建新草稿。
-              </div>
-              <dl class="trade-license-metrics">
-                <div><dt>允许买入区间</dt><dd>{{ formatRange(form.plannedEntryLow, form.plannedEntryHigh) }}</dd></div>
-                <div><dt>超过即不追</dt><dd>{{ form.noChasePrice || '--' }}</dd></div>
-                <div><dt>失败全仓止损</dt><dd>{{ form.stopLossPrice || '--' }}</dd></div>
-                <div><dt>目标全仓止盈</dt><dd>{{ form.takeProfitPrice || '--' }}</dd></div>
-                <div><dt>建议股数</dt><dd>{{ form.plannedQuantity || '--' }} 股</dd></div>
-                <div><dt>计划金额</dt><dd>{{ form.plannedAmount || '--' }}</dd></div>
-              </dl>
-              <div class="trade-record-form__grid trade-record-form__grid--three">
-                <label>
-                  <span>买入日期</span>
-                  <UiInput v-model="form.actualEntryDate" size="sm" type="date" />
-                </label>
-                <label>
-                  <span>买入价格</span>
-                  <UiInput v-model="form.actualEntryPrice" size="sm" type="text" />
-                </label>
-                <label>
-                  <span>买入数量</span>
-                  <UiInput v-model="form.actualEntryQuantity" size="sm" type="text" />
-                </label>
-              </div>
-              <div class="trade-license-actions">
-                <UiButton type="button" :loading="saving" :disabled="isLegacyLicense" @click="recordSelectedEntry">记录合规买入</UiButton>
-                <UiButton type="button" variant="danger" :disabled="saving" @click="cancelSelectedPlan">取消计划</UiButton>
-              </div>
-            </section>
+              <template v-else-if="stageIs('entered', 'holding', 'exited')"></template>
 
-            <template v-else-if="stageIs('entered', 'holding', 'exited')"></template>
-
-            <section v-else-if="stageIs('reviewed')" class="trade-record-form__section">
-              <h3>最终复盘</h3>
-              <dl class="trade-record-final-summary">
-                <div>
-                  <dt>买入</dt>
-                  <dd>{{ formatDate(form.actualEntryDate) }} · {{ form.actualEntryPrice || "--" }} · {{ form.actualEntryQuantity || "--" }} 股</dd>
+              <section v-else-if="stageIs('reviewed')" class="trade-record-form__section">
+                <h3>最终复盘</h3>
+                <dl class="trade-record-final-summary">
+                  <div>
+                    <dt>买入</dt>
+                    <dd>{{ formatDate(form.actualEntryDate) }} · {{ form.actualEntryPrice || "--" }} · {{ form.actualEntryQuantity || "--" }} 股</dd>
+                  </div>
+                  <div>
+                    <dt>卖出</dt>
+                    <dd>{{ formatDate(form.actualExitDate) }} · {{ form.actualExitPrice || "--" }} · {{ form.actualExitQuantity || "--" }} 股</dd>
+                  </div>
+                  <div>
+                    <dt>卖出原因</dt>
+                    <dd>{{ form.exitReason || "--" }}</dd>
+                  </div>
+                </dl>
+                <div class="trade-record-form__grid trade-record-form__grid--one trade-record-form__grid--spaced">
+                  <label>
+                    <span>最终复盘</span>
+                    <UiTextarea v-model="form.finalReview" />
+                  </label>
                 </div>
-                <div>
-                  <dt>卖出</dt>
-                  <dd>{{ formatDate(form.actualExitDate) }} · {{ form.actualExitPrice || "--" }} · {{ form.actualExitQuantity || "--" }} 股</dd>
+              </section>
+
+              <section v-else-if="stageIs('cancelled')" class="trade-record-form__section">
+                <h3>已取消</h3>
+                <div class="trade-record-form__grid trade-record-form__grid--one">
+                  <label>
+                    <span>取消 / 买入备注</span>
+                    <UiTextarea v-model="form.entryNotes" />
+                  </label>
                 </div>
-                <div>
-                  <dt>卖出原因</dt>
-                  <dd>{{ form.exitReason || "--" }}</dd>
+              </section>
+
+              <section v-else class="trade-record-form__section">
+                <h3>阶段表单</h3>
+                <div class="trade-record-stage-hint">
+                  请先设置当前阶段，再填写对应阶段的交易信息。
                 </div>
-              </dl>
-              <div class="trade-record-form__grid trade-record-form__grid--one trade-record-form__grid--spaced">
-                <label>
-                  <span>最终复盘</span>
-                  <UiTextarea v-model="form.finalReview" />
-                </label>
-              </div>
-            </section>
+              </section>
 
-            <section v-else-if="stageIs('cancelled')" class="trade-record-form__section">
-              <h3>已取消</h3>
-              <div class="trade-record-form__grid trade-record-form__grid--one">
-                <label>
-                  <span>取消 / 买入备注</span>
-                  <UiTextarea v-model="form.entryNotes" />
-                </label>
+              <div v-if="!stageIs('entered', 'holding', 'exited')" class="trade-record-form__actions">
+                <UiButton type="submit" :loading="saving" :disabled="detailLoading">
+                  <template #prefix><Save v-if="!saving" :size="16" /></template>
+                  保存
+                </UiButton>
               </div>
-            </section>
-
-            <section v-else class="trade-record-form__section">
-              <h3>阶段表单</h3>
-              <div class="trade-record-stage-hint">
-                请先设置当前阶段，再填写对应阶段的交易信息。
-              </div>
-            </section>
-
-            <div v-if="!stageIs('entered', 'holding', 'exited')" class="trade-record-form__actions">
-              <UiButton type="submit" :loading="saving" :disabled="detailLoading">
-                <template #prefix><Save v-if="!saving" :size="16" /></template>
-                保存
-              </UiButton>
-            </div>
-          </form>
+            </form>
+          </div>
         </template>
       </UiCard>
       </div>
@@ -1136,6 +1108,8 @@ onMounted(() => {
   font-size: 0.875rem;
   padding: 1rem;
 }
+
+.trade-record-content { display:grid;gap:16px; }
 
 .trade-record-form {
   display: grid;
