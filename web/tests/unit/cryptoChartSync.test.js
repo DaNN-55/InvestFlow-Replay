@@ -21,6 +21,10 @@ test('invalid saved preferences cannot request arbitrary periods or layouts, and
  assert.equal(p.layout,'dual');assert.deepEqual(p.periods,[60,60,15,240]);assert.deepEqual(cryptoVisiblePeriods(p),[60]);
  assert.equal(p.collapsed,false);assert.equal(p.kinds[0],'last');assert.equal(p.kinds[1],'mark');
 });
+test('playback speed restores only supported values and defaults safely',()=>{
+ for(const speed of [1,2,4,8]) assert.equal(normalizeCryptoPreferences({playbackSpeed:String(speed)}).playbackSpeed,speed);
+ for(const speed of [0,-1,3,Infinity,'bad',null]) assert.equal(normalizeCryptoPreferences({playbackSpeed:speed}).playbackSpeed,1);
+});
 test('coin and quote inputs round down to contract lot steps using decimal arithmetic',()=>{
  const contract={ctVal:'0.01',ctMult:'1',lotSz:'0.01'};
  assert.equal(cryptoQuantityToContracts('0.010099999999999999','base',contract,'50000'),'1');

@@ -21,6 +21,8 @@
 .crypto-terminal-side { display:flex;flex-direction:column;gap:12px;min-width:0; }
 .crypto-playback { display:grid;gap:12px;padding:12px;border:1px solid var(--ql-line-strong);border-radius:7px;background:var(--ql-panel); }
 .crypto-playback-heading { display:flex;align-items:center;gap:10px; }
+.crypto-playback-heading>.ql-relative { margin-left:auto;width:66px;flex-shrink:0; }
+.crypto-playback-heading .crypto-playback-speed { height:32px;min-height:32px;padding-left:8px;font-size:11px; }
 .crypto-playback strong { display:block;font-size:12px;font-weight:500; }
 .crypto-playback small { display:block;color:var(--ql-color-text-muted);font-size:10px;margin-top:3px; }
 .crypto-playback-progress>div { display:flex;justify-content:space-between;color:var(--ql-color-text-muted);font-size:10px;margin-bottom:5px; }

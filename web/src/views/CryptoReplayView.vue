@@ -14,7 +14,7 @@ import CryptoChartWorkspace from '../components/crypto/CryptoChartWorkspace.vue'
 import CryptoReviewPanel from '../components/crypto/CryptoReviewPanel.vue';
 import { createCryptoReplayController } from '../utils/cryptoReplayController.js';
 import { amount, relativeTime } from '../utils/cryptoReplayPresentation.js';
-import { loadCryptoPreferences, CRYPTO_WORKSPACE_KEY, cryptoVisiblePeriods } from '../utils/cryptoWorkspacePreferences.js';
+import { loadCryptoPreferences, CRYPTO_WORKSPACE_KEY, CRYPTO_PLAYBACK_SPEEDS, cryptoVisiblePeriods } from '../utils/cryptoWorkspacePreferences.js';
 import '../components/crypto/crypto-terminal.css';
 const route=useRoute(),router=useRouter();
 const openData=inject('openCryptoData',()=>{});
@@ -29,6 +29,7 @@ const finishOpen=ref(false),settingsOpen=ref(false),playing=ref(false);
 const retraining=ref(false);
 const display=reactive({precision:'auto'});
 let playbackTimer;
+let playbackGeneration=0, playbackInFlight=false;
 let lastRequestedSession=null;
 function records(focusCurrent=false) { playing.value=false;router.push({path:'/decision/trade-records',query:{tab:'replay',market:'crypto-perpetual',...(focusCurrent===true&&s.value?{session:s.value.id}:{})}}); }
 function command(value,note='') {playing.value=false;return controller.act('command',{command:value,...(note?{note}:{})});}
@@ -53,16 +54,25 @@ watch(()=>state.value.busy,value=>{if(!value) {syncRequestedSession();ensurePeri
 watch(()=>route.query.session,()=>{lastRequestedSession=null;syncRequestedSession();});
 onActivated(()=>typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync());
 async function advance(minutes=1) {playing.value=false;return controller.act('advance',{minutes});}
-async function tick() {
+function schedulePlayback(generation=playbackGeneration) {
+  clearTimeout(playbackTimer);
+  if(playing.value&&!playbackInFlight) playbackTimer=setTimeout(()=>tick(generation),900/preferences.value.playbackSpeed);
+}
+async function tick(generation) {
+  if(generation!==playbackGeneration) return;
   if(!playing.value||locked.value||s.value?.status!=='active'||s.value?.ending){playing.value=false;return;}
   const sequence=state.value.traces.at(-1)?.sequence??0;
+  playbackInFlight=true;
   const ok=await controller.act('advance',{minutes:1});
-  const paused=state.value.traces.some(e=>e.sequence>sequence&&['order-filled','funding-settled','protection-triggered','teaching-liquidation','risk-triggered','end-filled','training-ended'].includes(e.type));
+  playbackInFlight=false;
+  if(generation!==playbackGeneration) return;
+  const paused=state.value.traces.some(e=>e.sequence>sequence&&['order-filled','order-rejected','funding-settled','protection-triggered','protection-filled','teaching-liquidation','risk-triggered','end-filled','training-ended','end-blocked'].includes(e.type));
   if(!ok||paused||s.value?.status!=='active') playing.value=false;
-  if(playing.value) playbackTimer=setTimeout(tick,900);
+  if(playing.value) schedulePlayback(generation);
 }
-watch(playing,value=>{clearTimeout(playbackTimer);if(value) playbackTimer=setTimeout(tick,200);});
-function stop() {playing.value=false;clearTimeout(playbackTimer);}
+watch(playing,()=>{playbackGeneration++;clearTimeout(playbackTimer);if(playing.value) schedulePlayback();});
+watch(()=>preferences.value.playbackSpeed,()=>{if(playing.value) schedulePlayback();});
+function stop() {playing.value=false;playbackGeneration++;clearTimeout(playbackTimer);}
 onDeactivated(stop);onBeforeUnmount(stop);
 async function finish() {stop();if(await controller.act('finish')) finishOpen.value=false;}
 async function retrain() {
@@ -92,8 +102,9 @@ async function retrain() {
         <div class="crypto-terminal-side">
           <section class="crypto-playback" aria-label="回放控制">
             <div class="crypto-playback-heading">
-              <button type="button" class="crypto-icon" :aria-label="playing?'暂停回放':'自动回放'" :disabled="locked||s.status!=='active'||s.ending" @click="playing=!playing"><Pause v-if="playing" :size="16" /><Play v-else :size="16" /></button>
+              <button type="button" class="crypto-icon" :aria-label="playing?'暂停回放':'自动回放'" :disabled="!playing&&(locked||s.status!=='active'||s.ending)" @click="playing=!playing"><Pause v-if="playing" :size="16" /><Play v-else :size="16" /></button>
               <div><strong>{{ relativeTime(s.elapsedMinutes) }}</strong><small>{{ s.attemptInfo.kind==='first'?'首次盲测':`复练 #${s.attemptInfo.attemptNumber}` }} · {{ s.config.leverage }}倍</small></div>
+              <UiSelect v-model="preferences.playbackSpeed" class="crypto-playback-speed" aria-label="自动回放倍率" title="调整播放间隔；每次仍推进 1 分钟，事件发生后暂停"><option v-for="speed in CRYPTO_PLAYBACK_SPEEDS" :key="speed" :value="speed">{{ speed }}×</option></UiSelect>
             </div>
             <div class="crypto-playback-progress"><div><span>练习进度</span><span>{{ Math.round(progress*100)/100 }}%</span></div><progress :value="progress" max="100" aria-label="练习进度" /></div>
             <div class="crypto-playback-steps"><UiButton v-for="n in [1,5,15]" :key="n" variant="secondary" :disabled="locked||s.status!=='active'" @click="advance(n)">推进 {{ n }} 分钟</UiButton></div>
