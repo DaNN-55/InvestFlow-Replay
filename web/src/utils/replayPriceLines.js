@@ -21,12 +21,14 @@ export const REPLAY_PRICE_LINE_OVERLAY = {
     const displaced=Math.abs(y-point.y)>2;
     const tag={ key:'price-tag',type:'text',attrs:{x:8,y,text:`${line.draggable?'↕ ':''}${outside?(point.y<0?'↑ ':'↓ '):''}${line.label}${outside||displaced||line.preview?` @ ${line.price}`:''}`,align:'left',baseline:'middle'},
       styles:{style:'stroke_fill',color:line.color,size:11,backgroundColor:line.background??'#ffffff',borderColor:line.color,borderSize:1,borderRadius:3,paddingLeft:5,paddingRight:5,paddingTop:3,paddingBottom:3},ignoreEvent:!line.draggable };
+    const cancel=line.cancellable?[{key:'price-cancel',type:'text',attrs:{x:tag.attrs.x+line.measureLabel(tag.attrs.text)+16,y,text:'×',align:'left',baseline:'middle'},
+      styles:{...tag.styles,size:13,paddingLeft:5,paddingRight:5},ignoreEvent:false}]:[];
     // An out-of-range tag names the actual price; never draw a line at a fake
     // clamped price or stretch the candle scale to fit a distant protective stop.
-    if(outside) return [tag];
+    if(outside) return [tag,...cancel];
     return [{ key:'price-line',type: 'line', attrs: { coordinates: [{ x: 0, y: point.y }, { x: bounding.width, y: point.y }] },
       styles: { color: line.color, size: 1.5, style: line.dashed ? 'dashed' : 'solid', dashedValue: [6, 4] }, ignoreEvent: !line.draggable },
-    tag,...(displaced?[{type:'line',attrs:{coordinates:[{x:5,y},{x:5,y:point.y}]},styles:{color:line.color,size:1},ignoreEvent:true}]:[])];
+    tag,...cancel,...(displaced?[{type:'line',attrs:{coordinates:[{x:5,y},{x:5,y:point.y}]},styles:{color:line.color,size:1},ignoreEvent:true}]:[])];
   },
   createYAxisFigures({coordinates=[],bounding={},overlay,yAxis}) {
     const point=coordinates[0],line=overlay.extendData;

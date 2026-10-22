@@ -8,6 +8,7 @@ import {
   init,
   registerIndicator,
   registerOverlay,
+  utils,
 } from "klinecharts";
 import {
   computed,
@@ -95,6 +96,7 @@ export function useReplayKlineChart({
   onCrosshair = () => {},
   onRange = () => {},
   onPriceLineDrag = () => {},
+  onPriceLineCancel = () => {},
 }) {
   const chart = shallowRef(null);
   const activeDrawingTool = shallowRef("");
@@ -296,17 +298,25 @@ export function useReplayKlineChart({
   function outsidePriceRelease(event) {if(priceDrag&&!host.value?.contains(event.target)) endPriceDrag(true);}
 
   function priceDragHandlers(line,current) {
+    let cancelPress=null;
+    function clickCancel({figureKey}) {
+      if(figureKey==='price-cancel'&&line.cancellable&&!cancelPress?.moved&&!priceDrag) onPriceLineCancel({leg:line.protectionLeg,orderId:line.orderId});
+      cancelPress=null;return true;
+    }
     return {
-      onPressedMoveStart:({overlay,y})=>{
+      onPressedMoveStart:({overlay,x,y,figureKey})=>{
+        cancelPress=null;
         if(priceDrag||!line.draggable) return true;
-        const original={...overlay.extendData,draggable:false};
+        if(figureKey==='price-cancel') {cancelPress={x,y,moved:false};return true;}
+        const original={...overlay.extendData,draggable:false,cancellable:false};
         const backupId=`${line.id}:drag-original`;
         priceDrag={line,original,backupId,startY:y,anchorY:current.convertToPixel({value:Number(line.price)},{paneId:CANDLE_PANE_ID}).y,price:line.price,moved:false};
         current.createOverlay({name:REPLAY_PRICE_LINE_OVERLAY.name,id:backupId,groupId:REPLAY_PRICE_LINE_GROUP,lock:true,points:[{value:Number(line.price)}],extendData:original},CANDLE_PANE_ID);
         onPriceLineDrag({phase:'start',leg:line.protectionLeg,orderId:line.orderId});
         return true;
       },
-      onPressedMoving:({overlay,y})=>{
+      onPressedMoving:({overlay,x,y})=>{
+        if(cancelPress) {if(Math.hypot(x-cancelPress.x,y-cancelPress.y)>=3) cancelPress.moved=true;return true;}
         if(!priceDrag||priceDrag.line.id!==overlay.id) return true;
         const delta=y-priceDrag.startY;
         if(Math.abs(delta)<3&&!priceDrag.moved) return true;
@@ -318,6 +328,8 @@ export function useReplayKlineChart({
         return true; // The native default must not add hidden time/index offsets.
       },
       onPressedMoveEnd:()=>{endPriceDrag();return true;},
+      onClick:clickCancel,
+      onDoubleClick:clickCancel,
     };
   }
 
@@ -338,8 +350,8 @@ export function useReplayKlineChart({
     priceLineIds = []; priceLineKey = nextKey;
     for (const [tagIndex,line] of priceLines.value.entries()) {
       const id = current.createOverlay({ name: REPLAY_PRICE_LINE_OVERLAY.name, id: line.id,
-        groupId: REPLAY_PRICE_LINE_GROUP, lock: !line.draggable, points: [{ value: Number(line.price) }], extendData: {...line,color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price})=>({id,price}))},
-        ...(line.draggable?priceDragHandlers(line,current):{}) }, CANDLE_PANE_ID);
+        groupId: REPLAY_PRICE_LINE_GROUP, lock: !line.draggable, points: [{ value: Number(line.price) }], extendData: {...line,measureLabel:text=>utils.calcTextWidth(text,11),color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price})=>({id,price}))},
+        ...(line.draggable||line.cancellable?priceDragHandlers(line,current):{}) }, CANDLE_PANE_ID);
       if (id) priceLineIds.push(id);
     }
   }

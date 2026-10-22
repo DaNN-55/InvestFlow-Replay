@@ -57,3 +57,31 @@ test('limit draft uses exact order identity and captured revision without changi
     assert.equal(priceDraftReached(s,createPriceDraft(s,{orderId:2},buy?49900:50100)),false);
   }
 });
+
+test('chart cancellation captures one remaining limit order, validates its version, and never cancels the sibling',async()=>{
+  const {createPriceCancellation,priceCancellationCurrent,priceCancellationCommand}=await import('../../src/utils/cryptoPriceDraft.js');
+  const s=session();s.orders=[{id:2,type:'limit',limitPrice:'49000',contracts:'3',remainingContracts:'1',filledContracts:'2'},{id:3,type:'limit',limitPrice:'48000',remainingContracts:'1'}];
+  const before=structuredClone(s),draft=createPriceCancellation(s,{orderId:2});assert.deepEqual(s,before);
+  assert.deepEqual(priceCancellationCommand(s,draft),{expectedRevision:4,command:{type:'cancel-order',orderId:2}});
+  for(const change of [s=>s.revision++,s=>s.id='other',s=>s.orders.shift(),s=>s.orders[0].remainingContracts='0.5',s=>s.ending=true]) {
+    const changed=structuredClone(before);change(changed);assert.equal(priceCancellationCurrent(changed,draft),false);assert.equal(priceCancellationCommand(changed,draft),null);
+  }
+  assert.equal(createPriceCancellation(s,{orderId:9}),null);s.orders[0].type='market';assert.equal(createPriceCancellation(s,{orderId:2}),null);
+});
+
+test('chart cancellation targets a single actual protective leg, including an already-triggered remaining exit',async()=>{
+  const {createPriceCancellation,priceCancellationCurrent,priceCancellationCommand}=await import('../../src/utils/cryptoPriceDraft.js');
+  const s=session(),before=structuredClone(s);
+  for(const leg of ['stopLoss','takeProfit']) {
+    const draft=createPriceCancellation(s,{leg});assert.deepEqual(s,before);
+    assert.deepEqual(priceCancellationCommand(s,draft),{expectedRevision:4,command:{type:'cancel-protection',leg}});
+    for(const change of [s=>s.revision++,s=>s.account.position.contracts='1',s=>s.protection[leg]=null,s=>s.protection.triggeredLeg=leg,s=>s.status='completed']) {
+      const changed=structuredClone(before);change(changed);assert.equal(priceCancellationCurrent(changed,draft),false);
+    }
+  }
+  s.protection.triggeredLeg='stopLoss';s.protection.takeProfit=null;
+  const triggered=createPriceCancellation(s,{leg:'stopLoss'});assert.ok(triggered);assert.equal(priceCancellationCurrent(s,triggered),true);
+  assert.equal(createPriceCancellation(s,{leg:'takeProfit'}),null);
+  assert.equal(createPriceCancellation(s,{leg:'manual'}),null);
+  s.account.position=null;assert.equal(createPriceCancellation(s,{leg:'stopLoss'}),null);
+});

@@ -64,3 +64,25 @@ export function priceDraftReached(session,draft) {
   const buy=(draft.order.side==='long')!==(draft.order.intent==='reduce');
   return buy?Number(draft.price)>=Number(session.currentPrices.last):Number(draft.price)<=Number(session.currentPrices.last);
 }
+
+export function createPriceCancellation(session,target) {
+  if(session?.status!=='active'||session.ending) return null;
+  if(target.orderId!=null) {
+    const order=session.orders?.find(order=>order.id===target.orderId);
+    return order?.type==='limit'&&Number(order.remainingContracts)>0?{kind:'order',sessionId:session.id,revision:session.revision,orderId:order.id,order:structuredClone(order)}:null;
+  }
+  const leg=target.leg;
+  if(!['stopLoss','takeProfit'].includes(leg)||!session.account?.position||!session.protection?.[leg]||(session.protection.triggeredLeg&&session.protection.triggeredLeg!==leg)) return null;
+  return {kind:'protection',sessionId:session.id,revision:session.revision,leg,protection:structuredClone(session.protection),position:structuredClone(session.account.position)};
+}
+
+export function priceCancellationCurrent(session,draft) {
+  if(draft?.kind==='order') return priceDraftCurrent(session,draft);
+  return Boolean(draft&&session?.id===draft.sessionId&&session.revision===draft.revision&&session.status==='active'&&!session.ending&&
+    JSON.stringify(session.protection)===JSON.stringify(draft.protection)&&JSON.stringify(session.account?.position)===JSON.stringify(draft.position));
+}
+
+export function priceCancellationCommand(session,draft) {
+  if(!priceCancellationCurrent(session,draft)) return null;
+  return {expectedRevision:draft.revision,command:draft.kind==='order'?{type:'cancel-order',orderId:draft.orderId}:{type:'cancel-protection',leg:draft.leg}};
+}

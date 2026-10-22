@@ -8,7 +8,7 @@ import { priceDraftCurrent, priceDraftReached } from '../../utils/cryptoPriceDra
 import { CRYPTO_PERIODS, cryptoChartBars, cryptoChartLines } from '../../utils/cryptoReplayPresentation.js';
 import { REPLAY_RISE_COLOR, REPLAY_FALL_COLOR } from '../../utils/replayKlineConfig.js';
 const props=defineProps({session:{type:Object,required:true},markets:{type:Object,default:()=>({})},modelValue:{type:Object,required:true},busy:Boolean,blocked:Boolean,priceDraft:{type:Object,default:null}});
-const emit=defineEmits(['update:modelValue','price-drag','confirm-price','cancel-price']);
+const emit=defineEmits(['update:modelValue','price-drag','confirm-price','cancel-price','request-cancellation']);
 const draggingIndex=ref(null);
 const selected=ref(0), maximized=ref(null), menu=ref(false), root=ref(null);
 const charts=new Map();
@@ -19,9 +19,13 @@ const prefs=computed(()=>props.modelValue);
 const models=computed(()=>prefs.value.periods.map((period,i)=>{
   const bars=cryptoChartBars(props.markets[period],prefs.value.kinds[i]);
   const editable=!props.busy&&!props.blocked&&!props.priceDraft&&props.session.status==='active'&&!props.session.ending&&(draggingIndex.value==null||draggingIndex.value===i);
-  const lines=cryptoChartLines(props.session,prefs.value.kinds[i]).map(line=>({...line,draggable:Boolean(editable&&(line.orderId!=null||(line.protectionLeg&&props.session.account.position&&!props.session.protection?.triggeredLeg)))}));
+  const lines=cryptoChartLines(props.session,prefs.value.kinds[i]).map(line=>({...line,
+    draggable:Boolean(editable&&(line.orderId!=null||(line.protectionLeg&&props.session.account.position&&!props.session.protection?.triggeredLeg))),
+    cancellable:Boolean(editable&&(line.orderId!=null||(line.protectionLeg&&props.session.account.position&&(!props.session.protection?.triggeredLeg||props.session.protection.triggeredLeg===line.protectionLeg)))),
+    cancelLabel:line.orderId!=null?`限价委托 #${line.orderId}，${line.price}`:`${line.protectionLeg==='stopLoss'?'自动止损':'自动止盈'}，${line.price}`,
+  }));
   const base=props.priceDraft&&lines.find(line=>props.priceDraft.kind==='order'?line.orderId===props.priceDraft.orderId:line.protectionLeg===props.priceDraft.leg);
-  if(base) lines.push({...base,id:`${base.id}:draft`,price:props.priceDraft.price,label:`待确认${props.priceDraft.kind==='order'?'委托':props.priceDraft.leg==='stopLoss'?'止损':'止盈'}`,draggable:false,protectionLeg:null,orderId:null,dashed:true,preview:true});
+  if(base) lines.push({...base,id:`${base.id}:draft`,price:props.priceDraft.price,label:`待确认${props.priceDraft.kind==='order'?'委托':props.priceDraft.leg==='stopLoss'?'止损':'止盈'}`,draggable:false,cancellable:false,protectionLeg:null,orderId:null,dashed:true,preview:true});
   return { bars, lines, showVolume:bars.length>0&&bars.every(bar=>bar.volume!=null) };
 }));
 function drag(index,event) {clearCrosshair();draggingIndex.value=event.phase==='start'?index:null;emit('price-drag',event);}
@@ -68,7 +72,7 @@ onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside));
     <div class="crypto-chart-grid" :class="maximized==null?prefs.layout:'single'" @pointerleave="clearCrosshair">
       <section v-for="i in visible" :key="`${session.id}:${i}`" class="crypto-chart-tile" :class="{'is-selected':i===selected}" :data-chart-index="i" tabindex="0" :aria-label="`图${i+1}，按回车选中`" @pointerdown.capture="selected=i" @wheel.capture="selected=i" @focusin="selected=i" @keydown.enter="selected=i">
         <header><button type="button" :aria-pressed="i===selected" @click="selected=i">{{ session.instrumentId }} <b>{{ CRYPTO_PERIODS.find(([v])=>v===prefs.periods[i])[1] }}</b><span>{{ prefs.kinds[i]==='last'?'最新价':'标记价格' }}</span></button><small v-if="i===selected">当前图</small></header>
-        <CandlestickChart v-if="markets[prefs.periods[i]]" :key="`${prefs.periods[i]}:${prefs.kinds[i]}`" :ref="value=>value?charts.set(i,value):charts.delete(i)" :bars="models[i].bars" :price-lines="models[i].lines" :price-step="session.contract.tickSz" :colors="colors" compact :show-volume="models[i].showVolume" :height="count===4||prefs.layout==='rows'?280:400" @crosshair="link(i,$event)" @range="range(i,$event)" @price-line-drag="drag(i,$event)" />
+        <CandlestickChart v-if="markets[prefs.periods[i]]" :key="`${prefs.periods[i]}:${prefs.kinds[i]}`" :ref="value=>value?charts.set(i,value):charts.delete(i)" :bars="models[i].bars" :price-lines="models[i].lines" :price-step="session.contract.tickSz" :colors="colors" compact :show-volume="models[i].showVolume" :height="count===4||prefs.layout==='rows'?280:400" @crosshair="link(i,$event)" @range="range(i,$event)" @price-line-drag="drag(i,$event)" @price-line-cancel="clearCrosshair();emit('request-cancellation',$event)" />
         <p v-else class="crypto-chart-loading" role="status">行情加载中…</p>
       </section>
     </div>
