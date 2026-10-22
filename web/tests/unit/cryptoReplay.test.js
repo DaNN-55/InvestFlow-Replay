@@ -152,3 +152,21 @@ test('F6 unavailable or stale derived review never masks a saved action or cross
   api.cryptoMarket = async () => { throw new Error('读取失败'); };
   await ui.select('new-unavailable'); assert.equal(ui.state.analysis, null); assert.deepEqual(ui.state.traces, []);
 });
+
+test('mark-price charts use real trading volume from the identical visible candle, never array position', () => {
+  const candle = { startMinute: 0, knownThroughMinute: 3, complete: false, open:'10', high:'12', low:'9', close:'11' };
+  const view = { candles:{ mark:[candle], last:[{...candle,startMinute:-5,knownThroughMinute:0,volumeContracts:'999'}, {...candle,volumeContracts:'12.5',volumeQuote:'125'}] } };
+  const [mark] = cryptoChartBars(view,'mark');
+  assert.equal(mark.volume,'12.5');
+  assert.equal(mark.amount,'125');
+  assert.equal(mark.endSequence,2);
+  assert.equal(mark.open,'10');
+  assert.equal(cryptoChartBars(view,'last')[0].volume,'999');
+  assert.equal(view.candles.mark[0].volumeContracts,undefined);
+});
+test('a mark candle cannot borrow volume from a later prefix or display missing volume as zero', () => {
+  const candle = { startMinute:0, knownThroughMinute:3, complete:false, open:'10',high:'12',low:'9',close:'11' };
+  const view = { candles:{mark:[candle],last:[{...candle,knownThroughMinute:5,volumeContracts:'99999'}]} };
+  assert.equal(cryptoChartBars(view,'mark')[0].volume,null);
+  assert.equal(cryptoChartBars({candles:{mark:[candle]}},'mark')[0].volume,null);
+});

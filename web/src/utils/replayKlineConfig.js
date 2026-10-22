@@ -41,6 +41,7 @@ export function createReplayChartStyles({
   rise = REPLAY_RISE_COLOR,
   fall = REPLAY_FALL_COLOR,
   mainIndicatorLegends = () => [],
+  compact = false,
 }) {
   return {
     grid: {
@@ -60,10 +61,10 @@ export function createReplayChartStyles({
         noChangeWickColor: text,
       },
       tooltip: {
+        ...(compact ? { showRule:"follow_cross", showType:"rect", rect:{color:background,borderColor:grid}, text:{color:text,size:11} } : {}),
         custom: (data) => [
           ...BASE_CANDLE_TOOLTIP_LEGENDS,
-          createPctChangeLegend(data.current, { rise, fall, text }),
-          { title: "volume", value: "{volume}" },
+          ...(compact ? [] : [createPctChangeLegend(data.current, { rise, fall, text }), { title:"volume", value:"{volume}" }]),
           ...(mainIndicatorLegends(data.current?.replayIndex) ?? []),
         ],
       },

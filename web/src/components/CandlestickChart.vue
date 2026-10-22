@@ -22,6 +22,8 @@ const props = defineProps({
   priceLines: { type: Array, default: () => [] },
   height: { type: Number, default: 0 },
   colors: { type: Object, default: () => ({}) },
+  compact: Boolean,
+  showVolume: { type: Boolean, default: true },
   trades: {
     type: Array,
     default: () => [],
@@ -42,7 +44,7 @@ const subPaneCount = computed(() =>
     (indicator) => indicator.placement === "sub" && !indicator.error,
   ).length ?? 0),
 );
-const chartHeight = computed(() => props.height || 330 + 92 + subPaneCount.value * 126 + 24);
+const chartHeight = computed(() => props.height || 330 + (props.showVolume ? 92 : 0) + subPaneCount.value * 126 + 24);
 const emit = defineEmits(['crosshair','range']);
 const drawingIcons = Object.freeze({
   trend: TrendingUp,
@@ -58,6 +60,8 @@ const chartModel = computed(() => ({
   trades: props.trades,
   indicators: props.indicators,
   colors: props.colors,
+  compact: props.compact,
+  showVolume: props.showVolume,
 }));
 const { state, drawing, commands } = useReplayKlineChart({
   host,
@@ -128,7 +132,7 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
       :style="{ height: `${chartHeight}px` }"
       data-testid="replay-klinecharts-host"
     />
-    <div class="replay-kline-chart__status" aria-live="polite">
+    <div v-if="!compact" class="replay-kline-chart__status" aria-live="polite">
       <span v-if="state.visibleRange.startLabel && state.visibleRange.endLabel">
         可视范围 {{ state.visibleRange.startLabel }} 至 {{ state.visibleRange.endLabel }}
       </span>

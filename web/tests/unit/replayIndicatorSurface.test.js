@@ -70,7 +70,7 @@ describe("replay indicator frontend surface", () => {
   });
 
   it("uses native built-ins, VOL and isolated custom indicator errors", () => {
-    assert.match(lifecycleSource, /createIndicator\(createReplayBuiltinIndicatorConfig\("VOL"\)/u);
+    assert.match(lifecycleSource, /createIndicator\(createReplayBuiltinIndicatorConfig\("VOL"(?:\)|,)/u);
     assert.match(indicatorSource, /MA: \[5, 10, 30, 60\]/u);
     assert.match(indicatorSource, /BOLL: \[20, 2\]/u);
     assert.match(indicatorSource, /MACD: \[12, 26, 9\]/u);
