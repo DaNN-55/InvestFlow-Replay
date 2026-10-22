@@ -2,6 +2,7 @@
 import { computed, reactive } from 'vue';
 import { ShieldCheck } from 'lucide-vue-next';
 import '../replay/replay-start.css';
+import ReplayResumeCard from '../replay/ReplayResumeCard.vue';
 import UiButton from '../ui/UiButton.vue';
 import UiInput from '../ui/UiInput.vue';
 import UiSelect from '../ui/UiSelect.vue';
@@ -31,18 +32,21 @@ const setup = reactive({ instrumentId: 'BTC-USDT-SWAP', startingCash: '10000', l
       <h2>这次怎么练？</h2>
       <label for="crypto-instrument">01 · 练习合约</label>
       <UiSelect id="crypto-instrument" v-model="setup.instrumentId" :disabled="busy || blocked"><option>BTC-USDT-SWAP</option><option>ETH-USDT-SWAP</option></UiSelect>
-      <details class="crypto-cost-settings">
-<summary>02 · 资金与成本 <span>{{ setup.startingCash }} USDT · {{ setup.leverage }}倍</span></summary>      <label for="crypto-cash">起始资金（USDT）</label><UiInput id="crypto-cash" v-model="setup.startingCash" inputmode="decimal" required :disabled="busy || blocked" />
-      <label for="crypto-leverage">杠杆倍数</label><UiInput id="crypto-leverage" v-model="setup.leverage" inputmode="decimal" required :disabled="busy || blocked" />
-      <label for="crypto-slip">单边教学滑点</label><UiSelect id="crypto-slip" v-model="setup.slippageBps" :disabled="busy || blocked"><option value="0">0 bps · 对照</option><option value="2">2 bps · 默认</option><option value="10">10 bps · 压力</option></UiSelect>
-</details>
-      <div class="crypto-setup__facts"><span>90 天背景</span><span>72 小时回放</span><span>逐仓 · 单向持仓</span></div>
-      <div v-if="resumable" class="crypto-resume"><div><strong>有一局练习正在等你</strong><p>{{ resumable.instrumentId }} · 原进度、持仓与委托保留</p></div><UiButton variant="secondary" :disabled="busy" @click="emit('resume',resumable.id)">继续上次练习</UiButton></div>
-      <p class="muted" v-if="pool?.mode==='history-pool'">当前合约还有 {{ selectedPool?.unseenWindows??0 }} 个未见场景。</p>
+      <fieldset class="crypto-cost-settings">
+        <legend>02 · 资金与成本</legend>
+        <div class="crypto-starting-funds">
+          <div><label for="crypto-cash">起始资金（USDT）</label><UiInput id="crypto-cash" v-model="setup.startingCash" inputmode="decimal" required :disabled="busy || blocked" /></div>
+          <div><label for="crypto-leverage">杠杆倍数</label><UiInput id="crypto-leverage" v-model="setup.leverage" inputmode="decimal" required :disabled="busy || blocked" /></div>
+        </div>
+        <label for="crypto-slip">单边教学滑点</label><UiSelect id="crypto-slip" v-model="setup.slippageBps" :disabled="busy || blocked"><option value="0">0 bps · 对照</option><option value="2">2 bps · 默认</option><option value="10">10 bps · 压力</option></UiSelect>
+      </fieldset>
+      <div class="crypto-setup__facts"><span>固定：90 天背景</span><span>72 小时回放</span><span>逐仓 · 单向</span></div>
+      <ReplayResumeCard v-if="resumable" :session-id="resumable.id" :description="`${resumable.instrumentId} · 原进度、持仓与委托保留`" :busy="busy" @resume="emit('resume',$event)" />
+      <p class="muted" v-if="pool?.mode==='history-pool'">可首次盲测：{{ selectedPool?.unseenWindows??0 }} 段历史行情。<span class="crypto-pool-help">每段回放 72 小时；用完后可到演练记录复练。</span></p>
       <p v-if="exhausted" role="status" class="muted">当前合约没有尚未暴露的场景，请到演练记录选择历史场景并显式复练；不会删除首次成绩或自动重置已见状态。</p>
       <p v-if="unavailable" role="status" class="muted">本地行情尚未准备或校验失败，暂时不能开始新练习。请按项目 README 的「加密行情数据准备」导入并核验冻结小样或历史池，然后刷新页面。已有练习仍可从演练记录继续。</p>
       <UiButton class="crypto-setup__submit" type="submit" :loading="busy" :disabled="blocked || exhausted || unavailable" block>开始合约盲测</UiButton>
-      <button type="button" class="crypto-text-button crypto-setup__records" @click="emit('records')">查看全部演练记录 ↗</button>
+      <button type="button" class="replay-setup__records" @click="emit('records')">查看全部演练记录 ↗</button>
     </form>
     </div>
   </section>
@@ -54,12 +58,10 @@ h2 { margin:0 0 20px;font-size:24px;letter-spacing:-.035em; }
 .crypto-setup__form label { display:block;margin:14px 0 7px;color:var(--ql-color-text-muted);font-size:11px;font-weight:700;letter-spacing:.04em; }
 .muted { color:var(--ql-color-text-muted);font-size:12px;line-height:1.7;margin:16px 0; }
 .crypto-setup__submit { margin-top:18px;min-height:48px; }
-.crypto-setup__records { display:flex;justify-content:center;width:100%;margin-top:12px; }
-.crypto-resume { display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--ql-line-strong);padding-top:16px;margin-top:16px;font-size:12px; }
-.crypto-resume p { margin:4px 0 0;color:var(--ql-color-text-muted);font-size:11px;line-height:1.7; }
-.crypto-resume :deep(.ql-ui-button) { flex-shrink:0;min-height:32px;height:32px;font-size:11px; }
-.crypto-cost-settings { border-block:1px solid var(--ql-line);padding:16px 0;margin:20px 0; }
-.crypto-cost-settings summary { display:flex;justify-content:space-between;gap:12px;cursor:pointer;font-size:12px; }
-.crypto-cost-settings summary span { font-size:11px;color:var(--ql-color-text-muted); }
-@media(max-width:780px) { .crypto-setup__intro { padding-inline:20px; }.crypto-setup__form { width:min(calc(100% - 32px),500px);box-sizing:border-box; }.crypto-resume { flex-wrap:wrap; } }
+.crypto-cost-settings { min-width:0;border:0;border-top:1px solid var(--ql-line);padding:4px 0 0;margin:16px 0 0; }
+.crypto-cost-settings legend { padding:0 8px 0 0;color:var(--ql-color-text-muted);font-size:11px; }
+.crypto-starting-funds { display:grid;grid-template-columns:1.4fr 1fr;gap:12px; }
+.crypto-starting-funds>div { min-width:0; }
+.crypto-pool-help { display:block;font-size:11px;margin-top:3px; }
+@media(max-width:780px) { .crypto-setup__intro { padding-inline:20px; }.crypto-setup__form { width:min(calc(100% - 32px),500px);box-sizing:border-box; } }
 </style>

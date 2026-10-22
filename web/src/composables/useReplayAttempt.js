@@ -147,6 +147,7 @@ export function useReplayAttempt(options = {}) {
     toggleAutoplay: autoplayController.toggle,
     setAutoplaySpeed: autoplayController.setSpeed,
     sync: sessionController.syncStoredSession,
+    resume: (id) => runWrite(() => sessionController.resumeSession(id)),
       startNew: () => runWrite(() => sessionController.startNewSession()),
     clearMessages: sessionController.clearMessages,
   });

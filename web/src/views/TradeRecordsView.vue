@@ -1,14 +1,13 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import { Ellipsis, Pencil, Plus, Save, Settings2, Trash2 } from "lucide-vue-next";
+import { Ellipsis, Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
 
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import ReplayHistoryRecords from "../components/replay-history/ReplayHistoryRecords.vue";
 import ReplayPlaybookPanel from "../components/replay-playbook/ReplayPlaybookPanel.vue";
 import TradeExecutionEventDialog from "../components/TradeExecutionEventDialog.vue";
 import TradeExecutionEventsPanel from "../components/TradeExecutionEventsPanel.vue";
-import TradeExecutionSettingsDrawer from "../components/TradeExecutionSettingsDrawer.vue";
 import TradeRecordCreateDrawer from "../components/TradeRecordCreateDrawer.vue";
 import TradeRecordList from "../components/TradeRecordList.vue";
 import UiActionMenu from "../components/ui/UiActionMenu.vue";
@@ -104,7 +103,6 @@ const createDrawerMode = ref("create");
 const creating = ref(false);
 const createErrorText = ref("");
 const executionSettings = ref(null);
-const executionSettingsOpen = ref(false);
 const executionEventEditorOpen = ref(false);
 const selectedExecutionEvent = ref(null);
 const executionEventErrorText = ref("");
@@ -636,14 +634,6 @@ onMounted(() => {
           记录模拟与实盘的逐笔成交、持仓结果和复盘备注；交易计划与风控按需使用。
         </p>
       </div>
-      <UiButton
-        v-if="primaryTab === 'records'"
-        variant="secondary"
-        @click="executionSettingsOpen = true"
-      >
-        <template #prefix><Settings2 :size="16" /></template>
-        执行参数
-      </UiButton>
     </header>
 
     <nav class="trade-records-primary-tabs" aria-label="交易追踪分类">
@@ -961,11 +951,6 @@ onMounted(() => {
         :error="executionEventErrorText"
         @close="closeExecutionEventEditor"
         @save="saveExecutionEvent"
-      />
-      <TradeExecutionSettingsDrawer
-        :open="executionSettingsOpen"
-        @close="executionSettingsOpen = false"
-        @saved="executionSettings = $event"
       />
       <ConfirmDialog
         :open="Boolean(pendingExecutionEventDelete)"

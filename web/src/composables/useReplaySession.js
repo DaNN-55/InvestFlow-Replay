@@ -104,18 +104,19 @@ export function useReplaySession(options = {}) {
     }
   }
 
-  async function restoreSession() {
-    const sessionId = readStoredSessionId(storage);
-    if (!sessionId) {
-      return;
-    }
+  async function resumeSession(sessionId) {
+    if (!sessionId || isBusy.value) return null;
     isRestoring.value = true;
     clearMessages();
     try {
-      await refreshSession({ sessionId });
+      return await refreshSession({ sessionId });
     } finally {
       isRestoring.value = false;
     }
+  }
+
+  async function restoreSession() {
+    return resumeSession(readStoredSessionId(storage));
   }
 
   async function syncStoredSession() {
@@ -591,6 +592,7 @@ export function useReplaySession(options = {}) {
     deleteReviewCorrection,
     cancelRetrain,
     refreshSession,
+    resumeSession,
     syncStoredSession,
     startNewSession,
     clearMessages,
