@@ -38,3 +38,29 @@ export function protectionDraftTriggered(session,draft) {
   const current=Number(session.currentPrices[draft.protection[draft.leg].reference]),price=Number(draft.price),long=draft.position.side==='long';
   return draft.leg==='stopLoss'?(long?price>=current:price<=current):(long?price<=current:price>=current);
 }
+
+export function createPriceDraft(session,target,value) {
+  if(target.orderId==null) return createProtectionDraft(session,target.leg,value);
+  const order=session?.orders?.find(order=>order.id===target.orderId);
+  if(session?.status!=='active'||session.ending||order?.type!=='limit'||Number(order.remainingContracts)<=0) return null;
+  const price=snapProtectionPrice(value,session.contract.tickSz);
+  if(!price||Number(price)===Number(order.limitPrice)) return null;
+  return {kind:'order',sessionId:session.id,revision:session.revision,orderId:order.id,price,oldPrice:order.limitPrice,order:structuredClone(order)};
+}
+
+export function priceDraftCurrent(session,draft) {
+  if(draft?.kind!=='order') return protectionDraftCurrent(session,draft);
+  return Boolean(session?.id===draft.sessionId&&session.revision===draft.revision&&session.status==='active'&&!session.ending&&
+    JSON.stringify(session.orders?.find(order=>order.id===draft.orderId))===JSON.stringify(draft.order));
+}
+
+export function priceDraftCommand(session,draft) {
+  if(!priceDraftCurrent(session,draft)) return null;
+  return draft.kind==='order'?{expectedRevision:draft.revision,command:{type:'amend-limit',orderId:draft.orderId,limitPrice:draft.price}}:protectionDraftCommand(session,draft);
+}
+
+export function priceDraftReached(session,draft) {
+  if(draft?.kind!=='order') return protectionDraftTriggered(session,draft);
+  const buy=(draft.order.side==='long')!==(draft.order.intent==='reduce');
+  return buy?Number(draft.price)>=Number(session.currentPrices.last):Number(draft.price)<=Number(session.currentPrices.last);
+}

@@ -305,3 +305,61 @@ for (const c of liquidationOracles.cases) test(`P3b approved takeover oracle ${c
   assert.equal(result.state.summary.netPnl, expected.netSessionPnl); assert.equal(result.state.account.position, null);
   assert.equal(result.state.totals.tradingFees, x.openingFeeAlreadyPaid); bridge(result.state);
 });
+
+for (const side of ['long','short']) test(`amend ${side} limit atomically reprices only remaining quantity and executes from next unseen minute`,()=>{
+  const source=sample();set(source,'last',0,{volumeContracts:'2'});
+  const e=engine(source),protection={stopLoss:{price:side==='long'?'40000':'60000',reference:'mark'}};
+  let state=act(e,e.create(),{type:'limit-open',side,contracts:'4',limitPrice:'50000',protection});
+  state=advance(e,state).state;
+  assert.equal(state.orders[0].filledContracts,'2');assert.equal(state.orders[0].remainingContracts,'2');
+  const before=clone(state),limitPrice=side==='long'?'50100':'49900';
+  const result=e.apply(state,{type:'amend-limit',orderId:1,limitPrice});
+  assert.deepEqual(state,before);state=result.state;
+  assert.equal(state.elapsedMinutes,before.elapsedMinutes);assert.deepEqual(state.account.position,before.account.position);
+  assert.deepEqual(state.protection,before.protection);assert.deepEqual(state.totals,before.totals);
+  assert.deepEqual(state.orders[0],{...before.orders[0],limitPrice,submittedMinute:1,resting:false,blockedAtMinute:null,reservedBalance:state.orders[0].reservedBalance});
+  assert.deepEqual(result.events.map(x=>x.type),['order-amended']);bridge(state);
+  const filled=advance(e,state);assert.equal(fills(filled)[0].quote.contracts,'2');
+  assert.equal(fills(filled)[0].quote.liquidityRole,'taker');assert.equal(filled.state.account.position.contracts,'4');
+  assert.equal(filled.state.orders.length,0);bridge(filled.state);
+});
+
+test('failed limit amendment preserves old price, reserve and queue; market/absent/ended orders reject',()=>{
+  const e=engine();let state=act(e,e.create({startingCash:'101'}),{type:'limit-open',side:'long',contracts:'1',limitPrice:'49000'});
+  const before=clone(state);
+  assert.throws(()=>e.apply(state,{type:'amend-limit',orderId:1,limitPrice:'60000'}),error('INSUFFICIENT_CASH'));
+  assert.deepEqual(state,before);
+  assert.throws(()=>e.apply(state,{type:'amend-limit',orderId:1,limitPrice:'49000.01'}),error('INVALID_PRICE_TICK'));
+  assert.throws(()=>e.apply(state,{type:'amend-limit',orderId:'1',limitPrice:'48000'}),error('INVALID_ORDER_ID'));
+  assert.throws(()=>e.apply(state,{type:'amend-limit',orderId:2,limitPrice:'48000'}),error('ORDER_NOT_ACTIVE'));
+  state=act(e,e.create(),{type:'market-open',side:'long',contracts:'1'});
+  assert.throws(()=>e.apply(state,{type:'amend-limit',orderId:1,limitPrice:'48000'}),error('ORDER_NOT_ACTIVE'));
+  state=act(e,state,{type:'finish'});
+  assert.throws(()=>e.apply(state,{type:'amend-limit',orderId:1,limitPrice:'48000'}),error('REPLAY_NOT_ACTIVE'));
+});
+
+for(const side of ['long','short']) test(`amended ${side} reduce limit preserves reduce-only size and has no margin reserve`,()=>{
+  const e=engine();let state=opened(e,{side,contracts:'4'});
+  state=act(e,state,{type:'limit-close',contracts:'2',limitPrice:side==='long'?'51000':'49000'});
+  const before=clone(state),order=state.orders[0];
+  state=act(e,state,{type:'amend-limit',orderId:order.id,limitPrice:side==='long'?'49900':'50100'});
+  assert.equal(state.orders[0].remainingContracts,'2');assert.equal(state.orders[0].intent,'reduce');
+  assert.equal(state.reservedBalance,'0.00000000');assert.deepEqual(state.account,before.account);
+  const filled=advance(e,state);assert.equal(filled.state.account.position.contracts,'2');assert.equal(fills(filled)[0].quote.contracts,'2');bridge(filled.state);
+});
+
+test('a price change loses queue priority even when its stable order ID is older',()=>{
+  const source=sample();set(source,'last',0,{volumeContracts:'1'});const e=engine(source);
+  let state=act(e,e.create(),{type:'limit-open',side:'long',contracts:'1',limitPrice:'49000'});
+  state=act(e,state,{type:'limit-open',side:'long',contracts:'1',limitPrice:'50100'});
+  state=act(e,state,{type:'amend-limit',orderId:1,limitPrice:'50200'});
+  assert.deepEqual(state.orders.map(o=>o.id),[2,1]);
+  const filled=advance(e,state);assert.equal(fills(filled)[0].orderId,2);assert.equal(state.elapsedMinutes,0);
+});
+
+test('changing every unseen candle cannot alter an amendment or its reserve',()=>{
+  const original=sample(),altered=clone(original);
+  for(const kind of ['last','mark']) for(const b of altered[kind]) if(b.ts>=START) Object.assign(b,{open:'90000',high:'90000',low:'90000',close:'90000'});
+  const run=source=>{const e=engine(source);const state=act(e,e.create(),{type:'limit-open',side:'long',contracts:'2',limitPrice:'49000'});return e.apply(state,{type:'amend-limit',orderId:1,limitPrice:'49500'});};
+  assert.deepEqual(run(original),run(altered));
+});

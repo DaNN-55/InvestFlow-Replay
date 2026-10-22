@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {snapProtectionPrice,createProtectionDraft,protectionDraftCurrent,protectionDraftCommand,protectionDraftTriggered} from '../../src/utils/cryptoProtectionDraft.js';
+import {snapProtectionPrice,createProtectionDraft,protectionDraftCurrent,protectionDraftCommand,protectionDraftTriggered} from '../../src/utils/cryptoPriceDraft.js';
 
 const session=()=>({id:'one',revision:4,status:'active',contract:{tickSz:'0.1'},currentPrices:{last:'50000',mark:'50010'},account:{position:{side:'long',contracts:'2',entryPrice:'50000'}},
   protection:{contracts:'2',triggeredLeg:null,stopLoss:{price:'49000',reference:'last'},takeProfit:{price:'51000',reference:'mark'}}});
@@ -36,4 +36,24 @@ test('no draggable draft for an absent or triggered leg, and both sides flag an 
   assert.equal(protectionDraftTriggered(s,createProtectionDraft(s,'stopLoss',49900)),true);
   assert.equal(protectionDraftTriggered(s,createProtectionDraft(s,'takeProfit',50200)),true);
   assert.equal(protectionDraftTriggered(s,createProtectionDraft(s,'takeProfit',49800)),false);
+});
+
+test('limit draft uses exact order identity and captured revision without changing size, fills or attachments',async()=>{
+  const {createPriceDraft,priceDraftCurrent,priceDraftCommand,priceDraftReached}=await import('../../src/utils/cryptoPriceDraft.js');
+  const s=session();s.account.position=null;s.protection=null;
+  s.orders=[{id:2,type:'limit',intent:'increase',side:'long',limitPrice:'49000',remainingContracts:'1',filledContracts:'2',attachedProtection:{stopLoss:{price:'48000',reference:'mark'}}}];
+  const before=structuredClone(s),draft=createPriceDraft(s,{orderId:2},49200.123);
+  assert.deepEqual(s,before);assert.equal(draft.price,'49200.1');
+  assert.deepEqual(priceDraftCommand(s,draft),{expectedRevision:4,command:{type:'amend-limit',orderId:2,limitPrice:'49200.1'}});
+  for(const change of [s=>s.revision++,s=>s.id='other',s=>s.orders=[],s=>s.orders[0].remainingContracts='0.5',s=>s.orders[0].attachedProtection=null,s=>s.status='completed',s=>s.ending=true]) {
+    const changed=structuredClone(before);change(changed);assert.equal(priceDraftCurrent(changed,draft),false);assert.equal(priceDraftCommand(changed,draft),null);
+  }
+  assert.equal(createPriceDraft(s,{orderId:2},49000),null);
+  assert.equal(createPriceDraft(s,{orderId:3},49200),null);
+  s.orders[0].type='market';assert.equal(createPriceDraft(s,{orderId:2},49200),null);
+  for(const side of ['long','short']) for(const intent of ['increase','reduce']) {
+    s.orders[0]={...before.orders[0],side,intent};const buy=(side==='long')!==(intent==='reduce');
+    assert.equal(priceDraftReached(s,createPriceDraft(s,{orderId:2},buy?50100:49900)),true);
+    assert.equal(priceDraftReached(s,createPriceDraft(s,{orderId:2},buy?49900:50100)),false);
+  }
 });

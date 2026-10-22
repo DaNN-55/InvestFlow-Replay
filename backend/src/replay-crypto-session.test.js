@@ -490,3 +490,29 @@ test('F6 take-profit-only addition does not inherit a protective stop that it re
   const a = c.service.analysis(s.id).analysis;
   assert.equal(a.trades[0].plannedPricePnl, null); assert.equal(a.trades[0].comparisonStatus, 'missing-entry-plan');
 });
+
+test('limit-price amendment persists once, reconciles reserves, rejects stale writes and restores after restart',t=>{
+  const c=context(t);let s=make(c).session;
+  s=mutate(c,s,'limit',{type:'limit-open',side:'long',contracts:'2',limitPrice:'49000',protection:{stopLoss:{price:'48000',reference:'mark'}}}).session;
+  const before=structuredClone(s),body={actionId:'amend',expectedRevision:s.revision,command:{type:'amend-limit',orderId:s.orders[0].id,limitPrice:'49500'}};
+  const result=c.service.command(s.id,body);s=result.session;
+  assert.equal(s.revision,before.revision+1);assert.equal(s.elapsedMinutes,0);assert.equal(s.account.position,null);
+  assert.equal(s.orders[0].limitPrice,'49500');assert.equal(s.orders[0].remainingContracts,'2');
+  assert.deepEqual(s.orders[0].attachedProtection,before.orders[0].attachedProtection);ledgerCheck(c,s);
+  assert.equal(c.service.command(s.id,body).idempotent,true);
+  assert.throws(()=>c.service.command(s.id,{...body,actionId:'stale'}),code('REPLAY_REVISION_CONFLICT'));
+  assert.throws(()=>c.service.command(s.id,{actionId:'extra',expectedRevision:s.revision,command:{...body.command,contracts:'5'}}),code('INVALID_REQUEST'));
+  c.reopen();assert.deepEqual(c.service.get(s.id).session,s);
+  assert.deepEqual(c.service.command(s.id,body).session,s);ledgerCheck(c,s);
+  assert.equal(c.service.audit(s.id,'traces',{limit:200}).items.filter(e=>e.type==='order-amended').length,1);
+  assert.throws(()=>mutate(c,s,'no-cash',{type:'amend-limit',orderId:s.orders[0].id,limitPrice:'90000000'}));
+  assert.deepEqual(c.service.get(s.id).session,s);
+  s=mutate(c,s,'crossing-price',{type:'amend-limit',orderId:s.orders[0].id,limitPrice:'50010'}).session;
+  assert.equal(s.account.position,null);assert.equal(s.elapsedMinutes,0);
+  s=advance(c,s,'amended-fill').session;assert.equal(s.account.position.contracts,'2');
+  s=c.service.finish(s.id,{actionId:'amended-finish',expectedRevision:s.revision}).session;
+  s=c.service.saveBlindReview(s.id,{actionId:'amended-blind',expectedRevision:s.revision,review:{thesis:'改单复盘',tradePlan:'保留原保护'}}).session;
+  s=c.service.reveal(s.id,{actionId:'amended-reveal',expectedRevision:s.revision}).session;
+  const analysis=c.service.analysis(s.id).analysis;assert.equal(analysis.finalEquity,s.summary.accountEquity);assert.equal(analysis.trades.length,1);ledgerCheck(c,s);
+  c.snapshotSource.disable();c.reopen();assert.deepEqual(c.service.analysis(s.id).analysis,analysis);
+});
