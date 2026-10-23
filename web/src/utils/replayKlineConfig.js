@@ -1,7 +1,7 @@
 export const REPLAY_CANDLE_PANE_OPTIONS = Object.freeze({
   id: "candle_pane",
   gap: Object.freeze({ top: 0.12, bottom: 0.08 }),
-  axisOptions: Object.freeze({ scrollZoomEnabled: false }),
+  axisOptions: Object.freeze({ scrollZoomEnabled: true }),
 });
 
 export const REPLAY_RISE_COLOR = "#df7180";

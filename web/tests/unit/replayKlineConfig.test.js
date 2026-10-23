@@ -9,7 +9,7 @@ import {
 } from "../../src/utils/replayKlineConfig.js";
 
 describe("replay KLineChart configuration", () => {
-  it("keeps the price axis automatic and exposes the crosshair price label", () => {
+  it("starts with automatic price scaling, allows manual axis zoom and exposes the crosshair price label", () => {
     const styles = createReplayChartStyles({
       background: "#ffffff",
       grid: "#e5e7eb",
@@ -21,7 +21,7 @@ describe("replay KLineChart configuration", () => {
     assert.deepEqual(REPLAY_CANDLE_PANE_OPTIONS, {
       id: "candle_pane",
       gap: { top: 0.12, bottom: 0.08 },
-      axisOptions: { scrollZoomEnabled: false },
+      axisOptions: { scrollZoomEnabled: true },
     });
     assert.equal(styles.yAxis.type, "normal");
     assert.equal(styles.yAxis.position, "right");

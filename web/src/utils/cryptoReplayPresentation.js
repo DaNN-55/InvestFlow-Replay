@@ -65,12 +65,12 @@ export function cryptoChartLines(session, kind) {
   if(position) {
     const pnl=session.risk?.unrealizedPnl;
     const floating=pnl==null?'':` · mark浮盈 ${Number(pnl)>0?'+':''}${amount(pnl)} USDT`;
-    add('position',position.entryPrice,`${position.side==='long'?'多仓':'空仓'}均价${floating}`,'entry',{color:'#2563eb',dashed:false},position.contracts);
+    add('position',position.entryPrice,`${position.side==='long'?'多仓':'空仓'}均价${floating}`,'entry',{color:'#2563eb',dashed:false,compactLabel:`${position.side==='long'?'多仓':'空仓'} ${pnl==null?'':`${Number(pnl)>0?'+':''}${amount(pnl)} USDT`} · ${position.contracts}张`},position.contracts);
   }
   const plan = session.trainingJournal?.plan;
   if (plan?.mode === 'manual') add('manual', plan.manualExitPrice, '手动计划（不执行）', 'last', { color: '#a16207', dashed: true });
   for (const order of session.orders ?? []) {
-    if (order.type === 'limit') add(`order-${order.id}`, order.limitPrice, `待成交 · ${order.intent === 'reduce' ? '减仓' : order.side === 'long' ? '开多' : '开空'}`, 'last', { color: '#2563eb', dashed: true, orderId:order.id }, order.remainingContracts);
+    if (order.type === 'limit') add(`order-${order.id}`, order.limitPrice, `待成交 · ${order.intent === 'reduce' ? '减仓' : order.side === 'long' ? '开多' : '开空'}`, 'last', { color: '#2563eb', dashed: true, compactLabel:`限价${order.intent==='reduce'?'减仓':order.side==='long'?'多':'空'} · ${order.remainingContracts}张`, orderId:order.id }, order.remainingContracts);
     if(!order.protectionApplied) for(const [leg,label] of [['stopLoss','止损'],['takeProfit','止盈']]) {
       const protection=order.attachedProtection?.[leg];
       if(protection) add(`order-${order.id}-${leg}`,protection.price,`待成交后${label}`,protection.reference,{color:leg==='stopLoss'?'#d55d70':'#159875',dashed:true},order.remainingContracts);
@@ -78,7 +78,7 @@ export function cryptoChartLines(session, kind) {
   }
   for (const [leg, label] of [['stopLoss', '自动止损'], ['takeProfit', '自动止盈']]) {
     const protection = session.protection?.[leg];
-    if (protection) add(leg, protection.price, `${label}${session.protection.triggeredLeg === leg ? ' · 已触发待退出' : ''}`, protection.reference, { color: leg === 'stopLoss' ? '#d55d70' : '#159875', dashed: false, protectionLeg:leg, estimateContext:{account:{position},contract:session.contract,config:{leverage:session.config?.leverage}} }, session.protection.contracts);
+    if (protection) add(leg, protection.price, `${label}${session.protection.triggeredLeg === leg ? ' · 已触发待退出' : ''}`, protection.reference, { color: leg === 'stopLoss' ? '#d55d70' : '#159875', dashed: false, protectionLeg:leg, estimateLeg:leg, estimateContext:{account:{position},contract:session.contract,config:{leverage:session.config?.leverage}} }, session.protection.contracts);
   }
   return lines.map(line=>repriceProtectionLine(line,line.price));
 }
