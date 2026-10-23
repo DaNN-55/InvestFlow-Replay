@@ -1140,3 +1140,37 @@ test('sub-cent funding changes and shortfalls remain visible without changing co
   }
   expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
 });
+
+test('order submission check formats money without changing raw previews or submission eligibility',async({page,request})=>{
+  const {id,commands}=await openPractice(page,request,{layout:'dual'});
+  const order=page.locator('.crypto-trading'),preview=order.getByTestId('crypto-order-preview');
+  await order.locator('.order-advanced>summary').click();
+  await order.getByRole('textbox',{name:'自动止损价',exact:true}).fill('49950');
+  await order.locator('.order-advanced>summary').click();
+  const display=value=>Number(value)!==0&&Math.abs(Number(value))<0.01?(Number(value)<0?'-<0.01':'<0.01'):Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  for(const quantity of ['0.01','1']) {
+    const responsePromise=page.waitForResponse(response=>response.url().endsWith('/preview')&&response.request().postDataJSON()?.amount===quantity);
+    await order.getByRole('textbox',{name:'委托张数',exact:true}).fill(quantity);
+    const {preview:values}=await (await responsePromise).json();
+    await expect(preview.locator('.order-preview-summary dd').first()).toHaveText(display(values.initialMargin));
+    await expect(preview.locator('.order-preview-summary dd').first()).toHaveAttribute('title',values.initialMargin);
+    await expect(preview.locator('.order-preview-summary dd').last()).toHaveText(display(values.requiredAvailable));
+    await expect(preview.locator('.order-preview-summary dd').last()).toHaveAttribute('title',values.requiredAvailable);
+    if(!await preview.locator('.order-estimates').evaluate(el=>el.open)) await preview.getByText('更多估算',{exact:true}).click();
+    for(const [label,key] of [['名义金额 · USDT','notional'],['逐仓保证金','initialMargin'],['计划估算损失','estimatedPlanLoss']]) {
+      const cell=preview.locator('.facts>div').filter({has:page.getByText(label,{exact:true})}).locator('dd');
+      await expect(cell).toHaveText(display(values[key]));await expect(cell).toHaveAttribute('title',values[key]);
+    }
+    const fees=preview.locator('.facts>div').filter({has:page.getByText('Maker / Taker 费用',{exact:true})}).locator('dd span');
+    for(const [i,key] of ['makerFee','takerFee'].entries()) {await expect(fees.nth(i)).toHaveText(display(values[key]));await expect(fees.nth(i)).toHaveAttribute('title',values[key]);}
+    if(quantity==='0.01') {expect(Number(values.takerFee)).toBeGreaterThan(0);expect(Number(values.takerFee)).toBeLessThan(0.01);}
+    await expect(order.getByRole('button',{name:'买入 / 做多',exact:true}).last()).toBeEnabled();
+  }
+  await page.setViewportSize({width:320,height:850});
+  await preview.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:test.info().outputPath('order-money-mobile.png')});
+  expect(commands).toHaveLength(0);
+  const session=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(session.revision).toBe(0);
+});

@@ -11,6 +11,7 @@ import { cryptoQuantityToContracts } from '../../utils/cryptoQuantity.js';
 const props = defineProps({ session: { type: Object, required: true }, busy: Boolean, blocked: Boolean, previewOrder: { type: Function, required: true } });
 const emit = defineEmits(['command', 'advance', 'finish']);
 const form = reactive({ intent: 'long', type: 'market', contracts: '', unit:'contracts', sizingMode: 'contracts', sizingAmount: '', limitPrice: '', stopLoss: '', takeProfit: '', reference: 'last', note: '' });
+const money = value => Number(value) !== 0 && Math.abs(Number(value)) < 0.01 ? (Number(value) < 0 ? '-<0.01' : '<0.01') : amount(value, 2);
 const position = computed(() => props.session.account.position);
 const advancedSummary = computed(() => [form.sizingMode === 'margin' ? '保证金估仓' : form.sizingMode === 'risk' ? '风险估仓' : '', ...(form.intent === 'reduce' ? [] : [form.stopLoss ? '止损' : '', form.takeProfit ? '止盈' : '']), form.note ? '理由' : ''].filter(Boolean).join(' · '));
 const protectionWarning = computed(() => {
@@ -92,15 +93,15 @@ onBeforeUnmount(()=>previewLoader.cancel());
           <p v-else-if="previewState.busy" class="muted">估算中…</p>
           <p v-else-if="previewState.error" class="preview-error" role="status">{{ previewState.error }}</p>
           <template v-else-if="readyPreview">
-            <dl class="order-preview-summary"><div><dt>保证金 · USDT</dt><dd>{{ amount(readyPreview.initialMargin) }}</dd></div><div><dt>预留资金 · USDT</dt><dd>{{ amount(readyPreview.requiredAvailable) }}</dd></div></dl>
+            <dl class="order-preview-summary"><div><dt>保证金 · USDT</dt><dd :title="String(readyPreview.initialMargin)">{{ money(readyPreview.initialMargin) }}</dd></div><div><dt>预留资金 · USDT</dt><dd :title="String(readyPreview.requiredAvailable)">{{ money(readyPreview.requiredAvailable) }}</dd></div></dl>
             <details class="order-estimates">
 <summary>更多估算</summary><dl class="facts">
               <div><dt>数量</dt><dd data-testid="crypto-preview-quantity">{{ readyPreview.contracts }} 张 / {{ readyPreview.baseQuantity }} {{ session.instrumentId.startsWith('BTC')?'BTC':'ETH' }}</dd></div>
               <div><dt>估算成交价</dt><dd>{{ readyPreview.fillPrice }}</dd></div>
-              <div><dt>名义金额 · USDT</dt><dd>{{ readyPreview.notional }}</dd></div>
-              <div><dt>逐仓保证金</dt><dd data-testid="crypto-preview-margin">{{ readyPreview.initialMargin }}</dd></div>
-              <div><dt>Maker / Taker 费用</dt><dd>{{ readyPreview.makerFee }} / {{ readyPreview.takerFee }}</dd></div>
-              <div><dt>计划估算损失</dt><dd data-testid="crypto-preview-loss">{{ readyPreview.estimatedPlanLoss??'未定义' }}</dd></div>
+              <div><dt>名义金额 · USDT</dt><dd :title="String(readyPreview.notional)">{{ money(readyPreview.notional) }}</dd></div>
+              <div><dt>逐仓保证金</dt><dd data-testid="crypto-preview-margin" :title="String(readyPreview.initialMargin)">{{ money(readyPreview.initialMargin) }}</dd></div>
+              <div><dt>Maker / Taker 费用</dt><dd><span :title="String(readyPreview.makerFee)">{{ money(readyPreview.makerFee) }}</span> / <span :title="String(readyPreview.takerFee)">{{ money(readyPreview.takerFee) }}</span></dd></div>
+              <div><dt>计划估算损失</dt><dd data-testid="crypto-preview-loss" :title="readyPreview.estimatedPlanLoss == null ? undefined : String(readyPreview.estimatedPlanLoss)">{{ readyPreview.estimatedPlanLoss == null ? '未定义' : money(readyPreview.estimatedPlanLoss) }}</dd></div>
               <div><dt>估算强平价 · mark</dt><dd>{{ amount(readyPreview.projectedRisk?.estimatedLiquidationPrice,4) }}</dd></div>
             </dl><p v-if="readyPreview.roundedDown" class="muted">已按步长向下取整为 {{ readyPreview.contracts }} 张。</p>
 </details>
