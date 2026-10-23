@@ -81,3 +81,8 @@
 .crypto-activity-actions { display:flex;align-items:center;gap:6px; }
 .crypto-activity-actions .ql-ui-button { min-height:32px;height:32px;padding:0 10px;font-size:11px;white-space:nowrap; }
 @container (max-width:559px) { .crypto-activity-row { grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) auto;gap:6px 10px; }.crypto-activity-heading { grid-column:1/-1;display:flex;align-items:baseline;gap:8px; }.crypto-activity-actions { gap:2px; }.crypto-activity-actions .ql-ui-button { padding:0 8px;min-height:36px;height:36px; } }
+
+.crypto-activity-price { display:flex;align-items:center;gap:4px;min-width:0; }
+.crypto-activity-price strong { min-width:0; }
+.crypto-controls.crypto-order-editor.ui-modal__panel { width:min(420px,calc(100vw - 32px));min-height:0;max-height:calc(100vh - 32px);border-radius:12px;background:var(--ql-panel);color:var(--ql-ink); }
+.crypto-order-editor-actions { display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px; }

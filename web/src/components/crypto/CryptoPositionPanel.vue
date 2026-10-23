@@ -10,7 +10,7 @@ import CryptoModelNotice from './CryptoModelNotice.vue';
 import { cryptoProtectionEstimate } from '../../utils/cryptoProtectionEstimate.js';
 import { amount, riskPlan, cryptoRiskDetails, plannedPricePnl, eventName, relativeTime } from '../../utils/cryptoReplayPresentation.js';
 const props=defineProps({session:{type:Object,required:true},traces:{type:Array,default:()=>[]},busy:Boolean,blocked:Boolean});
-const emit=defineEmits(['command','records','cancel-order']);
+const emit=defineEmits(['command','records','cancel-order','edit-order']);
 const tab=ref('持仓'), drawer=ref(''), selectedActivity=ref(null);
 const position=computed(()=>props.session.account.position), plan=computed(()=>riskPlan(props.session)), risk=computed(()=>cryptoRiskDetails(props.session));
 const floatingReturn=computed(()=>cryptoProtectionEstimate(props.session,props.session.currentPrices.mark)?.returnPercent);
@@ -71,7 +71,7 @@ function protection() {emit('command',{type:'set-protection',...(form.stop?{stop
       <ul v-if="activityRows.length" class="crypto-activity-list" :aria-label="tab">
         <li v-for="row in activityRows" :key="row.key" class="crypto-activity-row">
           <div class="crypto-activity-heading"><strong>{{ row.direction }}</strong><small>{{ row.label }}</small></div>
-          <div class="crypto-activity-value"><span>{{ row.priceLabel }}</span><strong>{{ row.market?'市价':amount(row.price,4) }}</strong></div>
+          <div class="crypto-activity-value"><span>{{ row.priceLabel }}</span><div class="crypto-activity-price"><strong>{{ row.market?'市价':amount(row.price,4) }}</strong><button v-if="tab==='当前委托'&&row.order.type==='limit'" type="button" class="crypto-position-icon" aria-label="修改委托价格" title="修改委托价格" :disabled="disabled" @click="emit('edit-order',{orderId:row.order.id})"><Pencil aria-hidden="true" /></button></div></div>
           <div class="crypto-activity-value"><span>{{ row.quantityLabel }} · 张</span><strong>{{ row.quantity??'—' }}</strong></div>
           <div class="crypto-activity-actions"><button type="button" class="crypto-position-icon" :aria-label="tab==='成交'?'成交详情':'委托详情'" :title="tab==='成交'?'成交详情':'委托详情'" @click="showActivity(row)"><Info aria-hidden="true" /></button><UiButton v-if="tab==='当前委托'" variant="secondary" :disabled="disabled" @click="emit('cancel-order',{orderId:row.order.id})">撤单</UiButton></div>
         </li>
