@@ -26,11 +26,22 @@ const state=shallowRef({}),preferences=ref(loadCryptoPreferences(localStorage));
 const controller=createCryptoReplayController({api,storage:localStorage,changed:value=>{state.value=value;}});
 controller.state.timeframes=cryptoVisiblePeriods(preferences.value);controller.state.timeframe=controller.state.timeframes[0];state.value={...controller.state};
 const s=computed(()=>state.value.session);
+const lastGoodChartPreferences=shallowRef(null);
+watch(()=>[state.value.busy,state.value.readStale,state.value.markets,preferences.value],()=>{
+  if(!s.value) {lastGoodChartPreferences.value=null;return;}
+  if(!state.value.busy&&!state.value.readStale&&cryptoVisiblePeriods(preferences.value).every(period=>state.value.markets[period])) {
+    lastGoodChartPreferences.value={...preferences.value,periods:[...preferences.value.periods],kinds:[...preferences.value.kinds]};
+  }
+},{deep:true});
+const chartPreferences=computed({
+  get:()=>state.value.readStale&&lastGoodChartPreferences.value?{...preferences.value,layout:lastGoodChartPreferences.value.layout,periods:lastGoodChartPreferences.value.periods}:preferences.value,
+  set:value=>{preferences.value=value;},
+});
 const progress=computed(()=>Math.min(100,Math.max(0,Number(s.value?.elapsedMinutes??0)/Math.max(1,Number(s.value?.gameLength??1))*100)));
 const routeMismatch=computed(()=>route.name==='crypto-market-replay'&&typeof route.query.session==='string'&&route.query.session!==s.value?.id);
 const confirmationView=shallowRef(null);
 const confirmation=createCryptoModificationConfirmation({
-  readContext:()=>({session:s.value,busy:state.value.busy,pending:state.value.pending,routeMismatch:routeMismatch.value}),
+  readContext:()=>({session:s.value,busy:state.value.busy||state.value.readStale,pending:state.value.pending,routeMismatch:routeMismatch.value}),
   previewOrder:api.cryptoPreview,
   submitCommand:body=>controller.act('command',body),
   syncSession:()=>controller.sync(),
@@ -50,7 +61,7 @@ const cancellationTitle=computed(()=>confirmationView.value.title),cancellationM
 const fundingAmount=value=>Number(value)>0&&Number(value)<0.01?'<0.01':amount(value,2);
 const availableBalanceAmount=value=>Number(value)<0&&Number(value)>-0.01?'缺口 <0.01':fundingAmount(value);
 const locked=computed(()=>confirmationView.value.blockNewActions);
-watch(()=>[s.value?.id,s.value?.revision,state.value.busy,state.value.pending,routeMismatch.value],()=>confirmation.reconcile());
+watch(()=>[s.value?.id,s.value?.revision,state.value.busy,state.value.readStale,state.value.pending,routeMismatch.value],()=>confirmation.reconcile());
 const finishOpen=ref(false),settingsOpen=ref(false),playing=ref(false);
 const retraining=ref(false);
 let playbackTimer;
@@ -74,7 +85,12 @@ async function loadRequestedSession(id) {
   await controller.select(id);
   if(!state.value.session&&!state.value.error&&route.query.session===id) await router.replace({query:{...route.query,session:undefined}});
 }
-function resync() {return typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync();}
+async function resync() {
+  if(!state.value.readStale) return typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync();
+  const ok=await controller.sync();
+  if(ok&&s.value&&typeof route.query.session==='string'&&route.query.session!==s.value.id) await router.replace({query:{...route.query,session:s.value.id}});
+  return ok;
+}
 watch(()=>state.value.busy,value=>{if(!value) {syncRequestedSession();ensurePeriods();}});
 watch(()=>route.query.session,()=>{lastRequestedSession=null;syncRequestedSession();});
 onActivated(()=>typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync());
@@ -110,19 +126,20 @@ async function retrain() {
   <div class="crypto-workspace crypto-controls" :class="{'crypto-workspace--setup':!s}" :aria-busy="state.busy">
     <header v-if="s" class="crypto-header"><div><p class="crypto-eyebrow">USDT 永续 / 历史盲测</p><h1>{{ s?s.instrumentId:'合约练习' }} <span v-if="s">逐仓 · 单向</span></h1><div v-if="s" class="crypto-quotes"><span>最新价 <b data-testid="crypto-last">{{ amount(s.currentPrices.last,4) }}</b></span><span>标记价格 <b>{{ amount(s.currentPrices.mark,4) }}</b></span></div></div><div class="crypto-header-actions"><button type="button" class="crypto-icon" aria-label="交易与显示设置" title="交易与显示设置" @click="settingsOpen=true"><Settings2 :size="17" /></button></div></header>
     <div v-if="state.error" class="crypto-alert" role="alert"><span>{{ state.error }}</span><UiButton v-if="!state.pending" variant="secondary" :disabled="state.busy" @click="resync">重新同步</UiButton></div>
+    <p v-if="state.readStale&&!state.busy" class="crypto-alert" role="status" data-testid="crypto-read-stale">{{ s?'显示的是上次完整同步的结果；重新同步前暂停新的操作。':'会话数据尚未同步，请重新同步后继续。' }}</p>
     <div v-if="state.pending&&!state.busy" class="crypto-alert" role="status"><span>上次动作的结果待核对；核对前不能提交新动作。可以从演练记录查看历史。</span><UiButton variant="secondary" @click="controller.retry()">重试原动作</UiButton></div>
     <p v-if="state.busy" class="crypto-save-status" role="status">正在同步与保存…</p><p v-else-if="state.notice" class="crypto-save-status" role="status">{{ state.notice }}</p>
     <p v-if="state.poolError" class="crypto-muted" role="status">{{ state.poolError }}</p>
     <p v-if="s&&priceNotice" class="crypto-muted" role="status">{{ priceNotice }}</p>
-    <CryptoSetupPanel v-if="!s" :busy="state.busy" :pool="state.pool" :history="state.history" :blocked="Boolean(state.pending)||Boolean(state.poolError)" @create="controller.act('create',$event)" @resume="controller.select($event)" @records="records" />
+    <CryptoSetupPanel v-if="!s" :busy="state.busy" :pool="state.pool" :history="state.history" :blocked="Boolean(state.pending)||Boolean(state.poolError)||state.readStale" @create="controller.act('create',$event)" @resume="controller.select($event)" @records="records" />
     <template v-else>
       <div class="crypto-account" data-testid="crypto-account"><div v-for="[label,value,id] in [['账户权益 · USDT',s.summary.accountEquity,'crypto-equity'],['仓外可用',s.account.availableBalance,'crypto-available'],['委托冻结',s.reservedBalance,'crypto-reserved'],['本次净盈亏',s.summary.netPnl,'crypto-net-summary']]" :key="label"><span>{{ label }}</span><strong :data-testid="id" :title="String(value)">{{ moneyAmount(value) }}</strong></div></div>
       <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed}">
         <div class="crypto-terminal-main">
-          <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="confirmationView.blockChartActions" :price-draft="orderChartDraft" @price-drag="confirmation.handlePriceDrag" @confirm-price="confirmation.confirm" @cancel-price="confirmation.cancel" @request-cancellation="confirmation.openCancellation" />
+          <CryptoChartWorkspace v-model="chartPreferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="confirmationView.blockChartActions" :price-draft="orderChartDraft" @price-drag="confirmation.handlePriceDrag" @confirm-price="confirmation.confirm" @cancel-price="confirmation.cancel" @request-cancellation="confirmation.openCancellation" />
           <p v-if="s.ending&&s.status!=='completed'" class="crypto-alert" role="status">{{ s.status==='end-blocked'?'结束受阻：预留分钟容量不足，仍有仓位；不能揭晓或复练。':'正在结束：继续推进以退出剩余仓位，不再新开仓。' }}</p>
           <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="confirmationView.blockNewActions" @command="command" @cancel-order="confirmation.openCancellation" @edit-order="confirmation.openOrder" @records="records" />
-          <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
+          <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||state.readStale" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
           <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
         </div>
         <div class="crypto-terminal-side">
@@ -145,7 +162,7 @@ async function retrain() {
     <UiModal :open="Boolean(orderEditor)" title="修改委托" description="确认前原委托仍有效。" :busy="state.busy||priceSaving" panel-class="crypto-controls crypto-order-editor" @close="confirmation.cancel">
       <form v-if="orderEditor" @submit.prevent="confirmation.confirm">
         <p class="crypto-muted">{{ orderEditor.order.intent==='reduce'?(orderEditor.order.side==='long'?'平多':'平空'):(orderEditor.order.side==='long'?'开多':'开空') }} · 已成交 {{ orderEditor.order.filledContracts }} 张保持不变</p>
-        <div class="crypto-order-editor-fields"><label v-if="orderEditor.order.type==='limit'">委托价格<UiInput v-model="orderEditPrice" aria-label="新委托价" inputmode="decimal" required :disabled="state.busy||priceSaving" /></label><label>剩余数量 · 张<UiInput v-model="orderEditQuantity" aria-label="新剩余数量" inputmode="decimal" required :disabled="state.busy||priceSaving" /></label></div>
+        <div class="crypto-order-editor-fields"><label v-if="orderEditor.order.type==='limit'">委托价格<UiInput v-model="orderEditPrice" aria-label="新委托价" inputmode="decimal" required :disabled="state.busy||state.readStale||priceSaving" /></label><label>剩余数量 · 张<UiInput v-model="orderEditQuantity" aria-label="新剩余数量" inputmode="decimal" required :disabled="state.busy||state.readStale||priceSaving" /></label></div>
         <table class="crypto-order-comparison">
           <thead><tr><th scope="col">项目</th><th scope="col">修改前</th><th scope="col">修改后</th></tr></thead><tbody>
           <tr><th scope="row">委托价</th><td>{{ orderEditor.order.limitPrice??'市价' }}</td><td>{{ orderEditor.order.type==='market'?'市价':orderEditDraft?.price??'—' }}</td></tr>
@@ -156,7 +173,7 @@ async function retrain() {
         </table>
         <p v-if="orderPreviewReady" class="crypto-muted" data-testid="order-amend-change" :title="`${orderPreview.funds.reserveChangeAmount} USDT`">{{ ({increase:'增加冻结',release:'释放冻结',unchanged:'冻结不变'})[orderPreview.funds.reserveChangeType] }} {{ fundingAmount(orderPreview.funds.reserveChangeAmount) }} USDT</p>
         <p v-if="orderPreviewReady&&!orderPreview.funds.affordable" class="crypto-muted" role="alert" data-testid="order-amend-shortfall" :title="`${orderPreview.funds.shortfall} USDT`">资金不足，还差 {{ fundingAmount(orderPreview.funds.shortfall) }} USDT</p>
-        <template v-if="orderPreviewReady&&!orderPreview.funds.affordable"><UiButton variant="secondary" :disabled="!(Number(orderPreview.funds.maximumRemainingContracts)>0)||state.busy||priceSaving" @click="confirmation.applyMaximum">调整到最大可用数量 · {{ orderPreview.funds.maximumRemainingContracts }} 张</UiButton><p v-if="orderPreview.funds.maximumRemainingContracts==='0'" class="crypto-muted">可用资金不足最小委托数量。</p></template>
+        <template v-if="orderPreviewReady&&!orderPreview.funds.affordable"><UiButton variant="secondary" :disabled="!(Number(orderPreview.funds.maximumRemainingContracts)>0)||state.busy||state.readStale||priceSaving" @click="confirmation.applyMaximum">调整到最大可用数量 · {{ orderPreview.funds.maximumRemainingContracts }} 张</UiButton><p v-if="orderPreview.funds.maximumRemainingContracts==='0'" class="crypto-muted">可用资金不足最小委托数量。</p></template>
         <p v-if="orderPreviewReady&&orderPreview.changed===false" class="crypto-muted">与原委托一致，无需修改。</p>
         <p v-if="orderPreviewBusy" class="crypto-muted" role="status">核算冻结资金…</p>
         <p v-if="orderPreviewError" class="crypto-muted" role="alert">{{ orderPreviewError }} <button type="button" class="crypto-text-button" @click="confirmation.retryPreview">重新预览</button></p>
