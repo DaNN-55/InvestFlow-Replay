@@ -14,8 +14,8 @@ async function connect(page) {
 }
 async function openAnalysis(page) {
   await page.goto(`${baseUrl}/decision/trade-records`);
-  await page.getByRole("button", { name: "历史演练", exact: true }).click();
-  await page.getByRole("button", { name: "首次分析", exact: true }).click();
+  await page.getByRole("button", { name: "演练记录", exact: true }).click();
+  await page.getByRole("button", { name: "A股首次分析", exact: true }).click();
   return page.getByRole("region", { name: "跨会话训练分析", exact: true });
 }
 
@@ -25,22 +25,22 @@ test("真实分析独立分组和筛选，空样本不伪造零收益，窄屏�
   page.on("request", request => { if (new URL(request.url()).pathname === "/api/quant/replay/analytics") analyticsRequests++; });
   const analysis = await openAnalysis(page);
   const controls = analysis.locator(".ql-ui-card");
-  await expect(controls.getByRole("button", { name: "首次分析", exact: true })).toBeVisible();
+  await expect(controls.getByRole("button", { name: "A股首次分析", exact: true })).toBeVisible();
   await expect(controls.getByLabel("创建开始日期")).toBeVisible();
   await expect(controls.getByRole("button", { name: "更新分析", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "首次分析", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "A股首次分析", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(analysis.locator(".training-analytics__summary")).toContainText(/2\s*次练习/u);
   await expect(analysis.getByRole("region", { name: "单次收益率分布" })).toContainText("1 次");
   await expect(analysis.getByText("暂无样本", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "复练分析", exact: true }).click();
-  await expect(controls.getByRole("button", { name: "复练分析", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "A股复练分析", exact: true }).click();
+  await expect(controls.getByRole("button", { name: "A股复练分析", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(controls.getByLabel("创建开始日期")).toBeVisible();
   await expect(analysis.getByRole("region", { name: "单次收益率分布" })).toContainText("2 次");
   await analysis.getByLabel("练习长度").selectOption("20");
-  await page.getByRole("button", { name: "首次分析", exact: true }).click();
+  await page.getByRole("button", { name: "A股首次分析", exact: true }).click();
   await expect(analysis.getByLabel("练习长度")).toHaveValue("20");
   await expect(analysis.getByRole("region", { name: "单次收益率分布" })).toContainText("1 次");
-  await page.getByRole("button", { name: "复练分析", exact: true }).click();
+  await page.getByRole("button", { name: "A股复练分析", exact: true }).click();
   expect(analyticsRequests).toBe(1);
   await analysis.getByLabel("练习周期").selectOption("1m");
   await expect(analysis.getByLabel("练习长度")).toHaveValue("all");
@@ -80,7 +80,7 @@ test("事后问题标签通过页面追加，分析可跳转具体样本，原�
   const current = (await (await request.get(`${fixture.url}/api/quant/replay/sessions/${id}`)).json()).session;
   expect(current.scoreCard).toEqual(original.scoreCard);
   const analysis = await openAnalysis(page);
-  await page.getByRole("button", { name: "复练分析", exact: true }).click();
+  await page.getByRole("button", { name: "A股复练分析", exact: true }).click();
   const issues = analysis.getByRole("region", { name: "用户确认的重复问题" });
   await expect(issues.getByText("提前入场", { exact: true })).toBeVisible();
   await issues.getByRole("button", { name: /查看样本/u }).click();
@@ -104,6 +104,6 @@ test("分析接口失败可重试，不显示旧收益作为成功结果", async
   const analysis = await openAnalysis(page);
   await expect(analysis.getByRole("alert")).toContainText("训练分析暂不可用");
   await analysis.getByRole("button", { name: "重新加载分析" }).click();
-  await expect(page.getByRole("button", { name: "首次分析", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "A股首次分析", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(analysis.locator(".training-analytics__summary")).toContainText(/2\s*次练习/u);
 });

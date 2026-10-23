@@ -13,8 +13,8 @@ test("起始页提供可配置的盲测开局，而不再提供战法专项入�
   await expect(page.getByRole("button", { name: "开始日线盲测" })).toBeVisible();
   await page.getByRole("button", { name: /日内模拟/ }).click();
   await expect(page.getByRole("button", { name: "开始日内模拟" })).toBeVisible();
-  await expect(page.getByText("调整资金与成本", { exact: true })).toBeVisible();
-  await page.getByText("调整资金与成本", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "调整资金与成本", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "调整资金与成本", exact: true }).click();
   await expect(page.getByText("资金与成本", { exact: true })).toBeVisible();
   const modal = page.getByRole("dialog", { name: "资金与成本" });
   const closeButton = modal.getByRole("button", { name: "关闭弹窗" });
@@ -27,7 +27,7 @@ test("起始页提供可配置的盲测开局，而不再提供战法专项入�
   await modal.getByLabel("滑点（bps）").fill("8");
   await closeButton.click();
   await expect(modal).toBeHidden();
-  await page.getByText("调整资金与成本", { exact: true }).click();
+  await page.getByRole("button", { name: "调整资金与成本", exact: true }).click();
   await expect(modal.getByLabel("初始资金")).toHaveValue("30000");
   await expect(modal.getByLabel("滑点（bps）")).toHaveValue("8");
   await page.keyboard.press("Escape");
@@ -40,7 +40,7 @@ test("起始页提供可配置的盲测开局，而不再提供战法专项入�
 
 test("新演练默认使用非零滑点", async ({ page }) => {
   await page.goto(`${replayUrl}/decision/market-replay`);
-  await page.getByText("调整资金与成本", { exact: true }).click();
+  await page.getByRole("button", { name: "调整资金与成本", exact: true }).click();
 
   await expect(page.getByLabel("滑点（bps）")).toBeVisible();
   await expect(page.getByLabel("滑点（bps）")).toHaveValue("5");

@@ -17,7 +17,7 @@ test("真实首次与多代复练通过历史详情和揭晓后复盘入口展�
   });
   const url = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5180";
   await page.goto(`${url}/decision/trade-records`);
-  await page.getByRole("button", { name: "历史演练", exact: true }).click();
+  await page.getByRole("button", { name: "演练记录", exact: true }).click();
   await page.getByRole("button").filter({ hasText: "复练 · 第 3 次" }).click();
   await page.getByRole("button", { name: "首次与复练对照", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "首次与复练对照", exact: true });
