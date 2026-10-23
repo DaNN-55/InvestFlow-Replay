@@ -5,13 +5,12 @@ import UiInput from '../ui/UiInput.vue';
 import UiSelect from '../ui/UiSelect.vue';
 import UiTextarea from '../ui/UiTextarea.vue';
 import UiTooltip from '../ui/UiTooltip.vue';
-import { amount } from '../../utils/cryptoReplayPresentation.js';
+import { amount, moneyAmount as money } from '../../utils/cryptoReplayPresentation.js';
 import { createCryptoPreviewLoader } from '../../utils/cryptoOrderPreview.js';
 import { cryptoQuantityToContracts } from '../../utils/cryptoQuantity.js';
 const props = defineProps({ session: { type: Object, required: true }, busy: Boolean, blocked: Boolean, previewOrder: { type: Function, required: true } });
 const emit = defineEmits(['command', 'advance', 'finish']);
 const form = reactive({ intent: 'long', type: 'market', contracts: '', unit:'contracts', sizingMode: 'contracts', sizingAmount: '', limitPrice: '', stopLoss: '', takeProfit: '', reference: 'last', note: '' });
-const money = value => Number(value) !== 0 && Math.abs(Number(value)) < 0.01 ? (Number(value) < 0 ? '-<0.01' : '<0.01') : amount(value, 2);
 const position = computed(() => props.session.account.position);
 const advancedSummary = computed(() => [form.sizingMode === 'margin' ? '保证金估仓' : form.sizingMode === 'risk' ? '风险估仓' : '', ...(form.intent === 'reduce' ? [] : [form.stopLoss ? '止损' : '', form.takeProfit ? '止盈' : '']), form.note ? '理由' : ''].filter(Boolean).join(' · '));
 const protectionWarning = computed(() => {

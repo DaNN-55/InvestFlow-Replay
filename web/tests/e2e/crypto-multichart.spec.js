@@ -1174,3 +1174,56 @@ test('order submission check formats money without changing raw previews or subm
   const session=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(session.revision).toBe(0);
 });
+
+test('position and activity money stays compact with full precision while prices and quantities stay intact',async({page,request})=>{
+  const {id,commands}=await openPractice(page,request,{layout:'dual'});
+  let session=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  const act=async command=>{
+    const response=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,command}});
+    expect(response.status()).toBe(200);session=(await response.json()).session;
+  };
+  await act({type:'market-open',side:'long',contracts:'0.01'});
+  const advanced=await request.post(`${fixture.url}${path}/${id}/advance`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,minutes:1}});
+  expect(advanced.status()).toBe(200);session=(await advanced.json()).session;
+  await act({type:'limit-open',side:'long',contracts:'0.01',limitPrice:'49950'});
+  await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const panel=page.getByTestId('crypto-risk');
+  const display=value=>Number(value)!==0&&Math.abs(Number(value))<0.01?(Number(value)<0?'-<0.01':'<0.01'):Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  await expect(panel.getByTestId('crypto-margin')).toHaveText(display(session.account.position.marginBalance));
+  await expect(panel.getByTestId('crypto-margin')).toHaveAttribute('title',session.account.position.marginBalance);
+  await expect(panel.locator('.crypto-position-pnl strong')).toHaveText(display(session.risk.unrealizedPnl));
+  await expect(panel.locator('.crypto-position-pnl strong')).toHaveAttribute('title',session.risk.unrealizedPnl);
+  await expect(panel.locator('.crypto-position-table')).toContainText('0.01 张');
+  await panel.getByRole('button',{name:'持仓详情与完整精度',exact:true}).click();
+  let dialog=page.getByRole('dialog');
+  const checkMoney=async()=>{
+    for(const cell of await dialog.locator('dd[title]').all()) {
+      const raw=await cell.getAttribute('title');await expect(cell).toHaveText(display(raw));
+    }
+  };
+  await checkMoney();
+  await expect(dialog.locator('.crypto-detail-facts>div').filter({has:page.getByText('开仓均价',{exact:true})}).locator('dd')).toHaveText(Number(session.account.position.entryPrice).toLocaleString('en-US',{minimumFractionDigits:8,maximumFractionDigits:8}));
+  await page.keyboard.press('Escape');
+  for(const tab of ['当前委托','历史委托','成交']) {
+    await panel.getByRole('button',{name:tab,exact:false}).click();
+    const rows=panel.locator('.crypto-activity-row');
+    await expect(rows.first()).toBeVisible();
+    if(tab==='当前委托') {await expect(rows.first()).toContainText('49,950.0000');await expect(rows.first()).toContainText('0.01');}
+    for(const row of await rows.all()) {
+      await row.getByRole('button',{name:tab==='成交'?'成交详情':'委托详情',exact:true}).click();
+      dialog=page.getByRole('dialog');await checkMoney();
+      if(tab==='成交') {
+        const fee=dialog.locator('.crypto-detail-facts>div').filter({has:page.getByText('手续费 · USDT',{exact:true})}).locator('dd');
+        await expect(fee).toHaveText('<0.01');expect(Number(await fee.getAttribute('title'))).toBeGreaterThan(0);
+      }
+      await page.setViewportSize({width:320,height:850});
+      expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+      if(tab==='成交') await page.screenshot({path:test.info().outputPath('fill-money-mobile.png')});
+      await page.keyboard.press('Escape');
+    }
+    expect(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+  }
+  expect(commands).toHaveLength(0);
+  const after=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(after).toEqual(session);
+});
