@@ -1065,3 +1065,46 @@ test('amendment dialog shows released or unchanged funds and the exact resulting
   await page.screenshot({path:test.info().outputPath('amendment-funds-320.png')});
   await dialog.getByRole('button',{name:'取消调整',exact:true}).click();expect(commands).toHaveLength(0);
 });
+
+
+test('maximum available quantity only updates the current price preview before explicit confirmation',async({page,request})=>{
+  const {id,session,order,commands}=await limitPractice(page,request);await page.setViewportSize({width:320,height:953});
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();await panel.getByRole('button',{name:'修改剩余数量',exact:true}).first().click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true}),confirm=dialog.getByRole('button',{name:'确认生效',exact:true});
+  const responsePromise=page.waitForResponse(response=>response.url().endsWith('/preview')&&response.request().postDataJSON()?.command?.limitPrice==='1000000'&&response.request().postDataJSON()?.command?.remainingContracts==='100');
+  await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill('1000000');await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('100');
+  const {preview}=await (await responsePromise).json(),maximum=preview.funds.maximumRemainingContracts;
+  await expect(confirm).toBeDisabled();const adjust=dialog.getByRole('button',{name:'调整到最大可用数量',exact:true});await expect(adjust).toBeEnabled();
+  await adjust.click();await expect(dialog.getByRole('textbox',{name:'新剩余数量',exact:true})).toHaveValue(maximum);await expect(dialog.getByRole('textbox',{name:'新委托价',exact:true})).toHaveValue('1000000');
+  await expect(confirm).toBeEnabled();await expect(dialog.getByTestId('order-amend-shortfall')).toHaveCount(0);
+  expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+  const above=await request.post(`${fixture.url}${path}/${id}/preview`,{data:{expectedRevision:session.revision,command:{type:'amend-order',orderId:order.id,limitPrice:'1000000',remainingContracts:(Number(maximum)+0.01).toFixed(2)}}});
+  expect((await above.json()).preview.funds.affordable).toBe(false);
+  await page.screenshot({path:test.info().outputPath('maximum-quantity-preview.png')});
+  await confirm.click();await expect(dialog).toHaveCount(0);await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  expect(commands).toHaveLength(1);expect(commands[0].command).toMatchObject({type:'amend-order',limitPrice:'1000000',remainingContracts:maximum});
+  const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(saved.orders.find(o=>o.id===order.id).remainingContracts).toBe(maximum);expect(saved.orders.find(o=>o.id===order.id).filledContracts).toBe(order.filledContracts);expect(Number(saved.account.availableBalance)).toBeGreaterThanOrEqual(0);expect(saved.elapsedMinutes).toBe(session.elapsedMinutes);
+});
+
+test('maximum available quantity is disabled when funds cannot cover a minimum lot',async({page,request})=>{
+  const {id,session,commands}=await limitPractice(page,request);
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();await panel.getByRole('button',{name:'修改剩余数量',exact:true}).first().click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill('1000000000');await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('100');
+  await expect(dialog.getByRole('button',{name:'调整到最大可用数量',exact:true})).toBeDisabled();await expect(dialog.getByText('可用资金不足最小委托数量。',{exact:true})).toBeVisible();
+  await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeDisabled();expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+});
+
+
+test('maximum quantity equal to the original shows an unchanged preview without allowing an empty submission',async({page,request})=>{
+  const {id,commands}=await openPractice(page,request,{layout:'dual'});
+  const placed=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:0,command:{type:'limit-open',side:'long',contracts:'99.85',limitPrice:'49950'}}});expect(placed.status()).toBe(200);const {session}=await placed.json();
+  await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();await panel.getByRole('button',{name:'修改剩余数量',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('100');
+  await dialog.getByRole('button',{name:'调整到最大可用数量',exact:true}).click();
+  await expect(dialog.getByRole('textbox',{name:'新剩余数量',exact:true})).toHaveValue('99.85');
+  await expect(dialog.getByText('与原委托一致，无需修改。',{exact:true})).toBeVisible();await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeDisabled();
+  await expect(dialog.getByTestId('order-amend-available')).toHaveAttribute('title',session.account.availableBalance);
+  expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+});

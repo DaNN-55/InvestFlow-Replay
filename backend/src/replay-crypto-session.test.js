@@ -567,11 +567,18 @@ test('amendment funds preview distinguishes released and unchanged reserves with
 test('insufficient amendment preview reports exact shortfall but command still rejects atomically',t=>{
   const c=context(t);let s=make(c).session;s=mutate(c,s,'shortfall-order',{type:'limit-open',side:'long',contracts:'2',limitPrice:'49000'}).session;
   const before=structuredClone(s),traces=c.service.audit(s.id,'traces',{limit:200}),command={type:'amend-order',orderId:s.orders[0].id,limitPrice:'1000000',remainingContracts:'100'};
+  const unchanged=c.service.preview(s.id,{expectedRevision:s.revision,command:{...command,limitPrice:'49000',remainingContracts:'2'}}).preview;
+  assert.equal(unchanged.changed,false);assert.equal(unchanged.funds.affordable,true);assert.deepEqual(c.service.get(s.id).session,s);
   const {preview}=c.service.preview(s.id,{expectedRevision:s.revision,command});
   assert.equal(preview.funds.affordable,false);
   const requiredExtra=new D(preview.after.reservedBalance).minus(s.orders[0].reservedBalance).minus(s.account.availableBalance);
   assert.ok(requiredExtra.gt(0));assert.equal(preview.funds.shortfall,requiredExtra.toFixed(8));
   assert.equal(preview.funds.availableBalanceAfter,requiredExtra.negated().toFixed(8));assert.equal(preview.after.filledContracts,s.orders[0].filledContracts);
+  const maximum=preview.funds.maximumRemainingContracts;assert.ok(new D(maximum).gt(0));
+  const atMaximum=c.service.preview(s.id,{expectedRevision:s.revision,command:{...command,remainingContracts:maximum}}).preview;
+  assert.equal(atMaximum.funds.affordable,true);
+  const above=c.service.preview(s.id,{expectedRevision:s.revision,command:{...command,remainingContracts:new D(maximum).plus(s.contract.lotSz).toFixed()}}).preview;
+  assert.equal(above.funds.affordable,false);
   assert.deepEqual(c.service.get(s.id).session,before);assert.deepEqual(c.service.audit(s.id,'traces',{limit:200}),traces);
   assert.throws(()=>mutate(c,s,'shortfall-confirm',command));assert.deepEqual(c.service.get(s.id).session,before);ledgerCheck(c,s);
   const lower=c.service.preview(s.id,{expectedRevision:s.revision,command:{...command,limitPrice:'48000',remainingContracts:'1'}}).preview;

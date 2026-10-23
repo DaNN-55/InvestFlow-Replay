@@ -418,3 +418,20 @@ test('combined amendment reserves the final price and remaining size once withou
   assert.throws(()=>e.apply(s,{type:'amend-order',orderId:o.id,limitPrice:'60000',remainingContracts:'3'}),error('INSUFFICIENT_CASH'));assert.deepEqual(s,before);
   assert.throws(()=>e.apply(s,{type:'amend-order',orderId:o.id,limitPrice:'30000',remainingContracts:'0.001'}));assert.deepEqual(s,before);
 });
+
+
+for(const type of ['limit','market']) test(`maximum affordable ${type} remainder uses fees, released reserve and lot steps`,()=>{
+  const e=engine(sample(),{slippageBps:10});
+  let s=act(e,e.create({startingCash:'405'}),{type:type==='limit'?'limit-open':'market-open',side:'long',contracts:'1',...(type==='limit'?{limitPrice:'49000'}:{})});
+  const before=clone(s),command={type:'amend-order',orderId:1,remainingContracts:'100',...(type==='limit'?{limitPrice:'1000000'}:{})};
+  let maximum;assert.throws(()=>e.apply(s,command),err=>{maximum=err.amendmentPreview?.maximumRemainingContracts;return err.code==='INSUFFICIENT_CASH'&&new D(maximum).gt(0);});
+  const result=act(e,s,{...command,remainingContracts:maximum});assert.ok(new D(result.account.availableBalance).gte(0));bridge(result);
+  assert.throws(()=>e.apply(s,{...command,remainingContracts:new D(maximum).plus('0.01').toFixed()}),error('INSUFFICIENT_CASH'));
+  assert.deepEqual(s,before);assert.equal(result.orders[0].filledContracts,before.orders[0].filledContracts);
+});
+
+test('maximum quantity returns zero when even one minimum lot is unaffordable',()=>{
+  const e=engine(),s=act(e,e.create({startingCash:'101'}),{type:'limit-open',side:'long',contracts:'1',limitPrice:'49000'}),before=clone(s);
+  assert.throws(()=>e.apply(s,{type:'amend-order',orderId:1,limitPrice:'100000000',remainingContracts:'1'}),err=>err.code==='INSUFFICIENT_CASH'&&err.amendmentPreview.maximumRemainingContracts==='0');
+  assert.deepEqual(s,before);
+});

@@ -125,6 +125,19 @@ export function createCryptoOrderReplay({ rules, scenario: input, dataVersion, s
     o.reservedBalance = required; s.account.availableBalance = money(new D(s.account.availableBalance).minus(required));
     s.reservedBalance = money(new D(s.reservedBalance).plus(required)); return true;
   }
+  function maximumAffordableRemaining(s, order) {
+    // The requested quantity already passed size/tier checks and is unaffordable.
+    // Search whole lot steps using exactly the same rounded reserve as submission.
+    const lot = new D(spec.lotSz), budget = new D(s.account.availableBalance);
+    let low = new D(spec.minSz).div(lot).ceil(), high = new D(order.remainingContracts).div(lot);
+    const fits = steps => new D(reserveEstimate(s, {...order,remainingContracts:steps.times(lot).toFixed()})).lte(budget);
+    if (!fits(low)) return "0";
+    while (high.minus(low).gt(1)) {
+      const middle = high.plus(low).div(2).floor();
+      if (fits(middle)) low = middle; else high = middle;
+    }
+    return low.times(lot).toFixed();
+  }
   function maxPosition(leverage) {
     const eligible = snapshot.instruments[instrumentId].isolatedPositionTiers.filter((t) => new D(t.maxLever).gte(leverage));
     return eligible.reduce((max, t) => D.max(max, t.maxSz), new D(0));
@@ -411,7 +424,7 @@ export function createCryptoOrderReplay({ rules, scenario: input, dataVersion, s
           release(s, o); o.remainingContracts = remaining.toFixed(); o.contracts = contracts.toFixed(); if (o.type === "limit") o.limitPrice = price;
           const required = reserveEstimate(s, o), projectedAvailable = new D(s.account.availableBalance).minus(required);
           if (projectedAvailable.lt(0)) throw Object.assign(new Error("可用资金不足"), { code:"INSUFFICIENT_CASH", amendmentPreview:{
-            order:{...structuredClone(o),reservedBalance:required}, availableBalanceAfter:money(projectedAvailable), shortfall:money(projectedAvailable.negated()) } });
+            order:{...structuredClone(o),reservedBalance:required}, availableBalanceAfter:money(projectedAvailable), shortfall:money(projectedAvailable.negated()), maximumRemainingContracts:maximumAffordableRemaining(s,o) } });
           reserve(s, o, required);
           o.resting = false; o.blockedAtMinute = null; o.submittedMinute = s.elapsedMinutes;
           s.orders = [...s.orders.filter((x) => x.id !== o.id), o];

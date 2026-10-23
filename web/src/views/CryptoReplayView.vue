@@ -31,11 +31,11 @@ const priceDraft=shallowRef(null),priceDragging=ref(false),priceSaving=ref(false
 const cancellation=shallowRef(null),orderEditor=shallowRef(null),orderEditPrice=ref(''),orderEditQuantity=ref('');
 const orderPreview=shallowRef(null),orderPreviewBusy=ref(false),orderPreviewError=ref('');
 let orderPreviewGeneration=0;
-const orderEditDraft=computed(()=>orderEditor.value?createOrderDraft(orderEditor.value.session,{orderId:orderEditor.value.orderId},orderEditPrice.value,orderEditQuantity.value):null);
+const orderEditDraft=computed(()=>orderEditor.value?createOrderDraft(orderEditor.value.session,{orderId:orderEditor.value.orderId},orderEditPrice.value,orderEditQuantity.value,true):null);
 const orderEditBody=computed(()=>orderEditDraft.value?orderDraftCommand(s.value,orderEditDraft.value):null);
 const orderPreviewReady=computed(()=>Boolean(orderEditBody.value&&orderPreview.value?.key===JSON.stringify(orderEditBody.value)&&!orderPreviewBusy.value&&!orderPreviewError.value));
-const orderCanConfirm=computed(()=>orderPreviewReady.value&&orderPreview.value.funds.affordable===true);
-const orderChartDraft=computed(()=>orderEditDraft.value?.order.type==='limit'?orderEditDraft.value:priceDraft.value);
+const orderCanConfirm=computed(()=>orderPreviewReady.value&&orderPreview.value.funds.affordable===true&&orderPreview.value.changed!==false);
+const orderChartDraft=computed(()=>orderEditDraft.value?.order.type==='limit'&&(orderEditDraft.value.price!==orderEditDraft.value.order.limitPrice||orderEditDraft.value.remainingContracts!==orderEditDraft.value.order.remainingContracts)?orderEditDraft.value:priceDraft.value);
 function clearOrderEditor() {orderPreviewGeneration++;orderEditor.value=null;orderEditPrice.value='';orderEditQuantity.value='';orderPreview.value=null;orderPreviewBusy.value=false;orderPreviewError.value='';}
 function requestOrderEdit(target) {
   if(locked.value) return;
@@ -61,6 +61,11 @@ async function refreshOrderPreview() {
   finally {if(generation===orderPreviewGeneration) orderPreviewBusy.value=false;}
 }
 watch(orderEditBody,refreshOrderPreview);
+function applyMaximumOrderQuantity() {
+  if(!orderPreviewReady.value||orderPreview.value.funds.affordable||state.value.busy||priceSaving.value) return;
+  const maximum=orderPreview.value.funds.maximumRemainingContracts;
+  if(Number(maximum)>0) orderEditQuantity.value=maximum;
+}
 function confirmOrderEdit() {
   if(!orderCanConfirm.value) return;
   return saveChartCommand(orderEditBody.value,clearOrderEditor);
@@ -226,6 +231,8 @@ async function retrain() {
         </table>
         <p v-if="orderPreviewReady" class="crypto-muted" data-testid="order-amend-change">{{ ({increase:'增加冻结',release:'释放冻结',unchanged:'冻结不变'})[orderPreview.funds.reserveChangeType] }} {{ amount(orderPreview.funds.reserveChangeAmount,8) }} USDT</p>
         <p v-if="orderPreviewReady&&!orderPreview.funds.affordable" class="crypto-muted" role="alert" data-testid="order-amend-shortfall">资金不足，还差 {{ amount(orderPreview.funds.shortfall,8) }} USDT</p>
+        <template v-if="orderPreviewReady&&!orderPreview.funds.affordable"><UiButton variant="secondary" :disabled="!(Number(orderPreview.funds.maximumRemainingContracts)>0)||state.busy||priceSaving" @click="applyMaximumOrderQuantity">调整到最大可用数量</UiButton><p v-if="orderPreview.funds.maximumRemainingContracts==='0'" class="crypto-muted">可用资金不足最小委托数量。</p></template>
+        <p v-if="orderPreviewReady&&orderPreview.changed===false" class="crypto-muted">与原委托一致，无需修改。</p>
         <p v-if="orderPreviewBusy" class="crypto-muted" role="status">核算冻结资金…</p>
         <p v-if="orderPreviewError" class="crypto-muted" role="alert">{{ orderPreviewError }} <button type="button" class="crypto-text-button" @click="refreshOrderPreview">重新预览</button></p>
         <p class="crypto-muted">{{ orderEditor.order.type==='limit'?`价格按 ${orderEditor.session.contract.tickSz} 对齐；`:'' }}数量步长 {{ orderEditor.session.contract.lotSz }} 张，全部取消请撤单。</p>

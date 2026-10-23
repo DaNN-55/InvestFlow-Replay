@@ -102,12 +102,12 @@ export function quantityDraftCommand(session,draft) {
   return {expectedRevision:draft.revision,command:{type:'amend-quantity',orderId:draft.orderId,remainingContracts:draft.remainingContracts}};
 }
 
-export function createOrderDraft(session,target,price,quantity) {
+export function createOrderDraft(session,target,price,quantity,allowUnchanged=false) {
   const base=createPriceCancellation(session,target),size=createQuantityDraft(session,target,quantity,true);
   if(!base?.order||!size) return null;
   const priced=base.order.type==='limit'?createPriceDraft(session,target,Number(price),true):null;
   if(base.order.type==='limit'&&!priced) return null;
-  if(size.remainingContracts===base.order.remainingContracts&&(!priced||priced.price===base.order.limitPrice)) return null;
+  if(!allowUnchanged&&size.remainingContracts===base.order.remainingContracts&&(!priced||priced.price===base.order.limitPrice)) return null;
   return {...base,price:priced?.price??null,oldPrice:base.order.limitPrice,remainingContracts:size.remainingContracts};
 }
 export function orderDraftCommand(session,draft) {
