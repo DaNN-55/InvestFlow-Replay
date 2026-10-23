@@ -55,10 +55,19 @@ async function nativeCharts(page) {
         colors:{rise:chart.getStyles().candle.bar.upColor,fall:chart.getStyles().candle.bar.downColor,volumeRise:volumeFigure?.styles({current:{kLineData:{open:1,close:2}}})?.color,volumeFall:volumeFigure?.styles({current:{kLineData:{open:2,close:1}}})?.color},
         lines:[...tile.querySelectorAll('[data-price-line-id]')].map(node=>{
           const overlay=chart.getOverlayById(node.dataset.priceLineId);
-          return {id:node.dataset.priceLineId,exists:!!overlay,price:overlay?.points?.[0]?.value,label:overlay?.extendData?.label,contracts:overlay?.extendData?.contracts,dashed:overlay?.extendData?.dashed,background:overlay?.extendData?.background,draggable:overlay?!overlay.lock:false,preview:!!overlay?.extendData?.preview};
+          return {id:node.dataset.priceLineId,exists:!!overlay,price:overlay?.points?.[0]?.value,label:overlay?.extendData?.label,contracts:overlay?.extendData?.contracts,dashed:overlay?.extendData?.dashed,background:overlay?.extendData?.background,estimate:overlay?.extendData?.estimate,estimateText:overlay?.extendData?.estimateText,draggable:overlay?!overlay.lock:false,preview:!!overlay?.extendData?.preview};
         })};
     });
   });
+}
+
+
+function assertProtectionEstimate(line,session) {
+  const p=session.account.position,base=Number(p.contracts)*Number(session.contract.ctVal)*Number(session.contract.ctMult),sign=p.side==='long'?1:-1;
+  const expected=(Number(line.price)-Number(p.entryPrice))*base*sign;
+  const percent=(Number(line.price)/Number(p.entryPrice)-1)*sign*Number(session.config.leverage)*100;
+  expect(line.estimate.pnl).toBeCloseTo(expected,6);expect(line.estimate.returnPercent).toBeCloseTo(percent,6);
+  expect(line.estimateText).toContain('USDT');expect(line.estimateText).toContain('%');
 }
 
 function assertPrefixes(reads) {
@@ -373,6 +382,8 @@ for(const side of ['long','short']) test(`${side} protective drag previews only,
   const getSession=async()=> (await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   const stopTarget=side==='long'?49920:50020;
   await dragProtection(page,0,stopId,stopTarget,{release:false});
+  const held=(await nativeCharts(page))[0].lines.find(l=>l.id===stopId);
+  assertProtectionEstimate(held,session);expect(held.preview).toBe(true);
   expect((await getSession()).protection).toEqual(session.protection);
   expect(commands.length).toBe(0);
   await page.keyboard.press('Escape');await page.mouse.up();
@@ -385,6 +396,8 @@ for(const side of ['long','short']) test(`${side} protective drag previews only,
   expect(commands.length).toBe(0);
   const ghost=(await nativeCharts(page))[0].lines.find(l=>l.id===`${stopId}:draft`);
   expect(ghost.preview&&ghost.dashed).toBe(true);
+  assertProtectionEstimate(ghost,session);
+  await expect(page.getByTestId('crypto-protection-draft-estimate')).toHaveText(ghost.estimateText);
   expect((await nativeCharts(page))[0].lines.find(l=>l.id===stopId).price).toBe(Number(session.protection.stopLoss.price));
   if(side==='short') {await page.getByRole('button',{name:'取消调整',exact:true}).focus();await page.keyboard.press('Escape');}
   else await page.getByRole('button',{name:'取消调整',exact:true}).click();
@@ -394,7 +407,8 @@ for(const side of ['long','short']) test(`${side} protective drag previews only,
     const before=await getSession(),sibling=leg==='stopLoss'?'takeProfit':'stopLoss';
     await dragProtection(page,index,`${id}:${leg}`,target);
     await expect(confirm).toBeVisible();
-    const price=(await nativeCharts(page))[index].lines.find(l=>l.id===`${id}:${leg}:draft`).price;
+    const previewLine=(await nativeCharts(page))[index].lines.find(l=>l.id===`${id}:${leg}:draft`),price=previewLine.price;
+    assertProtectionEstimate(previewLine,before);
     expect(price).not.toBe(Number(before.protection[leg].price));
     await expect(confirm).toContainText(String(price));
     await page.screenshot({path:test.info().outputPath(`${leg}-draft.png`)});
@@ -409,6 +423,8 @@ for(const side of ['long','short']) test(`${side} protective drag previews only,
     expect(Number(after.protection[leg].price)).toBe(price);
     expect(after.protection[leg].reference).toBe(before.protection[leg].reference);
     expect(after.elapsedMinutes).toBe(before.elapsedMinutes);
+    const applied=(await nativeCharts(page))[index].lines.find(l=>l.id===`${id}:${leg}`);
+    expect(applied.estimate).toEqual(previewLine.estimate);
   }
   const saved=await getSession();
   await dragProtection(page,0,stopId,side==='long'?49880:50040);
@@ -639,4 +655,26 @@ test('lost chart cancellation response retries the same single-leg action after 
   await page.getByRole('button',{name:'重试原动作',exact:true}).click();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
   const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;expect(latest).toEqual(committed);expect(latest.revision).toBe(session.revision+1);
   expect(latest.protection.stopLoss).toBe(null);expect(latest.protection.takeProfit).toEqual(session.protection.takeProfit);
+});
+
+test('protection estimates follow remaining position and weighted entry without counting topups as opening margin',async({page,request})=>{
+  const {id,session,reads}=await protectedPractice(page,request);
+  const initial=(await nativeCharts(page))[0].lines.find(l=>l.id===`${id}:stopLoss`);assertProtectionEstimate(initial,session);
+  let current=session;
+  const act=async command=>{const response=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:current.revision,command}});expect(response.status()).toBe(200);current=(await response.json()).session;};
+  const sync=async()=>{await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();return (await nativeCharts(page))[0].lines.find(l=>l.id===`${id}:stopLoss`);};
+  await act({type:'add-margin',amount:'500'});
+  const topped=await sync();expect(topped.estimate).toEqual(initial.estimate);
+  for(const command of [{type:'market-close',contracts:'0.5'},{type:'market-open',side:'long',contracts:'0.5'}]) {
+    await act(command);const response=await request.post(`${fixture.url}${path}/${id}/advance`,{data:{actionId:crypto.randomUUID(),expectedRevision:current.revision,minutes:1}});
+    expect(response.status()).toBe(200);current=(await response.json()).session;
+    const line=await sync();assertProtectionEstimate(line,current);
+    if(command.type==='market-close') {expect(line.estimate.pnl).toBeCloseTo(initial.estimate.pnl/2,6);expect(line.estimate.returnPercent).toBeCloseTo(initial.estimate.returnPercent,6);}
+  }
+  await page.getByRole('button',{name:'止盈止损估算说明',exact:true}).click();
+  await expect(page.locator('.ui-tooltip__content')).toContainText('不含手续费、滑点和资金费');
+  await expect(page.locator('.ui-tooltip__content')).toContainText('追加保证金不改变分母');
+  await page.keyboard.press('Escape');
+  await page.screenshot({path:test.info().outputPath('protection-estimate.png')});
+  assertPrefixes(reads);
 });

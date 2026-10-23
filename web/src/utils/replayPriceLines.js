@@ -1,12 +1,13 @@
 export const REPLAY_PRICE_LINE_GROUP = 'replay-controlled-price-lines';
 // Space labels independently from their exact price lines. A leader joins a
 // displaced label to its price, so nearby entry/stop/profit levels remain legible.
-function tagPosition(line,yAxis,height,fallback) {
+function tagPosition(line,yAxis,height,fallback,estimateHeight=17) {
   if(!yAxis||!line.levels?.length) return fallback;
   const levels=line.levels.map(level=>({...level,y:yAxis.convertToPixel(Number(level.price))})).sort((a,b)=>a.y-b.y);
-  const gap=Math.min(22,(height-24)/Math.max(1,levels.length-1));
-  for(let i=0;i<levels.length;i++) levels[i].tagY=Math.max(12,Math.min(height-12,levels[i].y),i?levels[i-1].tagY+gap:12);
-  for(let i=levels.length-1;i>=0;i--) levels[i].tagY=Math.min(levels[i].tagY,height-12,i<levels.length-1?levels[i+1].tagY-gap:height-12);
+  const bottom=height-(levels.some(level=>level.estimated)?12+estimateHeight:12);
+  const gap=Math.min(levels.some(level=>level.estimated)?22+estimateHeight:22,(bottom-12)/Math.max(1,levels.length-1));
+  for(let i=0;i<levels.length;i++) levels[i].tagY=Math.max(12,Math.min(bottom,levels[i].y),i?levels[i-1].tagY+gap:12);
+  for(let i=levels.length-1;i>=0;i--) levels[i].tagY=Math.min(levels[i].tagY,bottom,i<levels.length-1?levels[i+1].tagY-gap:bottom);
   return levels.find(level=>level.id===line.id)?.tagY??fallback;
 }
 export const REPLAY_PRICE_LINE_OVERLAY = {
@@ -16,19 +17,22 @@ export const REPLAY_PRICE_LINE_OVERLAY = {
     const point = coordinates[0], line = overlay.extendData;
     if (!point || !Number.isFinite(point.y)) return [];
     const outside=point.y<0||point.y>bounding.height;
+    const estimateRows=line.estimateText?(bounding.width<220?line.estimateText.split(' · '):[line.estimateText]):[];
+    const estimateHeight=bounding.width<220?34:17;
     const edgeY=outside?(point.y<0?14+(line.tagIndex??0)*22:bounding.height-14-(line.tagIndex??0)*22):point.y;
-    const y=Math.max(12,Math.min(bounding.height-12,tagPosition(line,yAxis,bounding.height,edgeY)));
+    const y=Math.max(12,Math.min(bounding.height-(line.estimateText?12+estimateHeight:12),tagPosition(line,yAxis,bounding.height,edgeY,estimateHeight)));
     const displaced=Math.abs(y-point.y)>2;
     const tag={ key:'price-tag',type:'text',attrs:{x:8,y,text:`${line.draggable?'↕ ':''}${outside?(point.y<0?'↑ ':'↓ '):''}${line.label}${outside||displaced||line.preview?` @ ${line.price}`:''}`,align:'left',baseline:'middle'},
       styles:{style:'stroke_fill',color:line.color,size:11,backgroundColor:line.background??'#ffffff',borderColor:line.color,borderSize:1,borderRadius:3,paddingLeft:5,paddingRight:5,paddingTop:3,paddingBottom:3},ignoreEvent:!line.draggable };
     const cancel=line.cancellable?[{key:'price-cancel',type:'text',attrs:{x:tag.attrs.x+line.measureLabel(tag.attrs.text)+16,y,text:'×',align:'left',baseline:'middle'},
       styles:{...tag.styles,size:13,paddingLeft:5,paddingRight:5},ignoreEvent:false}]:[];
+    const estimate=estimateRows.map((text,i)=>({key:`price-estimate-${i}`,type:'text',attrs:{x:8,y:y+17*(i+1),text:i?`收益率 ${text}`:text,align:'left',baseline:'middle'},styles:tag.styles,ignoreEvent:!line.draggable}));
     // An out-of-range tag names the actual price; never draw a line at a fake
     // clamped price or stretch the candle scale to fit a distant protective stop.
-    if(outside) return [tag,...cancel];
+    if(outside) return [tag,...cancel,...estimate];
     return [{ key:'price-line',type: 'line', attrs: { coordinates: [{ x: 0, y: point.y }, { x: bounding.width, y: point.y }] },
       styles: { color: line.color, size: 1.5, style: line.dashed ? 'dashed' : 'solid', dashedValue: [6, 4] }, ignoreEvent: !line.draggable },
-    tag,...cancel,...(displaced?[{type:'line',attrs:{coordinates:[{x:5,y},{x:5,y:point.y}]},styles:{color:line.color,size:1},ignoreEvent:true}]:[])];
+    tag,...cancel,...estimate,...(displaced?[{type:'line',attrs:{coordinates:[{x:5,y},{x:5,y:point.y}]},styles:{color:line.color,size:1},ignoreEvent:true}]:[])];
   },
   createYAxisFigures({coordinates=[],bounding={},overlay,yAxis}) {
     const point=coordinates[0],line=overlay.extendData;

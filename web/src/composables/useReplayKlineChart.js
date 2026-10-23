@@ -1,3 +1,4 @@
+import { repriceProtectionLine } from '../utils/cryptoProtectionEstimate.js';
 import { REPLAY_PRICE_LINE_GROUP, REPLAY_PRICE_LINE_OVERLAY } from '../utils/replayPriceLines.js';
 import { snapProtectionPrice } from '../utils/cryptoPriceDraft.js';
 import { findReplayMinuteIndex, replayRange } from '../utils/cryptoChartSync.js';
@@ -324,7 +325,7 @@ export function useReplayKlineChart({
         const price=snapProtectionPrice(value,model.value?.priceStep);
         if(!price) return true;
         priceDrag.price=price;priceDrag.moved=true;
-        current.overrideOverlay({id:overlay.id,points:[{value:Number(price)}],extendData:{...priceDrag.original,draggable:true,preview:true,dashed:true,price,label:`待确认${line.orderId!=null?'委托':line.protectionLeg==='stopLoss'?'止损':'止盈'}`,levels:priceDrag.original.levels?.map(level=>level.id===line.id?{...level,price}:level)}});
+        current.overrideOverlay({id:overlay.id,points:[{value:Number(price)}],extendData:{...repriceProtectionLine(priceDrag.original,price),draggable:true,preview:true,dashed:true,price,label:`待确认${line.orderId!=null?'委托':line.protectionLeg==='stopLoss'?'止损':'止盈'}`,levels:priceDrag.original.levels?.map(level=>level.id===line.id?{...level,price}:level)}});
         return true; // The native default must not add hidden time/index offsets.
       },
       onPressedMoveEnd:()=>{endPriceDrag();return true;},
@@ -350,7 +351,7 @@ export function useReplayKlineChart({
     priceLineIds = []; priceLineKey = nextKey;
     for (const [tagIndex,line] of priceLines.value.entries()) {
       const id = current.createOverlay({ name: REPLAY_PRICE_LINE_OVERLAY.name, id: line.id,
-        groupId: REPLAY_PRICE_LINE_GROUP, lock: !line.draggable, points: [{ value: Number(line.price) }], extendData: {...line,measureLabel:text=>utils.calcTextWidth(text,11),color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price})=>({id,price}))},
+        groupId: REPLAY_PRICE_LINE_GROUP, lock: !line.draggable, points: [{ value: Number(line.price) }], extendData: {...line,measureLabel:text=>utils.calcTextWidth(text,11),color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price,estimate})=>({id,price,estimated:Boolean(estimate)}))},
         ...(line.draggable||line.cancellable?priceDragHandlers(line,current):{}) }, CANDLE_PANE_ID);
       if (id) priceLineIds.push(id);
     }

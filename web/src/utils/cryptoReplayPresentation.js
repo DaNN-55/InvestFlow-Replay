@@ -1,3 +1,4 @@
+import { repriceProtectionLine } from './cryptoProtectionEstimate.js';
 export const CRYPTO_PERIODS = [[1, '1min'], [3, '3min'], [5, '5min'], [15, '15min'], [30, '30min'], [60, '1h'], [120, '2h'], [240, '4h'], [360, '6h'], [720, '12h'], [1440, '1day']];
 export const amount = (value, digits = 2) => value == null || value === '' || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 export const exact = (value) => value == null ? '未知' : String(value);
@@ -77,7 +78,7 @@ export function cryptoChartLines(session, kind) {
   }
   for (const [leg, label] of [['stopLoss', '自动止损'], ['takeProfit', '自动止盈']]) {
     const protection = session.protection?.[leg];
-    if (protection) add(leg, protection.price, `${label}${session.protection.triggeredLeg === leg ? ' · 已触发待退出' : ''}`, protection.reference, { color: leg === 'stopLoss' ? '#d55d70' : '#159875', dashed: false, protectionLeg:leg }, session.protection.contracts);
+    if (protection) add(leg, protection.price, `${label}${session.protection.triggeredLeg === leg ? ' · 已触发待退出' : ''}`, protection.reference, { color: leg === 'stopLoss' ? '#d55d70' : '#159875', dashed: false, protectionLeg:leg, estimateContext:{account:{position},contract:session.contract,config:{leverage:session.config?.leverage}} }, session.protection.contracts);
   }
-  return lines;
+  return lines.map(line=>repriceProtectionLine(line,line.price));
 }
