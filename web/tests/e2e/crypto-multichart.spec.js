@@ -822,6 +822,20 @@ test('compact order and fill rows keep prices quantities and cancellation usable
   await expect(dialog).toContainText('手续费');await expect(dialog).toContainText('时间');await page.keyboard.press('Escape');
   await panel.getByRole('button',{name:'当前委托',exact:false}).click();
   await panel.locator('.crypto-activity-row').filter({hasText:'50,060.0000'}).getByRole('button',{name:'撤单',exact:true}).click();
+  const confirmation=page.getByRole('dialog',{name:'撤销限价委托？',exact:true});
+  await expect(confirmation).toBeVisible();await expect(confirmation).toContainText('平多');await expect(confirmation).toContainText('委托价 50060');await expect(confirmation).toContainText('剩余未成交 1 张');
+  expect(commands).toHaveLength(0);
+  await confirmation.getByRole('button',{name:'保留',exact:true}).click();
+  await expect(panel.locator('.crypto-activity-row')).toHaveCount(2);expect(commands).toHaveLength(0);
+  await panel.locator('.crypto-activity-row').filter({hasText:'50,060.0000'}).getByRole('button',{name:'撤单',exact:true}).click();
+  await expect(confirmation).toBeVisible();await page.keyboard.press('Escape');
+  expect(commands).toHaveLength(0);
+  await panel.locator('.crypto-activity-row').filter({hasText:'50,060.0000'}).getByRole('button',{name:'撤单',exact:true}).click();
+  await expect(confirmation).toBeVisible();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true,includeHidden:true})).toBeDisabled();
+  await page.screenshot({path:test.info().outputPath('order-cancel-confirmation.png')});
+  await confirmation.getByRole('button',{name:'确认撤销',exact:true}).evaluate(button=>{button.click();button.click();});
+  await expect(confirmation).toHaveCount(0);
   await expect(panel.locator('.crypto-activity-row')).toHaveCount(1);
   expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'cancel-order',orderId:order.id});
   const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
@@ -831,4 +845,23 @@ test('compact order and fill rows keep prices quantities and cancellation usable
   await expect(cancelled).toContainText('委托已撤');await expect(cancelled).toContainText('50,060.0000');
   await cancelled.getByRole('button',{name:'委托详情',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'委托详情',exact:true})).toContainText('手动撤单');
+});
+
+
+test('pending market order cancellation shows its direction and market price before confirmation',async({page,request})=>{
+  const {id,commands}=await openPractice(page,request,{layout:'dual'});
+  const placed=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:0,command:{type:'market-open',side:'short',contracts:'1'}}});
+  expect(placed.status()).toBe(200);const {session}=await placed.json();
+  await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();
+  await panel.getByRole('button',{name:'撤单',exact:true}).focus();await page.keyboard.press('Enter');
+  const dialog=page.getByRole('dialog',{name:'撤销市价委托？',exact:true});
+  await expect(dialog).toContainText('开空');await expect(dialog).toContainText('委托价 市价');await expect(dialog).toContainText('剩余未成交 1 张');
+  expect(commands).toHaveLength(0);
+  await dialog.getByRole('button',{name:'确认撤销',exact:true}).click();
+  await expect(dialog).toHaveCount(0);await expect(panel.getByText('暂无待成交委托。',{exact:true})).toBeVisible();
+  expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'cancel-order',orderId:session.orders[0].id});
+  expect(commands[0].expectedRevision).toBe(session.revision);
+  const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(saved.elapsedMinutes).toBe(0);expect(saved.account.position).toBeNull();expect(saved.orders).toHaveLength(0);expect(saved.reservedBalance).toBe('0.00000000');
 });
