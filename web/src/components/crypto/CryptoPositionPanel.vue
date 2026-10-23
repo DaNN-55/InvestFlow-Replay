@@ -16,7 +16,7 @@ const position=computed(()=>props.session.account.position), plan=computed(()=>r
 const floatingReturn=computed(()=>cryptoProtectionEstimate(props.session,props.session.currentPrices.mark)?.returnPercent);
 const pnlTone=computed(()=>Number(props.session.risk?.unrealizedPnl)>0?'profit':Number(props.session.risk?.unrealizedPnl)<0?'loss':'neutral');
 const disabled=computed(()=>props.busy||props.blocked||props.session.status!=='active'||props.session.ending);
-const historyTypes=['order-submitted','order-amended','order-filled','order-cancelled','order-rejected'];
+const historyTypes=['order-submitted','order-amended','order-quantity-amended','order-filled','order-cancelled','order-rejected'];
 const fillTypes=['order-filled','protection-filled','end-filled'];
 const activityRows=computed(()=>{
   if(tab.value==='当前委托') return props.session.orders.map(order=>activityRow(order,null));
@@ -24,6 +24,7 @@ const activityRows=computed(()=>{
   for(const event of props.traces) {
     if(event.order) orders.set(event.order.id,{...event.order});
     if(event.type==='order-amended'&&orders.has(event.orderId)) orders.set(event.orderId,{...orders.get(event.orderId),limitPrice:event.limitPrice});
+    if(event.type==='order-quantity-amended'&&orders.has(event.orderId)) orders.set(event.orderId,{...orders.get(event.orderId),remainingContracts:event.remainingContracts,contracts:event.contracts,filledContracts:event.filledContracts});
     if((tab.value==='成交'?fillTypes:historyTypes).includes(event.type)) rows.push(activityRow(orders.get(event.orderId)??event.order??{},event));
   }
   return rows;
@@ -39,7 +40,7 @@ function activityRow(order,event) {
     price:event?.quote?.fillPrice??event?.limitPrice??order.limitPrice,
     market:!filled&&order.type==='market',
     quantity:event?.quote?.contracts??event?.remainingContracts??event?.unfilledContracts??order.remainingContracts??order.contracts,
-    quantityLabel:filled?'成交量':!event||event.type==='order-amended'||event.type==='order-cancelled'?'未成交':'委托量',
+    quantityLabel:filled?'成交量':!event||event.type==='order-amended'||event.type==='order-quantity-amended'||event.type==='order-cancelled'?'未成交':'委托量',
     priceLabel:filled?'成交价':'委托价'};
 }
 function showActivity(row) { selectedActivity.value=row;drawer.value='activity'; }
@@ -48,7 +49,7 @@ const activityDetails=computed(()=>{
   const {order:o,event:e}=row;
   return [['交易品种',props.session.instrumentId],['方向',row.direction],['事件',row.label],['时间',e?relativeTime(e.observedAtMinute):null],
     ['委托编号',e?.orderId??o.id],['委托类型',o.type?(o.type==='limit'?'限价':'市价'):null],['原委托价',e?.oldPrice],
-    [row.priceLabel,row.market?'市价':row.price],[`${row.quantityLabel} · 张`,row.quantity],['原委托量 · 张',o.contracts],
+    [row.priceLabel,row.market?'市价':row.price],[`${row.quantityLabel} · 张`,row.quantity],['委托总量 · 张',o.contracts],['原剩余量 · 张',e?.oldRemainingContracts],['已成交 · 张',e?.filledContracts??(!e?o.filledContracts:null)],
     ['手续费 · USDT',e?.quote?.fee],['已实现盈亏 · USDT',e?.realizedPnl],['冻结资金 · USDT',e?.reservedBalance??(!e?o.reservedBalance:null)],
     ['释放冻结 · USDT',e?.releasedReserve],['原因',({'user':'手动撤单','position-closed':'持仓已平','reduce-only-position-shrank':'持仓减少','risk-cancellation':'风险接管','IOC-unfilled-remainder':'市价单剩余量未成交','remaining-reserve-shortfall':'剩余可用资金不足','protective-exit-triggered':'止盈止损触发','training-end':'练习结束','NO_MINUTE_CAPACITY':'当前分钟无可成交数量','NO_AFFORDABLE_OR_TIER_CAPACITY':'资金或仓位档位不足'})[e?.reason]??e?.reason]].filter(([,value])=>value!=null&&value!=='');
 });
@@ -72,7 +73,7 @@ function protection() {emit('command',{type:'set-protection',...(form.stop?{stop
         <li v-for="row in activityRows" :key="row.key" class="crypto-activity-row">
           <div class="crypto-activity-heading"><strong>{{ row.direction }}</strong><small>{{ row.label }}</small></div>
           <div class="crypto-activity-value"><span>{{ row.priceLabel }}</span><div class="crypto-activity-price"><strong>{{ row.market?'市价':amount(row.price,4) }}</strong><button v-if="tab==='当前委托'&&row.order.type==='limit'" type="button" class="crypto-position-icon" aria-label="修改委托价格" title="修改委托价格" :disabled="disabled" @click="emit('edit-order',{orderId:row.order.id})"><Pencil aria-hidden="true" /></button></div></div>
-          <div class="crypto-activity-value"><span>{{ row.quantityLabel }} · 张</span><strong>{{ row.quantity??'—' }}</strong></div>
+          <div class="crypto-activity-value"><span>{{ row.quantityLabel }} · 张</span><div class="crypto-activity-price"><strong>{{ row.quantity??'—' }}</strong><button v-if="tab==='当前委托'" type="button" class="crypto-position-icon" aria-label="修改剩余数量" title="修改剩余数量" :disabled="disabled" @click="emit('edit-order',{orderId:row.order.id,field:'quantity'})"><Pencil aria-hidden="true" /></button></div></div>
           <div class="crypto-activity-actions"><button type="button" class="crypto-position-icon" :aria-label="tab==='成交'?'成交详情':'委托详情'" :title="tab==='成交'?'成交详情':'委托详情'" @click="showActivity(row)"><Info aria-hidden="true" /></button><UiButton v-if="tab==='当前委托'" variant="secondary" :disabled="disabled" @click="emit('cancel-order',{orderId:row.order.id})">撤单</UiButton></div>
         </li>
       </ul>

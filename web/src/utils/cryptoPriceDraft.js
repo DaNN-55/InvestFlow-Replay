@@ -86,3 +86,18 @@ export function priceCancellationCommand(session,draft) {
   if(!priceCancellationCurrent(session,draft)) return null;
   return {expectedRevision:draft.revision,command:draft.kind==='order'?{type:'cancel-order',orderId:draft.orderId}:{type:'cancel-protection',leg:draft.leg}};
 }
+
+
+export function createQuantityDraft(session,target,value) {
+  const draft=createPriceCancellation(session,target),text=String(value??'').trim(),lot=String(session?.contract?.lotSz??'');
+  if(!draft?.order||text.replace('.','').length>32||!/^\d+(?:\.\d+)?$/.test(text)||!/^\d+(?:\.\d+)?$/.test(lot)) return null;
+  const units=v=>{const [whole,fraction='']=v.split('.');return {n:BigInt(whole+fraction),d:10n**BigInt(fraction.length)};};
+  const quantity=units(text),step=units(lot),old=units(draft.order.remainingContracts),minimum=units(String(session.contract.minSz??lot));
+  if(quantity.n===0n||step.n===0n||(quantity.n*step.d)%(step.n*quantity.d)!==0n||quantity.n*minimum.d<minimum.n*quantity.d||quantity.n*old.d===old.n*quantity.d) return null;
+  const remainingContracts=text.replace(/^0+(?=\d)/,'').replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
+  return {...draft,remainingContracts};
+}
+export function quantityDraftCommand(session,draft) {
+  if(!priceCancellationCurrent(session,draft)) return null;
+  return {expectedRevision:draft.revision,command:{type:'amend-quantity',orderId:draft.orderId,remainingContracts:draft.remainingContracts}};
+}

@@ -387,6 +387,34 @@ export function createCryptoOrderReplay({ rules, scenario: input, dataVersion, s
           emit(events, s, "order-amended", { orderId: o.id, oldPrice, limitPrice: price, remainingContracts: o.remainingContracts, oldReserve, reservedBalance: o.reservedBalance });
           break;
         }
+        case "amend-quantity": {
+          if (s.elapsedMinutes >= replayMinutes) fail("END_EXECUTION_ONLY", "No amendments in the reserved minute");
+          if (!Number.isSafeInteger(command.orderId) || command.orderId < 1) fail("INVALID_ORDER_ID", "Use an active order ID");
+          const o = s.orders.find((o) => o.id === command.orderId);
+          if (!o) fail("ORDER_NOT_ACTIVE", "Only active orders can be amended");
+          if (o.intent === "increase" && s.protection?.triggeredLeg) fail("PROTECTION_EXIT_PENDING", "Finish the triggered exit before adding risk");
+          const remaining = decimal(command.remainingContracts), price = o.type === "limit" ? o.limitPrice : knownLast(s);
+          calc.quoteFill({ contracts: remaining.toFixed(), fillPrice: price, liquidityRole: "taker", leverage: o.intent === "increase" ? s.leverage : null });
+          if (remaining.eq(o.remainingContracts)) fail("UNCHANGED_ORDER_QUANTITY", "Remaining quantity has not changed");
+          const contracts = remaining.plus(o.filledContracts);
+          if (contracts.gt(o.type === "market" ? spec.maxMktSz : spec.maxLmtSz)) fail("ORDER_SIZE_LIMIT", "Amended total exceeds frozen size limit");
+          const siblings = s.orders.filter((x) => x.id !== o.id && x.intent === o.intent).reduce((n, x) => n.plus(x.remainingContracts), new D(0));
+          if (o.intent === "reduce") {
+            if (remaining.plus(siblings).gt(s.account.position?.contracts ?? 0)) fail("OVER_REDUCTION", "Pending closes cannot exceed the remaining position");
+          } else {
+            const pending = remaining.plus(siblings).plus(s.account.position?.contracts ?? 0);
+            calc.quoteFill({ contracts: pending.toFixed(), fillPrice: price, liquidityRole: "taker", leverage: s.leverage });
+          }
+          const oldRemainingContracts = o.remainingContracts, oldReserve = o.reservedBalance;
+          // apply() mutates a clone, so failed reserves leave both the order and cash intact.
+          release(s, o); o.remainingContracts = remaining.toFixed(); o.contracts = contracts.toFixed();
+          if (!reserve(s, o)) fail("INSUFFICIENT_CASH", "Cover the amended margin and taker fee before confirmation");
+          o.resting = false; o.blockedAtMinute = null; o.submittedMinute = s.elapsedMinutes;
+          s.orders = [...s.orders.filter((x) => x.id !== o.id), o];
+          emit(events, s, "order-quantity-amended", { orderId: o.id, oldRemainingContracts, remainingContracts: o.remainingContracts,
+            contracts: o.contracts, filledContracts: o.filledContracts, limitPrice: o.limitPrice, oldReserve, reservedBalance: o.reservedBalance });
+          break;
+        }
         case "cancel-order": {
           const o = s.orders.find((o) => o.id === command.orderId); if (!o) fail("ORDER_NOT_ACTIVE", "Only active unfilled quantity can be cancelled");
           cancel(s, events, o, "user"); break;

@@ -363,3 +363,43 @@ test('changing every unseen candle cannot alter an amendment or its reserve',()=
   const run=source=>{const e=engine(source);const state=act(e,e.create(),{type:'limit-open',side:'long',contracts:'2',limitPrice:'49000'});return e.apply(state,{type:'amend-limit',orderId:1,limitPrice:'49500'});};
   assert.deepEqual(run(original),run(altered));
 });
+
+
+for(const side of ['long','short']) test(`remaining ${side} quantity amendment preserves partial fills and uses only unseen minutes`,()=>{
+  const source=sample();set(source,'last',0,{volumeContracts:'2'});
+  const e=engine(source),protection={stopLoss:{price:side==='long'?'40000':'60000',reference:'mark'}};
+  let state=act(e,e.create(),{type:'limit-open',side,contracts:'4',limitPrice:'50000',protection});
+  state=advance(e,state).state;const before=clone(state);
+  assert.equal(state.orders[0].filledContracts,'2');assert.equal(state.orders[0].remainingContracts,'2');
+  for(const remaining of ['1','3']) {
+    const result=e.apply(state,{type:'amend-quantity',orderId:1,remainingContracts:remaining}),after=result.state,o=after.orders[0];
+    assert.deepEqual(state,before);assert.equal(o.filledContracts,'2');assert.equal(o.remainingContracts,remaining);assert.equal(o.contracts,String(2+Number(remaining)));
+    assert.equal(o.limitPrice,'50000');assert.deepEqual(o.attachedProtection,before.orders[0].attachedProtection);
+    assert.deepEqual(after.account.position,before.account.position);assert.deepEqual(after.protection,before.protection);assert.deepEqual(after.totals,before.totals);
+    assert.equal(after.elapsedMinutes,before.elapsedMinutes);assert.equal(o.resting,false);bridge(after);
+    assert.equal(new D(after.reservedBalance).cmp(before.reservedBalance),Number(remaining)<2?-1:1);
+    assert.equal(result.events[0].type,'order-quantity-amended');assert.equal(result.events[0].oldRemainingContracts,'2');assert.equal(result.events[0].filledContracts,'2');
+    const next=advance(e,after);assert.equal(fills(next)[0].quote.contracts,remaining);assert.equal(next.state.account.position.contracts,String(2+Number(remaining)));bridge(next.state);
+  }
+});
+
+test('quantity amendments reject invalid size or insufficient cash atomically and preserve sibling closes',()=>{
+  const e=engine();let s=act(e,e.create({startingCash:'101'}),{type:'limit-open',side:'long',contracts:'1',limitPrice:'49000'}),before=clone(s);
+  for(const remainingContracts of ['0','0.001','-1','100000001','2']) {
+    assert.throws(()=>e.apply(s,{type:'amend-quantity',orderId:1,remainingContracts}));assert.deepEqual(s,before);
+  }
+  assert.throws(()=>e.apply(s,{type:'amend-quantity',orderId:1,remainingContracts:'1'}),error('UNCHANGED_ORDER_QUANTITY'));
+  assert.throws(()=>e.apply(s,{type:'amend-quantity',orderId:99,remainingContracts:'1'}),error('ORDER_NOT_ACTIVE'));
+  s=opened(e,{contracts:'3'});s=act(e,s,{type:'limit-close',contracts:'1',limitPrice:'51000'});s=act(e,s,{type:'limit-close',contracts:'1',limitPrice:'52000'});before=clone(s);
+  const target=s.orders[0],sibling=s.orders[1];
+  assert.throws(()=>e.apply(s,{type:'amend-quantity',orderId:target.id,remainingContracts:'3'}),error('OVER_REDUCTION'));assert.deepEqual(s,before);
+  const after=act(e,s,{type:'amend-quantity',orderId:target.id,remainingContracts:'2'});
+  assert.deepEqual(after.orders.find(o=>o.id===sibling.id),sibling);assert.deepEqual(after.account.position,s.account.position);bridge(after);
+});
+
+test('pending market quantity amendment executes only the confirmed remaining quantity on advance',()=>{
+  const e=engine();let s=act(e,e.create(),{type:'market-open',side:'short',contracts:'1'});
+  s=act(e,s,{type:'amend-quantity',orderId:1,remainingContracts:'2'});
+  assert.equal(s.elapsedMinutes,0);assert.equal(s.account.position,null);assert.equal(s.orders[0].filledContracts,'0');bridge(s);
+  const next=advance(e,s);assert.equal(next.state.account.position.contracts,'2');assert.equal(next.state.account.position.side,'short');bridge(next.state);
+});
