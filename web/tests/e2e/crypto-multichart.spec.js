@@ -1189,6 +1189,11 @@ test('position and activity money stays compact with full precision while prices
   await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
   const panel=page.getByTestId('crypto-risk');
   const display=value=>Number(value)!==0&&Math.abs(Number(value))<0.01?(Number(value)<0?'-<0.01':'<0.01'):Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  for(const [testId,value] of [['crypto-equity',session.summary.accountEquity],['crypto-available',session.account.availableBalance],['crypto-reserved',session.reservedBalance],['crypto-net-summary',session.summary.netPnl]]) {
+    await expect(page.getByTestId(testId)).toHaveText(display(value));
+    await expect(page.getByTestId(testId)).toHaveAttribute('title',String(value));
+  }
+  expect(Number(session.summary.netPnl)).toBeLessThan(0);expect(Number(session.summary.netPnl)).toBeGreaterThan(-0.01);
   await expect(panel.getByTestId('crypto-margin')).toHaveText(display(session.account.position.marginBalance));
   await expect(panel.getByTestId('crypto-margin')).toHaveAttribute('title',session.account.position.marginBalance);
   await expect(panel.locator('.crypto-position-pnl strong')).toHaveText(display(session.risk.unrealizedPnl));
@@ -1223,6 +1228,9 @@ test('position and activity money stays compact with full precision while prices
     }
     expect(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
   }
+  await page.getByTestId('crypto-account').scrollIntoViewIfNeeded();
+  await page.getByTestId('crypto-account').screenshot({path:test.info().outputPath('account-money-mobile.png')});
+  expect(await page.getByTestId('crypto-account').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
   expect(commands).toHaveLength(0);
   const after=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(after).toEqual(session);
