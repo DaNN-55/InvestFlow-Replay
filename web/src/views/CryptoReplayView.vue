@@ -35,7 +35,7 @@ const orderEditDraft=computed(()=>orderEditor.value?createOrderDraft(orderEditor
 const orderEditBody=computed(()=>orderEditDraft.value?orderDraftCommand(s.value,orderEditDraft.value):null);
 const orderPreviewReady=computed(()=>Boolean(orderEditBody.value&&orderPreview.value?.key===JSON.stringify(orderEditBody.value)&&!orderPreviewBusy.value&&!orderPreviewError.value));
 const fundingAmount=value=>Number(value)>0&&Number(value)<0.01?'<0.01':amount(value,2);
-const availableBalanceAmount=value=>Number(value)<0&&Number(value)>-0.01?'缺口 <0.01':amount(value,2);
+const availableBalanceAmount=value=>Number(value)<0&&Number(value)>-0.01?'缺口 <0.01':fundingAmount(value);
 const orderCanConfirm=computed(()=>orderPreviewReady.value&&orderPreview.value.funds.affordable===true&&orderPreview.value.changed!==false);
 const orderChartDraft=computed(()=>orderEditDraft.value?.order.type==='limit'&&(orderEditDraft.value.price!==orderEditDraft.value.order.limitPrice||orderEditDraft.value.remainingContracts!==orderEditDraft.value.order.remainingContracts)?orderEditDraft.value:priceDraft.value);
 function clearOrderEditor() {orderPreviewGeneration++;orderEditor.value=null;orderEditPrice.value='';orderEditQuantity.value='';orderPreview.value=null;orderPreviewBusy.value=false;orderPreviewError.value='';}
