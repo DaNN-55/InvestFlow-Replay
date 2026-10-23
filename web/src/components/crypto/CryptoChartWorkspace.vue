@@ -4,6 +4,8 @@ import { Grid2X2, LocateFixed, Maximize2, PanelRightClose, PanelRightOpen } from
 import CandlestickChart from '../CandlestickChart.vue';
 import UiSelect from '../ui/UiSelect.vue';
 import UiButton from '../ui/UiButton.vue';
+import UiTooltip from '../ui/UiTooltip.vue';
+import { repriceProtectionLine, cryptoProtectionEstimate, formatProtectionEstimate } from '../../utils/cryptoProtectionEstimate.js';
 import { priceDraftCurrent, priceDraftReached } from '../../utils/cryptoPriceDraft.js';
 import { CRYPTO_PERIODS, cryptoChartBars, cryptoChartLines } from '../../utils/cryptoReplayPresentation.js';
 import { REPLAY_RISE_COLOR, REPLAY_FALL_COLOR } from '../../utils/replayKlineConfig.js';
@@ -25,9 +27,10 @@ const models=computed(()=>prefs.value.periods.map((period,i)=>{
     cancelLabel:line.orderId!=null?`限价委托 #${line.orderId}，${line.price}`:`${line.protectionLeg==='stopLoss'?'自动止损':'自动止盈'}，${line.price}`,
   }));
   const base=props.priceDraft&&lines.find(line=>props.priceDraft.kind==='order'?line.orderId===props.priceDraft.orderId:line.protectionLeg===props.priceDraft.leg);
-  if(base) lines.push({...base,id:`${base.id}:draft`,price:props.priceDraft.price,label:`待确认${props.priceDraft.kind==='order'?'委托':props.priceDraft.leg==='stopLoss'?'止损':'止盈'}`,draggable:false,cancellable:false,protectionLeg:null,orderId:null,dashed:true,preview:true});
+  if(base) lines.push({...repriceProtectionLine(base,props.priceDraft.price),id:`${base.id}:draft`,price:props.priceDraft.price,label:`待确认${props.priceDraft.kind==='order'?'委托':props.priceDraft.leg==='stopLoss'?'止损':'止盈'}`,draggable:false,cancellable:false,protectionLeg:null,orderId:null,dashed:true,preview:true});
   return { bars, lines, showVolume:bars.length>0&&bars.every(bar=>bar.volume!=null) };
 }));
+const draftEstimate=computed(()=>props.priceDraft&&props.priceDraft.kind!=='order'?formatProtectionEstimate(cryptoProtectionEstimate(props.session,props.priceDraft.price)):'');
 function drag(index,event) {clearCrosshair();draggingIndex.value=event.phase==='start'?index:null;emit('price-drag',event);}
 function escape() {menu.value=false;maximized.value=null;if(props.priceDraft&&!props.busy) emit('cancel-price');}
 function patch(value) { emit('update:modelValue',{...prefs.value,...value}); }
@@ -55,6 +58,7 @@ onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside));
       <div class="crypto-period-shortcuts"><button v-for="p in [5,15,60,240]" :key="p" type="button" :aria-pressed="prefs.periods[selected]===p" :disabled="busy" @click="period(p)">{{ CRYPTO_PERIODS.find(([n])=>n===p)[1] }}</button></div>
       <UiSelect :model-value="prefs.periods[selected]" aria-label="选中图周期" :disabled="busy" @update:model-value="period"><option v-for="[v,label] in CRYPTO_PERIODS" :key="v" :value="v">{{ label }}</option></UiSelect>
       <UiSelect :model-value="prefs.kinds[selected]" aria-label="选中图价格类型" @update:model-value="kind"><option value="last">最新价</option><option value="mark">标记价格</option></UiSelect>
+      <UiTooltip clickable wide label="止盈止损估算说明" content="预计金额是假设剩余持仓全部按标签价格退出的价格盈亏，不含手续费、滑点和资金费；收益率＝预计盈亏÷剩余开仓保证金基准（剩余入场成本÷本局杠杆）。追加保证金不改变分母。标记价触发不等于成交价，实际成交和强平结果可能不同。" />
       <button class="crypto-icon" type="button" title="回到当前" aria-label="回到当前" @click="charts.forEach(chart=>chart.latest())"><LocateFixed :size="17" /></button>
       <button class="crypto-icon" type="button" title="图表布局与联动" aria-label="图表布局与联动" :aria-expanded="menu" @click="menu=!menu"><Grid2X2 :size="17" /></button>
       <button class="crypto-icon" type="button" title="放大选中图 / 恢复布局" aria-label="放大选中图或恢复布局" @click="maximized=maximized==null?selected:null"><Maximize2 :size="17" /></button>
@@ -66,7 +70,7 @@ onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside));
       </div>
     </header>
     <section v-if="priceDraft" class="crypto-protection-confirm" :aria-label="priceDraft.kind==='order'?'确认限价委托调整':'确认止盈止损调整'">
-      <div><strong>{{ priceDraft.kind==='order'?'委托价':priceDraft.leg==='stopLoss'?'止损':'止盈' }} {{ priceDraft.oldPrice }} → {{ priceDraft.price }}</strong><small v-if="priceDraft.kind!=='order'">{{ priceDraft.protection[priceDraft.leg].reference==='mark'?'标记价格':'最新价' }}触发 · {{ priceDraft.position.contracts }} 张 · 原保护在确认前仍有效</small><small v-else>委托 #{{ priceDraft.orderId }} · 未成交 {{ priceDraft.order.remainingContracts }} 张 · 确认前原委托仍有效</small><p v-if="priceDraftReached(session,priceDraft)" role="status">{{ priceDraft.kind==='order'?'新价格已越过当前价，下一分钟可能按吃单成交。':'新价格已在触发侧，确认后下一分钟可能立即退出。' }}</p></div>
+      <div><strong>{{ priceDraft.kind==='order'?'委托价':priceDraft.leg==='stopLoss'?'止损':'止盈' }} {{ priceDraft.oldPrice }} → {{ priceDraft.price }}</strong><small v-if="draftEstimate" data-testid="crypto-protection-draft-estimate">{{ draftEstimate }}</small><small v-if="priceDraft.kind!=='order'">{{ priceDraft.protection[priceDraft.leg].reference==='mark'?'标记价格':'最新价' }}触发 · {{ priceDraft.position.contracts }} 张 · 原保护在确认前仍有效</small><small v-else>委托 #{{ priceDraft.orderId }} · 未成交 {{ priceDraft.order.remainingContracts }} 张 · 确认前原委托仍有效</small><p v-if="priceDraftReached(session,priceDraft)" role="status">{{ priceDraft.kind==='order'?'新价格已越过当前价，下一分钟可能按吃单成交。':'新价格已在触发侧，确认后下一分钟可能立即退出。' }}</p></div>
       <div class="crypto-protection-confirm-actions"><UiButton variant="secondary" :disabled="busy" @click="emit('cancel-price')">取消调整</UiButton><UiButton :disabled="busy||blocked||!priceDraftCurrent(session,priceDraft)" @click="emit('confirm-price')">确认生效</UiButton></div>
     </section>
     <div class="crypto-chart-grid" :class="maximized==null?prefs.layout:'single'" @pointerleave="clearCrosshair">

@@ -128,7 +128,7 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
       </button>
     </div>
     <ul v-if="priceLines.length" class="replay-price-lines" :class="{'replay-price-lines--compact':compact}" aria-label="当前图表状态线">
-      <li v-for="line in priceLines" :key="line.id" :data-price-line-id="line.id" :data-price-line-value="line.price" :data-price-line-quantity="line.contracts"><span :style="{ borderColor: line.color, borderStyle: line.dashed ? 'dashed' : 'solid' }" />{{ line.label }} · {{ line.price }}<button v-if="line.cancellable" type="button" :aria-label="`撤销${line.cancelLabel}`" @click="emit('price-line-cancel',{orderId:line.orderId,leg:line.protectionLeg})">×</button></li>
+      <li v-for="line in priceLines" :key="line.id" :data-price-line-id="line.id" :data-price-line-value="line.price" :data-price-line-quantity="line.contracts"><span :style="{ borderColor: line.color, borderStyle: line.dashed ? 'dashed' : 'solid' }" />{{ line.label }} · {{ line.price }}<small v-if="line.estimateText">{{ line.estimateText }}</small><button v-if="line.cancellable" type="button" :aria-label="`撤销${line.cancelLabel}`" @click="emit('price-line-cancel',{orderId:line.orderId,leg:line.protectionLeg})">×</button></li>
     </ul>
     <div
       ref="host"
