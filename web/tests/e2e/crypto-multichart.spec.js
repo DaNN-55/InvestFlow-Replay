@@ -30,7 +30,7 @@ async function openPractice(page,request,preferences={}) {
     if(!localStorage.getItem('investflow-crypto-workspace-v1')) localStorage.setItem('investflow-crypto-workspace-v1',JSON.stringify({layout:'quad',periods:[60,5,15,240],...preferences}));
   },{id:session.id,preferences});
   await page.goto(`${base}/decision/crypto-replay?session=${session.id}`);
-  await expect(page.locator('.crypto-chart-tile')).toHaveCount(preferences.layout==='dual'?2:4,{timeout:15000});
+  await expect(page.locator('.crypto-chart-tile')).toHaveCount(preferences.layout==='single'?1:['dual','rows'].includes(preferences.layout)?2:4,{timeout:15000});
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
   return {id:session.id,reads,advances,commands};
 }
@@ -1402,4 +1402,86 @@ test('leaving a kept-alive confirmation discards late previews without reopening
     await dialog.getByRole('button',{name:'取消调整',exact:true}).click();expect(commands).toHaveLength(0);
     expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
   } finally {release();}
+});
+
+function observeReadTraffic(page) {
+  const traffic=[];
+  page.on('request',request=>{
+    const url=new URL(request.url());
+    if(url.pathname.startsWith('/api/quant/replay/')) traffic.push({path:url.pathname,params:Object.fromEntries(url.searchParams),method:request.method()});
+  });
+  return traffic;
+}
+const auditTraffic=traffic=>traffic.filter(row=>/\/(ledger|traces)$/.test(row.path));
+const directoryCount=traffic=>traffic.filter(row=>row.path===path||row.path.endsWith('/crypto-pool')).length;
+
+test('period-only reads reuse audits and actions append from verified cursors while directories keep refreshing',async({page,request})=>{
+  const traffic=observeReadTraffic(page),{id,advances}=await openPractice(page,request,{layout:'single',periods:[5,5,5,5]});
+  const audits=auditTraffic(traffic).length,directories=directoryCount(traffic);
+  await page.getByRole('combobox',{name:'选中图周期'}).selectOption('15');
+  await expect(page.locator('.crypto-chart-tile header b')).toHaveText('15min');await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  expect(auditTraffic(traffic)).toHaveLength(audits);expect(directoryCount(traffic)).toBe(directories+2);
+  await page.getByRole('button',{name:'推进 1 分钟',exact:true}).click();await expect.poll(()=>advances.length).toBe(1);
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const added=auditTraffic(traffic).slice(audits);expect(added).toHaveLength(2);
+  expect(added.find(row=>row.path.endsWith('/ledger')).params.after).toBe('0');expect(added.find(row=>row.path.endsWith('/traces')).params.after).toBe('0');
+  expect(directoryCount(traffic)).toBe(directories+4);
+  const current=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;expect(current.revision).toBe(1);expect(current.elapsedMinutes).toBe(1);
+});
+
+test('an acknowledged advance with a failed read preserves the old complete screen and locks new writes until recovery',async({page,request})=>{
+  const {id,advances}=await openPractice(page,request,{layout:'single',periods:[5,5,5,5]});
+  const before=await nativeCharts(page),equity=await page.getByTestId('crypto-equity').textContent();
+  await page.route('**/market?**',route=>route.abort('failed'),{times:1});
+  await page.getByRole('button',{name:'推进 1 分钟',exact:true}).click();await expect(page.getByTestId('crypto-read-stale')).toBeVisible();
+  expect(advances).toHaveLength(1);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session.revision).toBe(1);
+  expect((await nativeCharts(page)).map(chart=>chart.data)).toEqual(before.map(chart=>chart.data));
+  await expect(page.getByTestId('crypto-equity')).toHaveText(equity);await expect(page.locator('.crypto-playback strong')).toHaveText('第1天 00:00');
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'新开一局',exact:true})).toBeDisabled();
+  await page.setViewportSize({width:390,height:953});await page.screenshot({path:test.info().outputPath('stale-read-390.png'),fullPage:true});
+  await page.getByRole('button',{name:'重新同步',exact:true}).click();await expect(page.getByTestId('crypto-read-stale')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();await expect(page.locator('.crypto-playback strong')).toHaveText('第1天 00:01');
+  expect(advances).toHaveLength(1);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session.revision).toBe(1);
+});
+
+test('a failed period read retains the prior chart period and bars until the requested period can load',async({page,request})=>{
+  await openPractice(page,request,{layout:'single',periods:[5,5,5,5]});const before=(await nativeCharts(page))[0];
+  await page.route('**/market?**',route=>route.abort('failed'),{times:1});
+  await page.getByRole('combobox',{name:'选中图周期'}).selectOption('15');await expect(page.getByTestId('crypto-read-stale')).toBeVisible();
+  await expect(page.locator('.crypto-chart-tile header b')).toHaveText('5min');expect((await nativeCharts(page))[0].data).toEqual(before.data);
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeDisabled();
+  await page.screenshot({path:test.info().outputPath('stale-period-desktop.png')});
+  await page.getByRole('button',{name:'重新同步',exact:true}).click();await expect(page.getByTestId('crypto-read-stale')).toHaveCount(0);
+  await expect(page.locator('.crypto-chart-tile header b')).toHaveText('15min');await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+});
+
+test('a concurrent audit revision discards its batch and retries reads once without extra directory refreshes or writes',async({page,request})=>{
+  const traffic=observeReadTraffic(page),{id,advances}=await openPractice(page,request,{layout:'single',periods:[5,5,5,5]});
+  const first=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:0,command:{type:'set-plan',mode:'none',reason:'另一窗口第一次更新'}}});expect(first.status()).toBe(200);
+  const directories=directoryCount(traffic);let changed=false;
+  await page.route('**/ledger?**',async route=>{
+    if(changed) return route.fallback();changed=true;
+    const second=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:1,command:{type:'set-plan',mode:'manual',manualExitPrice:'49000',reason:'另一窗口第二次更新'}}});expect(second.status()).toBe(200);
+    const url=new URL(route.request().url()),response=await route.fetch({url:`${fixture.url}${url.pathname}${url.search}`});await route.fulfill({response});
+  },{times:1});
+  await page.getByRole('combobox',{name:'选中图周期'}).selectOption('15');await expect(page.getByTestId('crypto-risk').locator('[data-risk-mode]')).toHaveAttribute('data-risk-mode','manual');
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();expect(directoryCount(traffic)).toBe(directories+2);
+  await expect(page.getByTestId('crypto-read-stale')).toHaveCount(0);
+  await page.getByRole('button',{name:'推进 1 分钟',exact:true}).click();await expect.poll(()=>advances.length).toBe(1);expect(advances[0].body.expectedRevision).toBe(2);
+});
+
+test('an original pending action remains retryable after reload even when its read batch fails',async({page,request})=>{
+  const {id,session}=await protectedPractice(page,request);await dragProtection(page,0,`${id}:stopLoss`,49920);
+  let original;
+  await page.route('**/api/quant/replay/sessions/*/actions',async route=>{
+    original=route.request().postDataJSON();const response=await route.fetch({url:`${fixture.url}${path}/${id}/actions`});expect(response.status()).toBe(200);await route.abort('failed');
+  },{times:1});
+  await page.getByRole('button',{name:'确认生效',exact:true}).click();await expect(page.getByRole('button',{name:'重试原动作',exact:true})).toBeVisible();
+  const committed=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  await page.route('**/market?**',route=>route.abort('failed'),{times:1});await page.reload();
+  await expect(page.getByTestId('crypto-read-stale')).toBeVisible();await expect(page.getByRole('button',{name:'重试原动作',exact:true})).toBeVisible();
+  expect((await page.evaluate(()=>JSON.parse(localStorage.getItem('investflow-crypto-attempt-v1')).pending)).body).toEqual(original);
+  await page.getByRole('button',{name:'重试原动作',exact:true}).click();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await expect(page.getByTestId('crypto-read-stale')).toHaveCount(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(committed);
+  expect(committed.revision).toBe(session.revision+1);
 });
