@@ -32,7 +32,7 @@ async function openHistory(page, { payload = group(), revealed = true, failOnce 
     return route.fulfill({ json: { items: [] } });
   });
   await page.goto(`${baseUrl}/decision/trade-records`);
-  await page.getByRole("button", { name: "历史演练", exact: true }).click();
+  await page.getByRole("button", { name: "演练记录", exact: true }).click();
   await expect(page.getByRole("button", { name: "首次与复练对照", exact: true })).toBeVisible();
   return () => calls;
 }

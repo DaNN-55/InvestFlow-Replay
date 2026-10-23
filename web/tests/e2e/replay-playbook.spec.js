@@ -88,12 +88,12 @@ test("战法库是独立一级标签且历史演练不再嵌套标签", async ({
 
   const primaryTabs = page.getByRole("navigation", { name: "交易追踪分类" });
   await expect(primaryTabs.getByRole("button", { name: "实盘与模拟", exact: true })).toBeVisible();
-  await expect(primaryTabs.getByRole("button", { name: "历史演练", exact: true })).toBeVisible();
+  await expect(primaryTabs.getByRole("button", { name: "演练记录", exact: true })).toBeVisible();
   await expect(primaryTabs.getByRole("button", { name: "战法库", exact: true })).toBeVisible();
 
-  await primaryTabs.getByRole("button", { name: "历史演练", exact: true }).click();
+  await primaryTabs.getByRole("button", { name: "演练记录", exact: true }).click();
   await expect(page.getByRole("navigation", { name: "历史演练内容" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "历史演练", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "历史演练列表", exact: true }).getByRole("heading", { name: "演练记录", exact: true })).toBeVisible();
 
   await primaryTabs.getByRole("button", { name: "战法库", exact: true }).click();
   await expect(page.getByRole("heading", { name: "测试战法", exact: true })).toBeVisible();
