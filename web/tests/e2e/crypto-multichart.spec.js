@@ -70,6 +70,16 @@ function assertProtectionEstimate(line,session) {
   expect(line.estimateText).toContain('USDT');expect(line.estimateText).toContain('%');
 }
 
+
+async function assertRewardRisk(page,session,preview=null) {
+  const p=session.account.position,sl=preview?.leg==='stopLoss'?preview.price:session.protection.stopLoss.price,tp=preview?.leg==='takeProfit'?preview.price:session.protection.takeProfit.price;
+  const expected=Math.abs((Number(tp)-Number(p.entryPrice))/(Number(sl)-Number(p.entryPrice)));
+  const summary=page.getByTestId('crypto-reward-risk');
+  await expect(summary).toHaveAttribute('data-preview',String(Boolean(preview)));
+  const ratio=Number(await summary.getAttribute('data-ratio'));expect(ratio).toBeCloseTo(expected,5);
+  await expect(summary).toContainText(`${ratio.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} : 1`);
+}
+
 function assertPrefixes(reads) {
   const supply=createCryptoScenarioView(cryptoTestDocument().scenario);
   for(const {params,body,status} of reads) {
@@ -381,13 +391,16 @@ for(const side of ['long','short']) test(`${side} protective drag previews only,
   const stopId=`${id}:stopLoss`,confirm=page.getByRole('region',{name:'确认止盈止损调整'});
   const getSession=async()=> (await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   const stopTarget=side==='long'?49920:50020;
+  await assertRewardRisk(page,session);
   await dragProtection(page,0,stopId,stopTarget,{release:false});
   const held=(await nativeCharts(page))[0].lines.find(l=>l.id===stopId);
   assertProtectionEstimate(held,session);expect(held.preview).toBe(true);
+  await assertRewardRisk(page,session,{leg:'stopLoss',price:held.price});
   expect((await getSession()).protection).toEqual(session.protection);
   expect(commands.length).toBe(0);
   await page.keyboard.press('Escape');await page.mouse.up();
   await expect(confirm).toHaveCount(0);
+  await assertRewardRisk(page,session);
   await dragProtection(page,0,stopId,stopTarget);
   await expect(confirm).toBeVisible();
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeDisabled();
@@ -397,6 +410,7 @@ for(const side of ['long','short']) test(`${side} protective drag previews only,
   const ghost=(await nativeCharts(page))[0].lines.find(l=>l.id===`${stopId}:draft`);
   expect(ghost.preview&&ghost.dashed).toBe(true);
   assertProtectionEstimate(ghost,session);
+  await assertRewardRisk(page,session,{leg:'stopLoss',price:ghost.price});
   await expect(page.getByTestId('crypto-protection-draft-estimate')).toHaveText(ghost.estimateText);
   expect((await nativeCharts(page))[0].lines.find(l=>l.id===stopId).price).toBe(Number(session.protection.stopLoss.price));
   if(side==='short') {await page.getByRole('button',{name:'取消调整',exact:true}).focus();await page.keyboard.press('Escape');}
@@ -405,10 +419,14 @@ for(const side of ['long','short']) test(`${side} protective drag previews only,
   expect(commands.length).toBe(0);
   for(const [index,leg,target] of [[0,'stopLoss',stopTarget],[1,'takeProfit',side==='long'?50020:49920]]) {
     const before=await getSession(),sibling=leg==='stopLoss'?'takeProfit':'stopLoss';
-    await dragProtection(page,index,`${id}:${leg}`,target);
+    await dragProtection(page,index,`${id}:${leg}`,target,{release:false});
+    const heldLeg=(await nativeCharts(page))[index].lines.find(l=>l.id===`${id}:${leg}`);
+    await assertRewardRisk(page,before,{leg,price:heldLeg.price});
+    await page.mouse.up();
     await expect(confirm).toBeVisible();
     const previewLine=(await nativeCharts(page))[index].lines.find(l=>l.id===`${id}:${leg}:draft`),price=previewLine.price;
     assertProtectionEstimate(previewLine,before);
+    await assertRewardRisk(page,before,{leg,price});
     expect(price).not.toBe(Number(before.protection[leg].price));
     await expect(confirm).toContainText(String(price));
     await page.screenshot({path:test.info().outputPath(`${leg}-draft.png`)});
@@ -425,6 +443,7 @@ for(const side of ['long','short']) test(`${side} protective drag previews only,
     expect(after.elapsedMinutes).toBe(before.elapsedMinutes);
     const applied=(await nativeCharts(page))[index].lines.find(l=>l.id===`${id}:${leg}`);
     expect(applied.estimate).toEqual(previewLine.estimate);
+    await assertRewardRisk(page,after);
   }
   const saved=await getSession();
   await dragProtection(page,0,stopId,side==='long'?49880:50040);
@@ -610,6 +629,7 @@ for(const side of ['long','short']) test(`${side} chart protection cancel confir
     expect(commands.at(-1).expectedRevision).toBe(before.revision);expect(after.elapsedMinutes).toBe(session.elapsedMinutes);expect(after.account.position).toEqual(session.account.position);
     expect(after.protection?.[leg]??null).toBe(null);
     if(leg==='stopLoss') expect(after.protection.takeProfit).toEqual(before.protection.takeProfit);
+    await expect(page.getByTestId('crypto-reward-risk')).toHaveCount(0);
     await expect.poll(async()=> (await nativeCharts(page)).every(c=>!c.lines.some(l=>l.id===`${id}:${leg}`))).toBe(true);
   }
 });
@@ -664,11 +684,11 @@ test('protection estimates follow remaining position and weighted entry without 
   const act=async command=>{const response=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:current.revision,command}});expect(response.status()).toBe(200);current=(await response.json()).session;};
   const sync=async()=>{await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();return (await nativeCharts(page))[0].lines.find(l=>l.id===`${id}:stopLoss`);};
   await act({type:'add-margin',amount:'500'});
-  const topped=await sync();expect(topped.estimate).toEqual(initial.estimate);
+  const topped=await sync();expect(topped.estimate).toEqual(initial.estimate);await assertRewardRisk(page,current);
   for(const command of [{type:'market-close',contracts:'0.5'},{type:'market-open',side:'long',contracts:'0.5'}]) {
     await act(command);const response=await request.post(`${fixture.url}${path}/${id}/advance`,{data:{actionId:crypto.randomUUID(),expectedRevision:current.revision,minutes:1}});
     expect(response.status()).toBe(200);current=(await response.json()).session;
-    const line=await sync();assertProtectionEstimate(line,current);
+    const line=await sync();assertProtectionEstimate(line,current);await assertRewardRisk(page,current);
     if(command.type==='market-close') {expect(line.estimate.pnl).toBeCloseTo(initial.estimate.pnl/2,6);expect(line.estimate.returnPercent).toBeCloseTo(initial.estimate.returnPercent,6);}
   }
   await page.getByRole('button',{name:'止盈止损估算说明',exact:true}).click();
@@ -677,4 +697,19 @@ test('protection estimates follow remaining position and weighted entry without 
   await page.keyboard.press('Escape');
   await page.screenshot({path:test.info().outputPath('protection-estimate.png')});
   assertPrefixes(reads);
+});
+
+for(const side of ['long','short']) test(`${side} reward/risk preview explains locked-profit stops and wrong-side take-profits instead of inventing a ratio`,async({page,request})=>{
+  const {id,session,commands}=await protectedPractice(page,request,side),summary=page.getByTestId('crypto-reward-risk');
+  for(const [index,leg,target,reason] of [[0,'stopLoss',side==='long'?50030:49950,'止损不在亏损区'],[1,'takeProfit',side==='long'?49980:50020,'止盈不在盈利区']]) {
+    await dragProtection(page,index,`${id}:${leg}`,target);
+    await expect(page.getByRole('region',{name:'确认止盈止损调整'})).toBeVisible();
+    await expect(summary).toContainText('—');await expect(summary).toContainText(reason);
+    await expect(summary).toHaveAttribute('data-preview','true');expect(await summary.getAttribute('data-ratio')).toBe(null);
+    await page.getByRole('button',{name:'取消调整',exact:true}).click();await assertRewardRisk(page,session);
+  }
+  expect(commands).toHaveLength(0);
+  await page.getByRole('button',{name:'预计盈亏比说明',exact:true}).click();
+  await expect(page.locator('.ui-tooltip__content')).toContainText('止盈预计盈利÷止损预计亏损');await page.keyboard.press('Escape');
+  await page.screenshot({path:test.info().outputPath('reward-risk.png')});
 });
