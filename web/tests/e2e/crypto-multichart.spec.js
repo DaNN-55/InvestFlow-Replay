@@ -778,3 +778,57 @@ test('position data and actions fit desktop and narrow panels without horizontal
   const details=page.getByRole('dialog',{name:'持仓详情与完整精度',exact:true});
   for(const label of ['标记价格','对应币数','风险率（≤100%触发）']) await expect(details.getByText(label,{exact:true})).toBeVisible();
 });
+
+
+test('compact order and fill rows keep prices quantities and cancellation usable on narrow screens',async({page,request})=>{
+  const {id,session,order,commands}=await limitPractice(page,request,'long','reduce');
+  const panel=page.getByTestId('crypto-risk');
+  await panel.getByRole('button',{name:'当前委托',exact:false}).click();
+  await expect(panel.locator('.crypto-activity-row')).toHaveCount(2);
+  const first=panel.locator('.crypto-activity-row').first();
+  await expect(first).toContainText('平多');await expect(first).toContainText('50,050.0000');
+  await first.getByRole('button',{name:'委托详情',exact:true}).focus();await page.keyboard.press('Enter');
+  let dialog=page.getByRole('dialog',{name:'委托详情',exact:true});
+  await expect(dialog).toContainText(String(order.id));await expect(dialog).toContainText('冻结资金');
+  expect(commands).toHaveLength(0);await page.keyboard.press('Escape');
+  const amended=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,command:{type:'amend-limit',orderId:order.id,limitPrice:'50060'}}});
+  expect(amended.status()).toBe(200);await page.reload();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await panel.getByRole('button',{name:'历史委托',exact:true}).click();
+  const history=panel.locator('.crypto-activity-row');
+  await expect(history.nth(2)).toContainText('50,050.0000');
+  await expect(history.last()).toContainText('50,060.0000');
+  await history.last().getByRole('button',{name:'委托详情',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'委托详情',exact:true})).toContainText('原委托价');
+  await page.keyboard.press('Escape');
+  for(const width of [1543,1280,900,768,390,320]) {
+    await page.setViewportSize({width,height:953});
+    for(const tab of ['当前委托','历史委托','成交']) {
+      await panel.getByRole('button',{name:tab,exact:false}).click();
+      await expect(panel.locator('.crypto-activity-row').first()).toBeVisible();
+      await expect.poll(()=>panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+      const boxes=await panel.locator('.crypto-activity-row').first().evaluate(el=>[...el.querySelectorAll('.crypto-activity-value,.crypto-activity-actions')].map(node=>{const r=node.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right};}));
+      expect(Math.max(...boxes.map(b=>b.top))).toBeLessThan(Math.min(...boxes.map(b=>b.bottom)));
+      expect(boxes[0].left).toBeGreaterThanOrEqual(0);expect(boxes.at(-1).right).toBeLessThanOrEqual(width);
+      if(width===390||width===1543) await panel.screenshot({path:test.info().outputPath(`${tab}-${width}.png`)});
+    }
+  }
+  await panel.getByRole('button',{name:'成交',exact:true}).click();
+  const fill=panel.locator('.crypto-activity-row').first();
+  await expect(fill).toContainText('开多');await expect(fill).toContainText('成交量');
+  await expect(fill).not.toContainText('手续费');
+  await fill.getByRole('button',{name:'成交详情',exact:true}).click();
+  dialog=page.getByRole('dialog',{name:'成交详情',exact:true});
+  await expect(dialog).toContainText('手续费');await expect(dialog).toContainText('时间');await page.keyboard.press('Escape');
+  await panel.getByRole('button',{name:'当前委托',exact:false}).click();
+  await panel.locator('.crypto-activity-row').filter({hasText:'50,060.0000'}).getByRole('button',{name:'撤单',exact:true}).click();
+  await expect(panel.locator('.crypto-activity-row')).toHaveCount(1);
+  expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'cancel-order',orderId:order.id});
+  const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(latest.orders.map(o=>o.id)).toEqual(session.orders.filter(o=>o.id!==order.id).map(o=>o.id));
+  await panel.getByRole('button',{name:'历史委托',exact:true}).click();
+  const cancelled=panel.locator('.crypto-activity-row').last();
+  await expect(cancelled).toContainText('委托已撤');await expect(cancelled).toContainText('50,060.0000');
+  await cancelled.getByRole('button',{name:'委托详情',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'委托详情',exact:true})).toContainText('手动撤单');
+});
