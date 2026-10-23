@@ -55,7 +55,7 @@ async function nativeCharts(page) {
         colors:{rise:chart.getStyles().candle.bar.upColor,fall:chart.getStyles().candle.bar.downColor,volumeRise:volumeFigure?.styles({current:{kLineData:{open:1,close:2}}})?.color,volumeFall:volumeFigure?.styles({current:{kLineData:{open:2,close:1}}})?.color},
         lines:[...tile.querySelectorAll('[data-price-line-id]')].map(node=>{
           const overlay=chart.getOverlayById(node.dataset.priceLineId);
-          return {id:node.dataset.priceLineId,exists:!!overlay,price:overlay?.points?.[0]?.value,label:overlay?.extendData?.label,contracts:overlay?.extendData?.contracts,dashed:overlay?.extendData?.dashed,background:overlay?.extendData?.background,estimate:overlay?.extendData?.estimate,estimateText:overlay?.extendData?.estimateText,draggable:overlay?!overlay.lock:false,preview:!!overlay?.extendData?.preview};
+          return {id:node.dataset.priceLineId,exists:!!overlay,price:overlay?.points?.[0]?.value,label:overlay?.extendData?.label,contracts:overlay?.extendData?.contracts,dashed:overlay?.extendData?.dashed,background:overlay?.extendData?.background,estimate:overlay?.extendData?.estimate,estimateText:overlay?.extendData?.estimateText,moneyTitle:overlay?.extendData?.moneyTitle,compactLabel:overlay?.extendData?.compactLabel,draggable:overlay?!overlay.lock:false,preview:!!overlay?.extendData?.preview};
         })};
     });
   });
@@ -354,10 +354,10 @@ for(const side of ['long','short']) test(`${side} position and protective lines 
   await expect(order.getByRole('button',{name:'买入 / 做多',exact:true}).first()).toHaveAttribute('aria-pressed','true');
 });
 
-async function protectedPractice(page,request,side='long') {
+async function protectedPractice(page,request,side='long',contracts='1') {
   const practice=await openPractice(page,request,{layout:'dual',periods:[5,5,15,240],kinds:['last','mark','last','last']});
   const protection={stopLoss:{price:side==='long'?'49950':'50050',reference:'last'},takeProfit:{price:side==='long'?'50050':'49950',reference:'mark'}};
-  const placed=await request.post(`${fixture.url}${path}/${practice.id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:0,command:{type:'market-open',side,contracts:'1',protection}}});
+  const placed=await request.post(`${fixture.url}${path}/${practice.id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:0,command:{type:'market-open',side,contracts,protection}}});
   expect(placed.status()).toBe(200);
   const advanced=await request.post(`${fixture.url}${path}/${practice.id}/advance`,{data:{actionId:crypto.randomUUID(),expectedRevision:1,minutes:1}});
   expect(advanced.status()).toBe(200);
@@ -367,7 +367,7 @@ async function protectedPractice(page,request,side='long') {
   return {...practice,session:(await advanced.json()).session};
 }
 
-async function dragProtection(page,index,id,targetPrice,{release=true}={}) {
+async function dragProtection(page,index,id,targetPrice,{release=true,hoverOnly=false}={}) {
   await page.locator(`[data-chart-index="${index}"]`).scrollIntoViewIfNeeded();
   const points=await page.evaluate(async({index,id,targetPrice})=>{
     const moduleUrl=performance.getEntriesByType('resource').find(e=>/\/klinecharts\.js\?v=/.test(e.name)).name;
@@ -381,6 +381,7 @@ async function dragProtection(page,index,id,targetPrice,{release=true}={}) {
     return {x:box.x+tag.attrs.x+35,y:box.y+tag.attrs.y,toY:box.y+tag.attrs.y+yAxis.convertToPixel(targetPrice)-originalY};
   },{index,id,targetPrice});
   await page.mouse.move(points.x,points.y);
+  if(hoverOnly) return;
   await page.mouse.down();
   await page.mouse.move(points.x,points.toY,{steps:8});
   if(release) await page.mouse.up();
@@ -1274,4 +1275,39 @@ test('completed crypto review and trade history share compact money with raw hov
   }
   expect(commands).toHaveLength(0);
   const after=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;expect(after).toEqual(session);
+});
+
+for(const side of ['long','short']) test(`${side} chart money labels retain sub-cent PnL and hover precision during protective previews`,async({page,request})=>{
+  const {id,session,commands}=await protectedPractice(page,request,side,'0.01');
+  const host=index=>page.locator(`[data-chart-index="${index}"] [k-line-chart-id]`);
+  const display=value=>Number(value)===0?'0.00':Math.abs(Number(value))<0.01?(Number(value)<0?'-<0.01':'<0.01'):Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const positionId=`${id}:position`;
+  await dragProtection(page,0,positionId,Number(session.account.position.entryPrice),{hoverOnly:true});
+  await expect(host(0)).toHaveAttribute('title',`${session.risk.unrealizedPnl} USDT`);
+  const entry=(await nativeCharts(page))[0].lines.find(l=>l.id===positionId);
+  expect(entry.compactLabel).toContain(`${display(session.risk.unrealizedPnl)} USDT`);
+  for(const [index,leg,target] of [[0,'stopLoss',side==='long'?49995:50015],[1,'takeProfit',side==='long'?50025:49995]]) {
+    const lineId=`${id}:${leg}`;
+    await dragProtection(page,index,lineId,target,{hoverOnly:true});
+    const original=(await nativeCharts(page))[index].lines.find(l=>l.id===lineId);
+    await expect(host(index)).toHaveAttribute('title',`${original.estimate.pnl} USDT`);
+    await dragProtection(page,index,lineId,target,{release:false});
+    const moving=(await nativeCharts(page))[index].lines.find(l=>l.id===lineId);
+    expect(moving.preview).toBe(true);expect(moving.compactLabel).toContain(`${display(moving.estimate.pnl)} USDT`);
+    expect(moving.moneyTitle).toBe(`${moving.estimate.pnl} USDT`);
+    await expect(host(index)).toHaveAttribute('title',moving.moneyTitle);
+    await page.mouse.up();
+    const draftId=`${lineId}:draft`;
+    await expect.poll(async()=> (await nativeCharts(page))[index].lines.some(l=>l.id===draftId)).toBe(true);
+    const draft=(await nativeCharts(page))[index].lines.find(l=>l.id===draftId);
+    expect(Math.abs(draft.estimate.pnl)).toBeLessThan(0.01);expect(draft.estimate.pnl).not.toBe(0);
+    expect(draft.compactLabel).toContain(`${display(draft.estimate.pnl)} USDT`);
+    await dragProtection(page,index,draftId,draft.price,{hoverOnly:true});
+    await expect(host(index)).toHaveAttribute('title',draft.moneyTitle);
+    const current=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+    expect(current).toEqual(session);expect(commands).toHaveLength(0);
+    if(leg==='takeProfit') await page.screenshot({path:test.info().outputPath(`${side}-tiny-chart-preview.png`)});
+    await page.keyboard.press('Escape');await page.mouse.move(1,1);
+    await expect(host(index)).not.toHaveAttribute('title',draft.moneyTitle);
+  }
 });

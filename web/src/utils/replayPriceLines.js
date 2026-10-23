@@ -23,10 +23,10 @@ export const REPLAY_PRICE_LINE_OVERLAY = {
     const y=Math.max(12,Math.min(bounding.height-(line.estimateText&&!line.compactLabel?12+estimateHeight:12),tagPosition(line,yAxis,bounding.height,edgeY,estimateHeight)));
     const displaced=Math.abs(y-point.y)>2;
     const tag={ key:'price-tag',type:'text',attrs:{x:8,y,text:`${line.draggable&&!line.compactLabel?'↕ ':''}${outside?(point.y<0?'↑ ':'↓ '):''}${line.compactLabel??line.label}${outside||displaced||line.preview?` @ ${line.price}`:''}`,align:'left',baseline:'middle'},
-      styles:{style:'stroke_fill',color:line.color,size:11,backgroundColor:line.background??'#ffffff',borderColor:line.color,borderSize:1,borderRadius:3,paddingLeft:5,paddingRight:5,paddingTop:3,paddingBottom:3},ignoreEvent:!line.draggable };
+      styles:{style:'stroke_fill',color:line.color,size:11,backgroundColor:line.background??'#ffffff',borderColor:line.color,borderSize:1,borderRadius:3,paddingLeft:5,paddingRight:5,paddingTop:3,paddingBottom:3},ignoreEvent:!line.draggable&&!line.moneyTitle };
     const cancel=line.cancellable?[{key:'price-cancel',type:'text',attrs:{x:tag.attrs.x+line.measureLabel(tag.attrs.text)+16,y,text:'×',align:'left',baseline:'middle'},
       styles:{...tag.styles,size:13,paddingLeft:5,paddingRight:5},ignoreEvent:false}]:[];
-    const estimate=estimateRows.map((text,i)=>({key:`price-estimate-${i}`,type:'text',attrs:{x:8,y:y+17*(i+1),text:i?`收益率 ${text}`:text,align:'left',baseline:'middle'},styles:tag.styles,ignoreEvent:!line.draggable}));
+    const estimate=estimateRows.map((text,i)=>({key:`price-estimate-${i}`,type:'text',attrs:{x:8,y:y+17*(i+1),text:i?`收益率 ${text}`:text,align:'left',baseline:'middle'},styles:tag.styles,ignoreEvent:!line.draggable&&!line.moneyTitle}));
     // An out-of-range tag names the actual price; never draw a line at a fake
     // clamped price or stretch the candle scale to fit a distant protective stop.
     if(outside) return [tag,...cancel,...estimate];

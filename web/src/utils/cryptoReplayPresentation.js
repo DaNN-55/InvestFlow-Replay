@@ -1,7 +1,8 @@
+import { moneyAmount } from './cryptoMoneyPresentation.js';
 import { repriceProtectionLine } from './cryptoProtectionEstimate.js';
 export const CRYPTO_PERIODS = [[1, '1min'], [3, '3min'], [5, '5min'], [15, '15min'], [30, '30min'], [60, '1h'], [120, '2h'], [240, '4h'], [360, '6h'], [720, '12h'], [1440, '1day']];
 export const amount = (value, digits = 2) => value == null || value === '' || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-export const moneyAmount = value => value != null && value !== '' && Number(value) === 0 ? '0.00' : Number(value) !== 0 && Math.abs(Number(value)) < 0.01 ? (Number(value) < 0 ? '-<0.01' : '<0.01') : amount(value, 2);
+export { moneyAmount } from './cryptoMoneyPresentation.js';
 export const exact = (value) => value == null ? '未知' : String(value);
 export const relativeTime = (minute) => minute < 0 ? `背景 ${Math.ceil(-minute / 1440)}天前` : `第${Math.floor(minute / 1440) + 1}天 ${String(Math.floor(minute % 1440 / 60)).padStart(2,'0')}:${String(minute % 60).padStart(2,'0')}`;
 export function cryptoChartTime(minute) {
@@ -65,8 +66,8 @@ export function cryptoChartLines(session, kind) {
   const position=session.account?.position;
   if(position) {
     const pnl=session.risk?.unrealizedPnl;
-    const floating=pnl==null?'':` · mark浮盈 ${Number(pnl)>0?'+':''}${amount(pnl)} USDT`;
-    add('position',position.entryPrice,`${position.side==='long'?'多仓':'空仓'}均价${floating}`,'entry',{color:'#2563eb',dashed:false,compactLabel:`${position.side==='long'?'多仓':'空仓'} ${pnl==null?'':`${Number(pnl)>0?'+':''}${amount(pnl)} USDT`} · ${position.contracts}张`},position.contracts);
+    const floating=pnl==null?'':` · mark浮盈 ${Number(pnl)>0?'+':''}${moneyAmount(pnl)} USDT`;
+    add('position',position.entryPrice,`${position.side==='long'?'多仓':'空仓'}均价${floating}`,'entry',{color:'#2563eb',dashed:false,moneyTitle:pnl==null?'':`${pnl} USDT`,compactLabel:`${position.side==='long'?'多仓':'空仓'} ${pnl==null?'':`${Number(pnl)>0?'+':''}${moneyAmount(pnl)} USDT`} · ${position.contracts}张`},position.contracts);
   }
   const plan = session.trainingJournal?.plan;
   if (plan?.mode === 'manual') add('manual', plan.manualExitPrice, '手动计划（不执行）', 'last', { color: '#a16207', dashed: true });
