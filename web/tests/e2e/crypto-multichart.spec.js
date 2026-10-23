@@ -768,6 +768,10 @@ test('position data and actions fit desktop and narrow panels without horizontal
       await button.click();
       await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');
     }
+    if(width===1543) {
+      const tops=await row.locator(':scope>div>strong').evaluateAll(nodes=>nodes.map(node=>node.getBoundingClientRect().top));
+      expect(Math.max(...tops)-Math.min(...tops)).toBeLessThanOrEqual(1);
+    }
     if(width===1543||width===390) await panel.screenshot({path:test.info().outputPath(`position-${width}.png`)});
   }
   await panel.getByRole('button',{name:'持仓详情与完整精度',exact:true}).click();

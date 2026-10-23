@@ -52,11 +52,22 @@
 .crypto-position-icon:hover:not(:disabled) { background:var(--ql-line);color:var(--ql-accent); }
 .crypto-position-icon:focus-visible { outline:2px solid var(--ql-accent);outline-offset:2px; }
 .crypto-position-icon:disabled { opacity:.4;cursor:default; }
-.crypto-position-table span { min-height:24px;margin-bottom:3px; }
+.crypto-position-table>div>span { min-height:32px;margin-bottom:3px; }
+.crypto-position-table>div>strong { display:block;line-height:20px; }
 .crypto-position-table>div.crypto-position-close { align-self:center;min-width:auto; }
 .crypto-position-close .ql-ui-button { min-height:32px;height:32px;padding:0 10px;font-size:11px;white-space:nowrap; }
 .crypto-position-note { margin-top:0;flex-wrap:wrap; }
 .crypto-position-note .crypto-risk-badge { margin:0;padding:2px 0; }
 
-@container (min-width:1050px) { .crypto-position-table { grid-template-columns:minmax(145px,1.3fr) repeat(7,minmax(0,1fr)); } }
+@container (min-width:1050px) { .crypto-position-table { grid-template-columns:minmax(145px,1.2fr) repeat(5,minmax(0,1fr)) minmax(180px,1.6fr) minmax(90px,1fr); } }
 @container (max-width:559px) { .crypto-position-table { grid-template-columns:repeat(2,minmax(0,1fr));gap:12px; }.crypto-position-icon { width:32px;height:32px; }.crypto-position-close .ql-ui-button { width:100%;min-height:36px;height:36px; }.crypto-position-table>div.crypto-position-close { align-self:end; }.crypto-position-note>span:last-child { flex-basis:100%; } }
+
+.crypto-position-table .crypto-position-protection-prices { display:flex;align-items:baseline;gap:4px;flex-wrap:nowrap;font-size:12px; }
+.crypto-position-protection-prices em,.crypto-position-protection-prices i { font-size:10px;font-style:normal;font-weight:400;color:var(--ql-color-text-muted); }
+.crypto-position-pnl[data-tone=profit]>strong,.crypto-position-pnl[data-tone=profit]>small { color:var(--ql-color-danger); }
+.crypto-position-pnl[data-tone=loss]>strong,.crypto-position-pnl[data-tone=loss]>small { color:var(--ql-color-success); }
+@container (max-width:699px) { .crypto-position-table>[data-testid="crypto-protection"] { grid-column:span 2; } }
+@container (max-width:559px) { .crypto-position-table>div.crypto-position-close { grid-column:span 2; } }
+
+.crypto-position .crypto-position-icon { min-height:24px;box-sizing:border-box; }
+@container (max-width:559px) { .crypto-position .crypto-position-icon { min-height:32px; } }
