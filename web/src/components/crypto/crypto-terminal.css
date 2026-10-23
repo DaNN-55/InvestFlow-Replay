@@ -46,3 +46,15 @@
 @media(prefers-reduced-motion:reduce) { .crypto-workspace * { transition:none!important; } }
 .crypto-reward-risk { display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding:7px 12px;border-bottom:1px solid var(--ql-line);font-size:11px;color:var(--ql-color-text-muted); }.crypto-reward-risk strong { color:var(--ql-ink);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums; }.crypto-reward-risk small { font-size:10px; }.crypto-reward-risk-preview { color:var(--ql-accent); }
 .crypto-position-table { display:flex;align-items:flex-start;gap:22px;overflow-x:auto;padding:15px 0; }.crypto-position-table>div { flex:0 0 auto;min-width:94px; }.crypto-position-table span { display:flex;align-items:center;gap:3px;white-space:nowrap; }.crypto-position-table small { display:block;margin-top:4px;color:var(--ql-color-text-muted);font-size:10px; }.crypto-position-note { display:flex;align-items:center;gap:6px;margin-top:10px;color:var(--ql-color-text-muted);font-size:10px; }
+
+.crypto-position-icon { display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:24px;height:24px;padding:4px;border:0;border-radius:4px;background:transparent;color:var(--ql-color-text-muted);cursor:pointer;vertical-align:middle; }
+.crypto-position-icon svg { width:13px;height:13px; }
+.crypto-position-icon:hover:not(:disabled) { background:var(--ql-line);color:var(--ql-accent); }
+.crypto-position-icon:focus-visible { outline:2px solid var(--ql-accent);outline-offset:2px; }
+.crypto-position-icon:disabled { opacity:.4;cursor:default; }
+.crypto-position-table { gap:16px;padding:10px 0; }
+.crypto-position-table span { min-height:24px;margin-bottom:3px; }
+.crypto-position-table>div.crypto-position-close { align-self:center;min-width:auto; }
+.crypto-position-close .ql-ui-button { min-height:32px;height:32px;padding:0 10px;font-size:11px;white-space:nowrap; }
+.crypto-position-note { margin-top:0; }
+.crypto-position-note .crypto-risk-badge { margin:0;padding:2px 0; }

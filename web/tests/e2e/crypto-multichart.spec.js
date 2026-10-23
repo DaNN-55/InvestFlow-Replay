@@ -713,3 +713,39 @@ for(const side of ['long','short']) test(`${side} reward/risk preview explains l
   await expect(page.locator('.ui-tooltip__content')).toContainText('止盈预计盈利÷止损预计亏损');await page.keyboard.press('Escape');
   await page.screenshot({path:test.info().outputPath('reward-risk.png')});
 });
+
+
+test('inline position controls open editors without submitting and retain close confirmation',async({page,request})=>{
+  const {commands}=await protectedPractice(page,request);
+  const panel=page.getByTestId('crypto-risk'),row=panel.locator('.crypto-position-table');
+  for(const [name,title] of [['调整保证金','调整逐仓保证金'],['止盈止损','持仓止盈止损']]) {
+    const button=row.getByRole('button',{name,exact:true});
+    await button.focus();await page.keyboard.press('Enter');
+    const dialog=page.getByRole('dialog',{name:title,exact:true});
+    await expect(dialog).toBeVisible();
+    if(name==='止盈止损') await expect(dialog.getByRole('textbox',{name:'持仓自动止损价',exact:true})).not.toHaveValue('');
+    expect(commands).toHaveLength(0);
+    await dialog.getByRole('button',{name:'关闭',exact:true}).click();
+  }
+  for(const name of ['手动退出计划','持仓详情与完整精度']) {
+    await panel.getByRole('button',{name,exact:true}).click();
+    const dialog=page.getByRole('dialog',{name,exact:true});
+    await expect(dialog).toBeVisible();await page.keyboard.press('Escape');
+  }
+  await expect(panel.locator('.crypto-position-actions')).toHaveCount(0);
+  await row.getByRole('button',{name:'市价平全部',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'市价平全部',exact:true});
+  await expect(dialog.getByRole('button',{name:'确认市价平全部',exact:true})).toBeEnabled();
+  expect(commands).toHaveLength(0);await page.keyboard.press('Escape');
+  await row.getByRole('button',{name:'市价平全部',exact:true}).scrollIntoViewIfNeeded();
+  await page.screenshot({path:test.info().outputPath('inline-position.png'),fullPage:true});
+});
+
+
+test('empty position disables inline margin protection and close controls',async({page,request})=>{
+  const {commands}=await openPractice(page,request,{layout:'dual'});
+  const panel=page.getByTestId('crypto-risk');
+  for(const name of ['调整保证金','止盈止损','市价平全部']) await expect(panel.getByRole('button',{name,exact:true})).toBeDisabled();
+  await expect(panel.getByRole('button',{name:'持仓详情与完整精度',exact:true})).toBeEnabled();
+  expect(commands).toHaveLength(0);
+});
