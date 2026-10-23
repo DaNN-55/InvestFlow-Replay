@@ -220,8 +220,10 @@ async function retrain() {
           <tr><th scope="row">委托价</th><td>{{ orderEditor.order.limitPrice??'市价' }}</td><td>{{ orderEditor.order.type==='market'?'市价':orderEditDraft?.price??'—' }}</td></tr>
           <tr><th scope="row">剩余 · 张</th><td>{{ orderEditor.order.remainingContracts }}</td><td>{{ orderEditDraft?.remainingContracts??'—' }}</td></tr>
           <tr><th scope="row">冻结 · USDT</th><td>{{ amount(orderEditor.order.reservedBalance,8) }}</td><td data-testid="order-amend-reserve">{{ orderPreviewReady?amount(orderPreview.after.reservedBalance,8):'—' }}</td></tr>
+          <tr><th scope="row">可用 · USDT</th><td :title="String(orderEditor.session.account.availableBalance)">{{ amount(orderEditor.session.account.availableBalance,2) }}</td><td data-testid="order-amend-available" :title="orderPreviewReady?orderPreview.funds.availableBalanceAfter:''">{{ orderPreviewReady?amount(orderPreview.funds.availableBalanceAfter,2):'—' }}</td></tr>
         </tbody>
         </table>
+        <p v-if="orderPreviewReady" class="crypto-muted" data-testid="order-amend-change">{{ ({increase:'增加冻结',release:'释放冻结',unchanged:'冻结不变'})[orderPreview.funds.reserveChangeType] }} {{ amount(orderPreview.funds.reserveChangeAmount,8) }} USDT</p>
         <p v-if="orderPreviewBusy" class="crypto-muted" role="status">核算冻结资金…</p>
         <p v-if="orderPreviewError" class="crypto-muted" role="alert">{{ orderPreviewError }} <button type="button" class="crypto-text-button" @click="refreshOrderPreview">重新预览</button></p>
         <p class="crypto-muted">{{ orderEditor.order.type==='limit'?`价格按 ${orderEditor.session.contract.tickSz} 对齐；`:'' }}数量步长 {{ orderEditor.session.contract.lotSz }} 张，全部取消请撤单。</p>
