@@ -1325,3 +1325,81 @@ for(const side of ['long','short']) test(`${side} chart money labels retain sub-
     await expect(host(index)).not.toHaveAttribute('title',draft.moneyTitle);
   }
 });
+
+
+test('combined amendment lost response keeps its exact action across reload without a second reserve',async({page,request})=>{
+  const {id,session,order}=await limitPractice(page,request);
+  await page.setViewportSize({width:390,height:953});
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();
+  await panel.getByRole('button',{name:'修改委托价格',exact:true}).first().click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});
+  await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill('48000');await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('2');
+  await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeEnabled();
+  let original;
+  await page.route('**/api/quant/replay/sessions/*/actions',async route=>{
+    original=route.request().postDataJSON();const response=await route.fetch({url:`${fixture.url}${path}/${id}/actions`});
+    expect(response.status()).toBe(200);await route.abort('failed');
+  },{times:1});
+  await dialog.getByRole('button',{name:'确认生效',exact:true}).click();
+  await expect(dialog).toHaveCount(0);await expect(page.getByRole('button',{name:'重试原动作',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeDisabled();
+  expect(original.command).toEqual({type:'amend-order',orderId:order.id,limitPrice:'48000',remainingContracts:'2'});
+  expect(original.expectedRevision).toBe(session.revision);
+  const committed=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(committed.revision).toBe(session.revision+1);
+  await page.reload();await expect(page.getByRole('button',{name:'重试原动作',exact:true})).toBeVisible();
+  expect((await page.evaluate(()=>JSON.parse(localStorage.getItem('investflow-crypto-attempt-v1')).pending)).body).toEqual(original);
+  await page.getByRole('button',{name:'重试原动作',exact:true}).click();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(latest).toEqual(committed);expect(latest.orders.find(o=>o.id===order.id).remainingContracts).toBe('2');
+  await page.screenshot({path:test.info().outputPath('combined-amendment-recovered-390.png'),fullPage:true});
+});
+
+test('rejected amendment followed by synchronization failure closes confirmation and reports uncertainty',async({page,request})=>{
+  const {id,session,order,commands}=await limitPractice(page,request);
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();
+  await panel.getByRole('button',{name:'修改委托价格',exact:true}).first().click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});
+  await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill('48000');await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeEnabled();
+  const changed=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,command:{type:'amend-limit',orderId:order.id,limitPrice:'49800'}}});
+  expect(changed.status()).toBe(200);
+  await page.route(`**/api/quant/replay/sessions/${id}`,route=>route.abort('failed'),{times:1});
+  await dialog.getByRole('button',{name:'确认生效',exact:true}).click();await expect(dialog).toHaveCount(0);
+  await expect(page.getByText('结果未能同步，请先核对当前委托或保护。',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'重试原动作',exact:true})).toHaveCount(0);
+  expect((await page.evaluate(()=>JSON.parse(localStorage.getItem('investflow-crypto-attempt-v1')).pending))).toBe(null);
+  expect(commands).toHaveLength(1);expect(commands[0].expectedRevision).toBe(session.revision);
+  const latest=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(latest.revision).toBe(session.revision+1);expect(latest.orders.find(o=>o.id===order.id).limitPrice).toBe('49800');
+  await page.getByRole('button',{name:'重新同步',exact:true}).click();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  await expect(page.locator('.crypto-alert[role="alert"]')).toHaveCount(0);
+});
+
+test('leaving a kept-alive confirmation discards late previews without reopening or contaminating the next edit',async({page,request})=>{
+  const {id,session,commands}=await limitPractice(page,request);
+  const navigation=page.getByRole('navigation',{name:'主导航'});
+  await navigation.getByRole('link',{name:'交易追踪',exact:true}).click();await expect(page).toHaveURL(/\/decision\/trade-records/);
+  await navigation.getByRole('link',{name:'合约盲测',exact:true}).click();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();
+  await panel.getByRole('button',{name:'修改委托价格',exact:true}).first().click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});
+  let release,seen,delivered;
+  const gate=new Promise(resolve=>{release=resolve;}),waiting=new Promise(resolve=>{seen=resolve;}),finished=new Promise(resolve=>{delivered=resolve;});
+  await page.route('**/preview',async route=>{
+    if(route.request().postDataJSON()?.command?.limitPrice!=='48000') return route.fallback();
+    const response=await route.fetch({url:`${fixture.url}${path}/${id}/preview`});seen();await gate;await route.fulfill({response});delivered();
+  });
+  try {
+    await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill('48000');await waiting;
+    await page.goBack();await expect(page).toHaveURL(/\/decision\/trade-records/);await expect(dialog).toHaveCount(0);
+    release();await finished;
+    await navigation.getByRole('link',{name:'合约盲测',exact:true}).click();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+    await expect(dialog).toHaveCount(0);expect((await nativeCharts(page)).every(chart=>chart.lines.every(line=>!line.preview))).toBe(true);
+    await panel.getByRole('button',{name:'当前委托',exact:false}).click();await panel.getByRole('button',{name:'修改委托价格',exact:true}).first().click();
+    await expect(dialog.getByRole('textbox',{name:'新委托价',exact:true})).toHaveValue('49950');
+    await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeDisabled();
+    await dialog.getByRole('button',{name:'取消调整',exact:true}).click();expect(commands).toHaveLength(0);
+    expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+  } finally {release();}
+});
