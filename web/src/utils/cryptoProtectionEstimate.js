@@ -20,3 +20,18 @@ export function repriceProtectionLine(line,price) {
   const estimate=cryptoProtectionEstimate(line.estimateContext,price);
   return {...line,price,estimate,estimateText:formatProtectionEstimate(estimate)};
 }
+
+export function cryptoProtectionRewardRisk(session,preview=null) {
+  const protection=session?.protection;
+  if(!session?.account?.position||!protection?.stopLoss||!protection.takeProfit) return null;
+  if(protection.triggeredLeg) return {ratio:null,reason:'保护已触发'};
+  const price=leg=>preview?.leg===leg?preview.price:protection[leg].price;
+  const stop=cryptoProtectionEstimate(session,price('stopLoss')),profit=cryptoProtectionEstimate(session,price('takeProfit'));
+  if(!stop||!profit) return {ratio:null,reason:'当前无法估算'};
+  // Money is stored to eight decimals; zero loss is not an infinite reward/risk ratio.
+  if(stop.pnl>=-1e-8) return {ratio:null,reason:'止损不在亏损区'};
+  if(profit.pnl<=1e-8) return {ratio:null,reason:'止盈不在盈利区'};
+  const ratio=profit.pnl/-stop.pnl;
+  return Number.isFinite(ratio)?{ratio,reward:profit.pnl,risk:-stop.pnl,reason:''}:{ratio:null,reason:'当前无法估算'};
+}
+export const formatProtectionRewardRisk=value=>value?.ratio!=null?`${value.ratio.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} : 1`:'—';

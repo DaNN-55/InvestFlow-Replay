@@ -5,13 +5,14 @@ import CandlestickChart from '../CandlestickChart.vue';
 import UiSelect from '../ui/UiSelect.vue';
 import UiButton from '../ui/UiButton.vue';
 import UiTooltip from '../ui/UiTooltip.vue';
-import { repriceProtectionLine, cryptoProtectionEstimate, formatProtectionEstimate } from '../../utils/cryptoProtectionEstimate.js';
+import { repriceProtectionLine, cryptoProtectionEstimate, formatProtectionEstimate, cryptoProtectionRewardRisk, formatProtectionRewardRisk } from '../../utils/cryptoProtectionEstimate.js';
 import { priceDraftCurrent, priceDraftReached } from '../../utils/cryptoPriceDraft.js';
 import { CRYPTO_PERIODS, cryptoChartBars, cryptoChartLines } from '../../utils/cryptoReplayPresentation.js';
 import { REPLAY_RISE_COLOR, REPLAY_FALL_COLOR } from '../../utils/replayKlineConfig.js';
 const props=defineProps({session:{type:Object,required:true},markets:{type:Object,default:()=>({})},modelValue:{type:Object,required:true},busy:Boolean,blocked:Boolean,priceDraft:{type:Object,default:null}});
 const emit=defineEmits(['update:modelValue','price-drag','confirm-price','cancel-price','request-cancellation']);
 const draggingIndex=ref(null);
+const movingPrice=ref(null);
 const selected=ref(0), maximized=ref(null), menu=ref(false), root=ref(null);
 const charts=new Map();
 const colors=Object.freeze({rise:REPLAY_RISE_COLOR,fall:REPLAY_FALL_COLOR});
@@ -31,7 +32,12 @@ const models=computed(()=>prefs.value.periods.map((period,i)=>{
   return { bars, lines, showVolume:bars.length>0&&bars.every(bar=>bar.volume!=null) };
 }));
 const draftEstimate=computed(()=>props.priceDraft&&props.priceDraft.kind!=='order'?formatProtectionEstimate(cryptoProtectionEstimate(props.session,props.priceDraft.price)):'');
-function drag(index,event) {clearCrosshair();draggingIndex.value=event.phase==='start'?index:null;emit('price-drag',event);}
+const ratioPreview=computed(()=>movingPrice.value?.leg?movingPrice.value:props.priceDraft?.kind!=='order'&&props.priceDraft?.leg?props.priceDraft:null);
+const rewardRisk=computed(()=>cryptoProtectionRewardRisk(props.session,ratioPreview.value));
+function drag(index,event) {
+  if(event.phase==='move') {movingPrice.value=event;return;}
+  movingPrice.value=null;clearCrosshair();draggingIndex.value=event.phase==='start'?index:null;emit('price-drag',event);
+}
 function escape() {menu.value=false;maximized.value=null;if(props.priceDraft&&!props.busy) emit('cancel-price');}
 function patch(value) { emit('update:modelValue',{...prefs.value,...value}); }
 function toggle(key,checked) { patch({[key]:checked,...(key==='period'&&checked?{periods:Array(4).fill(prefs.value.periods[selected.value])}:{})}); }
@@ -69,6 +75,10 @@ onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside));
         <p>同一合约，各图独立周期。价格线只在同一价格类型间同步；范围联动限于已加载行情。</p><button type="button" class="crypto-text-button" @click="menu=false">收起布局设置</button>
       </div>
     </header>
+    <div v-if="rewardRisk" class="crypto-reward-risk" data-testid="crypto-reward-risk" :data-preview="Boolean(ratioPreview)" :data-ratio="rewardRisk.ratio">
+      <span>预计盈亏比</span><strong>{{ formatProtectionRewardRisk(rewardRisk) }}</strong><small v-if="rewardRisk.reason">{{ rewardRisk.reason }}</small><small v-if="ratioPreview" class="crypto-reward-risk-preview">预览</small>
+      <UiTooltip clickable wide label="预计盈亏比说明" content="止盈预计盈利÷止损预计亏损的绝对值。例如2 : 1表示预计盈利是预计亏损的2倍。按剩余持仓从入场到各触发价的价格盈亏估算，不含手续费、滑点和资金费；不同触发参考不保证对应实际成交价。拖动时为待确认预览，原保护在确认前仍有效。" />
+    </div>
     <section v-if="priceDraft" class="crypto-protection-confirm" :aria-label="priceDraft.kind==='order'?'确认限价委托调整':'确认止盈止损调整'">
       <div><strong>{{ priceDraft.kind==='order'?'委托价':priceDraft.leg==='stopLoss'?'止损':'止盈' }} {{ priceDraft.oldPrice }} → {{ priceDraft.price }}</strong><small v-if="draftEstimate" data-testid="crypto-protection-draft-estimate">{{ draftEstimate }}</small><small v-if="priceDraft.kind!=='order'">{{ priceDraft.protection[priceDraft.leg].reference==='mark'?'标记价格':'最新价' }}触发 · {{ priceDraft.position.contracts }} 张 · 原保护在确认前仍有效</small><small v-else>委托 #{{ priceDraft.orderId }} · 未成交 {{ priceDraft.order.remainingContracts }} 张 · 确认前原委托仍有效</small><p v-if="priceDraftReached(session,priceDraft)" role="status">{{ priceDraft.kind==='order'?'新价格已越过当前价，下一分钟可能按吃单成交。':'新价格已在触发侧，确认后下一分钟可能立即退出。' }}</p></div>
       <div class="crypto-protection-confirm-actions"><UiButton variant="secondary" :disabled="busy" @click="emit('cancel-price')">取消调整</UiButton><UiButton :disabled="busy||blocked||!priceDraftCurrent(session,priceDraft)" @click="emit('confirm-price')">确认生效</UiButton></div>

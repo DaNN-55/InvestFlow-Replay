@@ -53,3 +53,27 @@ test('narrow chart estimate rows stay inside the pane and do not overlap neighbo
   assert.equal(rows.length,2);assert.equal(rows[1].attrs.text,'收益率 -20.00%');
   assert.ok(rows.every(row=>row.attrs.y<200&&row.attrs.y>0));
 });
+
+test('reward/risk is profit divided by loss for both sides, with one preview leg overriding only its own price',async()=>{
+  const {cryptoProtectionRewardRisk:ratio,formatProtectionRewardRisk:format}=await import('../../src/utils/cryptoProtectionEstimate.js');
+  for(const side of ['long','short']) {
+    const s=session(side),before=structuredClone(s);
+    assert.deepEqual(ratio(s),{ratio:2,reward:40,risk:20,reason:''});assert.equal(format(ratio(s)),'2.00 : 1');
+    assert.equal(ratio(s,{leg:'stopLoss',price:side==='long'?'49500':'50500'}).ratio,4);
+    assert.equal(ratio(s,{leg:'takeProfit',price:side==='long'?'51000':'49000'}).ratio,1);
+    assert.deepEqual(s,before);
+    s.account.position.contracts='1';s.account.position.entryNotional='500';s.account.position.marginBalance='999';s.config.leverage='50';
+    assert.deepEqual(ratio(s),{ratio:2,reward:20,risk:10,reason:''});
+  }
+});
+
+test('missing, reached, break-even and wrong-side protective prices never create a normal or infinite ratio',async()=>{
+  const {cryptoProtectionRewardRisk:ratio,formatProtectionRewardRisk:format}=await import('../../src/utils/cryptoProtectionEstimate.js');
+  const s=session('long');
+  for(const [preview,reason] of [[{leg:'stopLoss',price:'50000'},'止损不在亏损区'],[{leg:'stopLoss',price:'50100'},'止损不在亏损区'],[{leg:'takeProfit',price:'49900'},'止盈不在盈利区']]) {
+    assert.deepEqual(ratio(s,preview),{ratio:null,reason});assert.equal(format(ratio(s,preview)),'—');
+  }
+  s.protection.triggeredLeg='stopLoss';assert.equal(ratio(s).ratio,null);s.protection.triggeredLeg=null;
+  s.protection.stopLoss=null;assert.equal(ratio(s),null);s.protection=null;assert.equal(ratio(s),null);
+  s.account.position=null;assert.equal(ratio(s),null);
+});

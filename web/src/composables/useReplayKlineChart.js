@@ -326,6 +326,7 @@ export function useReplayKlineChart({
         if(!price) return true;
         priceDrag.price=price;priceDrag.moved=true;
         current.overrideOverlay({id:overlay.id,points:[{value:Number(price)}],extendData:{...repriceProtectionLine(priceDrag.original,price),draggable:true,preview:true,dashed:true,price,label:`待确认${line.orderId!=null?'委托':line.protectionLeg==='stopLoss'?'止损':'止盈'}`,levels:priceDrag.original.levels?.map(level=>level.id===line.id?{...level,price}:level)}});
+        onPriceLineDrag({phase:'move',leg:line.protectionLeg,orderId:line.orderId,price:Number(price)});
         return true; // The native default must not add hidden time/index offsets.
       },
       onPressedMoveEnd:()=>{endPriceDrag();return true;},
