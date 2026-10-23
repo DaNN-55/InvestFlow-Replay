@@ -1,3 +1,4 @@
+import { zoomReplayYAxisAt } from '../utils/replayYAxisZoom.js';
 import { repriceProtectionLine } from '../utils/cryptoProtectionEstimate.js';
 import { REPLAY_PRICE_LINE_GROUP, REPLAY_PRICE_LINE_OVERLAY } from '../utils/replayPriceLines.js';
 import { snapProtectionPrice } from '../utils/cryptoPriceDraft.js';
@@ -352,7 +353,7 @@ export function useReplayKlineChart({
     priceLineIds = []; priceLineKey = nextKey;
     for (const [tagIndex,line] of priceLines.value.entries()) {
       const id = current.createOverlay({ name: REPLAY_PRICE_LINE_OVERLAY.name, id: line.id,
-        groupId: REPLAY_PRICE_LINE_GROUP, lock: !line.draggable, points: [{ value: Number(line.price) }], extendData: {...line,measureLabel:text=>utils.calcTextWidth(text,11),color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price,estimate})=>({id,price,estimated:Boolean(estimate)}))},
+        groupId: REPLAY_PRICE_LINE_GROUP, lock: !line.draggable, points: [{ value: Number(line.price) }], extendData: {...line,measureLabel:text=>utils.calcTextWidth(text,11),color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price,estimate,compactLabel})=>({id,price,estimated:Boolean(estimate)&&!compactLabel}))},
         ...(line.draggable||line.cancellable?priceDragHandlers(line,current):{}) }, CANDLE_PANE_ID);
       if (id) priceLineIds.push(id);
     }
@@ -540,6 +541,7 @@ export function useReplayKlineChart({
   }
 
   function handleWheel(event) {
+    if(zoomReplayYAxisAt(chart.value,event)) {event.preventDefault();event.stopImmediatePropagation();return;}
     const scale = getReplayWheelZoomScale(event);
     event.stopImmediatePropagation();
     if (scale === null) {

@@ -695,7 +695,7 @@ test('protection estimates follow remaining position and weighted entry without 
   await expect(page.locator('.ui-tooltip__content')).toContainText('不含手续费、滑点和资金费');
   await expect(page.locator('.ui-tooltip__content')).toContainText('追加保证金不改变分母');
   await page.keyboard.press('Escape');
-  await page.screenshot({path:test.info().outputPath('protection-estimate.png')});
+  await page.screenshot({path:test.info().outputPath('protection-estimate.png'),fullPage:true});
   assertPrefixes(reads);
 });
 

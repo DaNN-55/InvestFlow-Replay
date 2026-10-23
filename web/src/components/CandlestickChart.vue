@@ -143,7 +143,7 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
       <span>
         可视 {{ state.visibleRange.visibleCount }} / 共 {{ state.visibleRange.total }} 根
       </span>
-      <span>Ctrl/⌘ + 滚轮缩放 · 拖拽平移</span>
+      <span>Ctrl/⌘ + 滚轮缩放 · 纵轴滚轮缩放 / 双击复位</span>
     </div>
   </div>
 </template>

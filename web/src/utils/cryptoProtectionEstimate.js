@@ -18,7 +18,7 @@ export const formatProtectionEstimate=estimate=>estimate?`预计 ${signed(estima
 export function repriceProtectionLine(line,price) {
   if(!line.estimateContext) return {...line,price};
   const estimate=cryptoProtectionEstimate(line.estimateContext,price);
-  return {...line,price,estimate,estimateText:formatProtectionEstimate(estimate)};
+  return {...line,price,estimate,estimateText:formatProtectionEstimate(estimate),compactLabel:estimate?`${line.estimateLeg==='stopLoss'?'止损':'止盈'} ${formatProtectionEstimate(estimate).replace('预计 ','')}`:line.compactLabel};
 }
 
 export function cryptoProtectionRewardRisk(session,preview=null) {
