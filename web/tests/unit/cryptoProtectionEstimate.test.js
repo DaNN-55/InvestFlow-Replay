@@ -22,7 +22,7 @@ test('partial exits halve remaining price PnL while retaining return, and exact 
   s.account.position={side:'long',contracts:'3',entryPrice:'33333.33',entryNotional:'1000.00000000',marginBalance:'100'};
   const estimate=cryptoProtectionEstimate(s,'33333.333333333336');assert.ok(Math.abs(estimate.pnl)<1e-10);
   assert.equal(formatProtectionEstimate(estimate),'预计 0.00 USDT · 0.00%');
-  assert.equal(formatProtectionEstimate({pnl:-0.000001,returnPercent:-0.000001}),'预计 0.00 USDT · 0.00%');
+  assert.equal(formatProtectionEstimate({pnl:-0.000001,returnPercent:-0.000001}),'预计 -<0.01 USDT · 0.00%');
 });
 
 test('only filled protective lines estimate returns, and previewing never mutates the original line or account',()=>{
@@ -76,4 +76,22 @@ test('missing, reached, break-even and wrong-side protective prices never create
   s.protection.triggeredLeg='stopLoss';assert.equal(ratio(s).ratio,null);s.protection.triggeredLeg=null;
   s.protection.stopLoss=null;assert.equal(ratio(s),null);s.protection=null;assert.equal(ratio(s),null);
   s.account.position=null;assert.equal(ratio(s),null);
+});
+
+
+test('chart PnL display keeps tiny nonzero money and full preview precision without changing values',()=>{
+  for(const side of ['long','short']) {
+    const s=session(side);s.risk={unrealizedPnl:'-0.00000001'};
+    s.account.position.contracts='0.01';s.account.position.entryNotional='5';
+    const before=structuredClone(s),lines=cryptoChartLines(s,'last');
+    const entry=lines.find(l=>l.reference==='entry');
+    assert.ok(entry.compactLabel.includes('-<0.01 USDT'));assert.equal(entry.moneyTitle,'-0.00000001 USDT');
+    const stop=lines.find(l=>l.protectionLeg==='stopLoss');
+    const preview=repriceProtectionLine(stop,side==='long'?'49999':'50001');
+    assert.ok(preview.compactLabel.includes('-<0.01 USDT'));assert.equal(preview.moneyTitle,`${preview.estimate.pnl} USDT`);
+    assert.equal(preview.price,side==='long'?'49999':'50001');assert.equal(preview.contracts,'2');
+    assert.deepEqual(s,before);
+  }
+  assert.equal(formatProtectionEstimate({pnl:0,returnPercent:0}),'预计 0.00 USDT · 0.00%');
+  assert.equal(formatProtectionEstimate({pnl:0.000001,returnPercent:0.000001}),'预计 +<0.01 USDT · 0.00%');
 });

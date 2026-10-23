@@ -1,3 +1,4 @@
+import { moneyAmount } from './cryptoMoneyPresentation.js';
 // Display-only conditional price PnL. Never quote a fill or change account state.
 export function cryptoProtectionEstimate(session,price) {
   const p=session?.account?.position,contract=session?.contract;
@@ -14,11 +15,11 @@ const signed=value=>{
   const rounded=Number(value.toFixed(2));
   return rounded===0?'0.00':`${rounded>0?'+':''}${rounded.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 };
-export const formatProtectionEstimate=estimate=>estimate?`预计 ${signed(estimate.pnl)} USDT · ${signed(estimate.returnPercent)}%`:'';
+export const formatProtectionEstimate=estimate=>estimate?`预计 ${estimate.pnl>0?'+':''}${moneyAmount(estimate.pnl)} USDT · ${signed(estimate.returnPercent)}%`:'';
 export function repriceProtectionLine(line,price) {
   if(!line.estimateContext) return {...line,price};
   const estimate=cryptoProtectionEstimate(line.estimateContext,price);
-  return {...line,price,estimate,estimateText:formatProtectionEstimate(estimate),compactLabel:estimate?`${line.estimateLeg==='stopLoss'?'止损':'止盈'} ${formatProtectionEstimate(estimate).replace('预计 ','')}`:line.compactLabel};
+  return {...line,price,estimate,moneyTitle:estimate?`${estimate.pnl} USDT`:line.moneyTitle,estimateText:formatProtectionEstimate(estimate),compactLabel:estimate?`${line.estimateLeg==='stopLoss'?'止损':'止盈'} ${formatProtectionEstimate(estimate).replace('预计 ','')}`:line.compactLabel};
 }
 
 export function cryptoProtectionRewardRisk(session,preview=null) {

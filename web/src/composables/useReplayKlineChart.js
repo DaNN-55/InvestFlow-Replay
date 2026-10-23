@@ -306,6 +306,8 @@ export function useReplayKlineChart({
       cancelPress=null;return true;
     }
     return {
+      onMouseEnter:({overlay})=>{if(overlay.extendData.moneyTitle) host.value?.setAttribute('title',overlay.extendData.moneyTitle);return true;},
+      onMouseLeave:()=>{host.value?.removeAttribute('title');return true;},
       onPressedMoveStart:({overlay,x,y,figureKey})=>{
         cancelPress=null;
         if(priceDrag||!line.draggable) return true;
@@ -327,6 +329,7 @@ export function useReplayKlineChart({
         if(!price) return true;
         priceDrag.price=price;priceDrag.moved=true;
         current.overrideOverlay({id:overlay.id,points:[{value:Number(price)}],extendData:{...repriceProtectionLine(priceDrag.original,price),draggable:true,preview:true,dashed:true,price,label:`待确认${line.orderId!=null?'委托':line.protectionLeg==='stopLoss'?'止损':'止盈'}`,levels:priceDrag.original.levels?.map(level=>level.id===line.id?{...level,price}:level)}});
+        if(overlay.extendData.moneyTitle) host.value?.setAttribute('title',repriceProtectionLine(priceDrag.original,price).moneyTitle);
         onPriceLineDrag({phase:'move',leg:line.protectionLeg,orderId:line.orderId,price:Number(price)});
         return true; // The native default must not add hidden time/index offsets.
       },
@@ -349,12 +352,13 @@ export function useReplayKlineChart({
     const accent=cssToken(rootStyle,'--ql-accent','#2563eb');
     const nextKey = JSON.stringify([priceLines.value,background,accent]);
     if (nextKey === priceLineKey) return;
+    host.value?.removeAttribute('title');
     for (const id of priceLineIds) current.removeOverlay(id);
     priceLineIds = []; priceLineKey = nextKey;
     for (const [tagIndex,line] of priceLines.value.entries()) {
       const id = current.createOverlay({ name: REPLAY_PRICE_LINE_OVERLAY.name, id: line.id,
         groupId: REPLAY_PRICE_LINE_GROUP, lock: !line.draggable, points: [{ value: Number(line.price) }], extendData: {...line,measureLabel:text=>utils.calcTextWidth(text,11),color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price,estimate,compactLabel})=>({id,price,estimated:Boolean(estimate)&&!compactLabel}))},
-        ...(line.draggable||line.cancellable?priceDragHandlers(line,current):{}) }, CANDLE_PANE_ID);
+        ...(line.draggable||line.cancellable||line.moneyTitle?priceDragHandlers(line,current):{}) }, CANDLE_PANE_ID);
       if (id) priceLineIds.push(id);
     }
   }
