@@ -516,3 +516,19 @@ test('limit-price amendment persists once, reconciles reserves, rejects stale wr
   const analysis=c.service.analysis(s.id).analysis;assert.equal(analysis.finalEquity,s.summary.accountEquity);assert.equal(analysis.trades.length,1);ledgerCheck(c,s);
   c.snapshotSource.disable();c.reopen();assert.deepEqual(c.service.analysis(s.id).analysis,analysis);
 });
+
+
+test('quantity amendment persists once with exact remaining size and rejects stale or invalid changes',t=>{
+  const c=context(t);let s=make(c).session;
+  s=mutate(c,s,'qty-order',{type:'limit-open',side:'long',contracts:'2',limitPrice:'49000'}).session;
+  const before=structuredClone(s),body={actionId:'qty-amend',expectedRevision:s.revision,command:{type:'amend-quantity',orderId:s.orders[0].id,remainingContracts:'3'}};
+  s=c.service.command(s.id,body).session;
+  assert.equal(s.orders[0].remainingContracts,'3');assert.equal(s.orders[0].filledContracts,'0');assert.equal(s.orders[0].contracts,'3');
+  assert.equal(s.elapsedMinutes,0);assert.equal(s.account.position,null);ledgerCheck(c,s);
+  assert.equal(c.service.command(s.id,body).idempotent,true);
+  assert.throws(()=>c.service.command(s.id,{...body,actionId:'qty-stale'}),code('REPLAY_REVISION_CONFLICT'));
+  assert.throws(()=>mutate(c,s,'qty-bad-step',{type:'amend-quantity',orderId:s.orders[0].id,remainingContracts:'0.001'}));
+  assert.deepEqual(c.service.get(s.id).session,s);assert.notEqual(s.reservedBalance,before.reservedBalance);
+  c.reopen();assert.deepEqual(c.service.get(s.id).session,s);assert.deepEqual(c.service.command(s.id,body).session,s);ledgerCheck(c,s);
+  assert.equal(c.service.audit(s.id,'traces',{limit:200}).items.filter(e=>e.type==='order-quantity-amended').length,1);
+});

@@ -35,7 +35,7 @@ function protective(value) {
 }
 function normalizeCommand(input) {
   const schemas = { "market-open": ["side", "contracts", "protection"], "limit-open": ["side", "contracts", "limitPrice", "protection"],
-    "market-close": ["contracts"], "limit-close": ["contracts", "limitPrice"], "amend-limit": ["orderId", "limitPrice"], "cancel-order": ["orderId"], "cancel-all-orders": [],
+    "market-close": ["contracts"], "limit-close": ["contracts", "limitPrice"], "amend-limit": ["orderId", "limitPrice"], "amend-quantity": ["orderId", "remainingContracts"], "cancel-order": ["orderId"], "cancel-all-orders": [],
     "set-protection": ["stopLoss", "takeProfit"], "cancel-protection": ["leg"], "add-margin": ["amount"], "advance": ["minutes"], "finish": [], "set-plan": ["mode", "manualExitPrice", "reason"] };
   const allowed = schemas[input?.type]; if (!allowed) fail("INVALID_REQUEST", "不支持该合约动作");
   fields(input, ["type", ...allowed]);
@@ -46,7 +46,7 @@ function normalizeCommand(input) {
     return { type: "set-plan", mode: input.mode, manualExitPrice: price, reason: input.reason.trim() };
   } const command = { type: input.type };
   for (const key of allowed) if (input[key] != null) command[key] = input[key];
-  for (const key of ["contracts", "limitPrice", "amount"]) if (command[key] != null) command[key] = decimal(command[key]);
+  for (const key of ["contracts", "remainingContracts", "limitPrice", "amount"]) if (command[key] != null) command[key] = decimal(command[key]);
   if (command.protection) command.protection = protective(command.protection);
   if (command.type === "set-protection") Object.assign(command, protective({ stopLoss: input.stopLoss, takeProfit: input.takeProfit }));
   if (command.type === "advance") {
@@ -137,7 +137,8 @@ export function createCryptoReplayService({ store, snapshotSource, now = () => n
       config: session.snapshot.config,
       contract: { ctVal: document.rules.instruments[session.snapshot.instrumentId].spec.ctVal,
         ctMult: document.rules.instruments[session.snapshot.instrumentId].spec.ctMult,
-        tickSz: document.rules.instruments[session.snapshot.instrumentId].spec.tickSz, lotSz: document.rules.instruments[session.snapshot.instrumentId].spec.lotSz },
+        tickSz: document.rules.instruments[session.snapshot.instrumentId].spec.tickSz, lotSz: document.rules.instruments[session.snapshot.instrumentId].spec.lotSz,
+        minSz: document.rules.instruments[session.snapshot.instrumentId].spec.minSz },
       ...(session.revealedAt && session.attemptInfo.kind === "retrain" ? { firstAttempt: firstAttempt(session.id) } : {}),
       currentPrices: { last: document.scenario.last[index].close, mark: document.scenario.mark[index].close },
       frozenRules: { ruleVersion: state.versions.ruleVersion, liquidationModelVersion: state.versions.liquidationModelVersion,
