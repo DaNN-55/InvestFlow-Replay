@@ -9,13 +9,41 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   const created = await request.post(`${fixture.url}/api/quant/replay/sessions`, { data: { gameLength: 20, interval: "hybrid" } });
   expect(created.status()).toBe(201);
   const { session } = await created.json();
+  let finishCalls=0;
   await page.route("**/api/**", async (route) => {
     const original = new URL(route.request().url());
+    if(original.pathname.endsWith("/finish")&&route.request().method()==="POST") finishCalls+=1;
     const response = await route.fetch({ url: `${fixture.url}${original.pathname}${original.search}` });
     await route.fulfill({ response });
   });
   await page.addInitScript((id) => localStorage.setItem("investflow.replay.active-session-id", id), session.id);
   await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5180"}/decision/market-replay`);
+  const playback=page.getByRole('region',{name:'回放控制',exact:true});
+  await expect(playback).toBeVisible();
+  await expect(page.locator('.replay-trading .replay-playback')).toHaveCount(0);
+  const intraday=await page.locator('.replay-intraday-panel').boundingBox(),controls=await playback.boundingBox(),trading=await page.locator('.replay-trading').boundingBox();
+  expect(controls.y).toBeGreaterThanOrEqual(intraday.y+intraday.height);
+  expect(controls.y+controls.height).toBeLessThanOrEqual(trading.y);
+  expect(controls.height).toBeLessThan(180);
+  await playback.getByRole('combobox',{name:'自动播放速度'}).selectOption('fast');
+  await expect(playback.getByRole('combobox',{name:'自动播放速度'})).toHaveValue('fast');
+  await expect(page.locator('[data-price-line-id="ashare-position-cost"]')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'新开一局',exact:true})).toHaveCount(1);
+  await expect(page.locator('.market-replay__header').getByRole('button',{name:'新开一局',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'本局无交易机会，结束并换一局',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'提前交卷',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'本局配置',exact:true}).click();
+  const settings=page.getByRole('dialog',{name:'本局配置',exact:true});
+  await expect(settings).toBeVisible();
+  for(const label of ['起始资金 · 元','佣金率','最低佣金 · 元','卖出印花税率','双向过户费率','滑点 · bps']) await expect(settings.getByText(label,{exact:true})).toBeVisible();
+  await expect(settings.locator('input')).toHaveCount(0);
+  await expect(settings.getByText('可用现金',{exact:true})).toHaveCount(0);
+  await expect(settings.locator('dd').nth(1)).toHaveAttribute('title',String(session.costConfig.commissionRate));
+  await page.setViewportSize({width:320,height:850});
+  expect(await settings.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+  await settings.screenshot({path:test.info().outputPath('ashare-settings-mobile.png')});
+  await page.keyboard.press('Escape');await page.setViewportSize({width:1280,height:900});
+
   await page.getByRole("button", { name: "买入", exact: true }).click();
   const form = page.getByRole("dialog", { name: "买入决策记录" });
   await form.getByRole("combobox", { name: "委托类型" }).selectOption("limit");
@@ -38,6 +66,28 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   await expect(page.getByText("未到限价，继续等待")).toBeVisible();
   await advance();
   await expect(page.getByText("已成交 1000 股 · 剩余 4000 股")).toBeVisible();
+  const filled=(await (await request.get(`${fixture.url}/api/quant/replay/sessions/${session.id}`)).json()).session;
+  const cost=page.locator('[data-price-line-id="ashare-position-cost"]');
+  await expect(cost).toHaveAttribute('data-price-line-value',String(filled.account.averageCost));
+  await expect(cost).toHaveAttribute('data-price-line-quantity',String(filled.account.positionQuantity));
+  for(const period of ['周','月','日']) {
+    await page.getByRole('button',{name:period,exact:true}).click();
+    await expect(cost).toHaveAttribute('data-price-line-value',String(filled.account.averageCost));
+  }
+  const styles=await page.evaluate(async()=>{
+    const url=performance.getEntriesByType('resource').find(e=>/\/klinecharts\.js\?v=/.test(e.name)).name,{init}=await import(url);
+    const chart=init({id:document.querySelector('[k-line-chart-id]').getAttribute('k-line-chart-id')});
+    const overlay=chart.getOverlayById('ashare-position-cost');
+    return {tooltip:chart.getStyles().candle.tooltip,price:overlay.points[0].value,locked:overlay.lock,data:chart.getDataList().length};
+  });
+  expect(styles.tooltip.showType).toBe('rect');expect(styles.tooltip.showRule).toBe('follow_cross');
+  expect(styles.locked).toBe(true);expect(styles.price).toBe(filled.account.averageCost);expect(styles.data).toBeLessThanOrEqual(filled.bars.length);
+  await page.screenshot({path:test.info().outputPath('ashare-cost-desktop.png')});
+  await page.setViewportSize({width:390,height:850});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await playback.scrollIntoViewIfNeeded();await playback.screenshot({path:test.info().outputPath('ashare-playback-mobile.png')});
+  await page.setViewportSize({width:1280,height:900});
+
   await page.getByRole("button", { name: "撤销未成交余量" }).click();
   await expect(page.getByRole("button", { name: "撤销未成交余量" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "取消止损保护" })).toBeVisible();
@@ -48,9 +98,30 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   await expect(page.getByText("已成交 500 股 · 剩余 500 股")).toBeVisible();
   await page.reload();
   await expect(page.getByText("已成交 500 股 · 剩余 500 股")).toBeVisible();
+  const partial=(await (await request.get(`${fixture.url}/api/quant/replay/sessions/${session.id}`)).json()).session;
+  await expect(cost).toHaveAttribute('data-price-line-value',String(partial.account.averageCost));
+  await expect(cost).toHaveAttribute('data-price-line-quantity','500');
   await advance();
   await expect(page.getByRole("button", { name: "取消止损保护" })).toHaveCount(0);
   const restored = await (await request.get(`${fixture.url}/api/quant/replay/sessions/${session.id}`)).json();
   expect(restored.session.account.positionQuantity).toBe(0);
+  await expect(cost).toHaveCount(0);
   expect(restored.session.executions.filter((item) => item.side === "sell" && item.status === "filled").map((item) => item.quantity)).toEqual([500, 500]);
+  await playback.getByRole('button',{name:'结束本局',exact:true}).click();
+  const end=page.getByRole('dialog',{name:'结束本局？',exact:true});
+  await expect(end).toContainText('保留当前持仓');
+  expect(finishCalls).toBe(0);
+  await end.getByRole('button',{name:'继续演练',exact:true}).click();
+  expect(finishCalls).toBe(0);
+  await playback.getByRole('button',{name:'结束本局',exact:true}).click();
+  await end.getByRole('button',{name:'确认结束',exact:true}).click();
+  await expect(end).not.toBeVisible();expect(finishCalls).toBe(1);
+  await expect(playback.getByRole('button',{name:'结束本局',exact:true})).toBeDisabled();
+  const completed=(await (await request.get(`${fixture.url}/api/quant/replay/sessions/${session.id}`)).json()).session;
+  expect(completed.status).toBe('completed');
+  await playback.getByRole('button',{name:'新开一局',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'这次怎么练？',exact:true})).toBeVisible();
+  const preserved=(await (await request.get(`${fixture.url}/api/quant/replay/sessions/${session.id}`)).json()).session;
+  expect(preserved).toEqual(completed);
+
 });

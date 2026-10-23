@@ -262,7 +262,7 @@ test('compact order form keeps advanced inputs and makes explanations available 
   await expect(order.getByRole('textbox',{name:'操作理由',exact:true})).not.toBeVisible();
   expect(await order.evaluate(el=>el.getBoundingClientRect().height)).toBeLessThan(430);
   await expect(page.locator('.crypto-header-actions button')).toHaveCount(1);
-  await expect(page.locator('.crypto-playback-actions').getByRole('button',{name:'新开一局',exact:true})).toBeVisible();
+  await expect(page.locator('.crypto-playback .replay-playback__actions').getByRole('button',{name:'新开一局',exact:true})).toBeVisible();
   await order.getByRole('button',{name:'数量与单位说明'}).click();
   await expect(page.locator('.ui-tooltip__content')).toContainText('不是保证金');
   await page.keyboard.press('Escape');
@@ -288,6 +288,7 @@ test('compact order form keeps advanced inputs and makes explanations available 
   await expect(page.locator('.ui-tooltip__content')).toContainText('下一分钟');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
   await page.keyboard.press('Escape');
+  await page.locator('.crypto-playback').screenshot({path:test.info().outputPath('crypto-playback-mobile.png')});
   await page.getByRole('button',{name:'新开一局',exact:true}).click();
   await expect(page.getByRole('button',{name:'继续上次练习',exact:true})).toBeVisible();
   const preserved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;

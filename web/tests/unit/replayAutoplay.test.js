@@ -12,9 +12,9 @@ const composableSource = readFileSync(
   new URL("../../src/composables/useReplayAutoplay.js", import.meta.url),
   "utf8",
 );
-const tradingPanelSource = readFileSync(
+const playbackSource = readFileSync(
   new URL(
-    "../../src/components/replay/ReplayTradingPanel.vue",
+    "../../src/components/replay/ReplayPlaybackControls.vue",
     import.meta.url,
   ),
   "utf8",
@@ -178,16 +178,16 @@ describe("replay autoplay", () => {
     assert.match(composableSource, /watch\(errorMessage/u);
   });
 
-  it("wires speed, pause and manual actions through the trading panel", () => {
-    assert.match(tradingPanelSource, /自动播放速度/u);
-    assert.match(tradingPanelSource, /自动播放/u);
-    assert.match(tradingPanelSource, /暂停/u);
-    assert.match(tradingPanelSource, /REPLAY_AUTOPLAY_SPEEDS/u);
-    assert.match(tradingPanelSource, /emit\('changeAutoplaySpeed'/u);
-    assert.match(tradingPanelSource, /emit\('toggleAutoplay'\)/u);
+  it("wires speed, pause and manual actions through shared playback controls", () => {
+    assert.match(playbackSource, /自动播放速度/u);
+    assert.match(playbackSource, /自动播放/u);
+    assert.match(playbackSource, /暂停/u);
+    assert.match(viewSource, /REPLAY_AUTOPLAY_SPEEDS/u);
+    assert.match(playbackSource, /emit\('speed'/u);
+    assert.match(playbackSource, /emit\('toggle'\)/u);
     assert.match(viewSource, /useReplayAttempt/u);
-    assert.match(viewSource, /@toggle-autoplay="commands\.toggleAutoplay"/u);
-    assert.match(viewSource, /@change-autoplay-speed="commands\.setAutoplaySpeed"/u);
+    assert.match(viewSource, /@toggle="commands\.toggleAutoplay"/u);
+    assert.match(viewSource, /@speed="commands\.setAutoplaySpeed"/u);
     assert.match(attemptSource, /autoplayController\.pause\(\)/u);
     assert.match(attemptSource, /sessionController\.advanceSession\(mode\)/u);
     assert.match(attemptSource, /sessionController\.submitOrder\(order\)/u);

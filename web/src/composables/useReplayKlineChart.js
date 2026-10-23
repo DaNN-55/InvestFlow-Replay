@@ -567,7 +567,7 @@ export function useReplayKlineChart({
     if (!current) return;
     current.removeIndicator("replay-volume", "VOL");
     if (model.value?.showVolume === false) return;
-    current.createIndicator(createReplayBuiltinIndicatorConfig("VOL", "sub", { compact:model.value?.compact, ...model.value?.colors }), false, {
+    current.createIndicator(createReplayBuiltinIndicatorConfig("VOL", "sub", { compact:model.value?.compact, volumeUnit:model.value?.volumeUnit, ...model.value?.colors }), false, {
       id:"replay-volume", height:92, minHeight:72, dragEnabled:false,
     });
   }

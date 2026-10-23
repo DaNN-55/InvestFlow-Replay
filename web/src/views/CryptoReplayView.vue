@@ -1,16 +1,16 @@
 <script setup>
 import { computed, inject, onActivated, onDeactivated, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Settings2, Play, Pause } from 'lucide-vue-next';
+import { Settings2 } from 'lucide-vue-next';
 import { api } from '../services/api.js';
 import UiButton from '../components/ui/UiButton.vue';
-import UiSelect from '../components/ui/UiSelect.vue';
 import UiDrawer from '../components/ui/UiDrawer.vue';
 import UiModal from '../components/ui/UiModal.vue';
 import UiInput from '../components/ui/UiInput.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import CryptoSetupPanel from '../components/crypto/CryptoSetupPanel.vue';
 import CryptoTradingPanel from '../components/crypto/CryptoTradingPanel.vue';
+import ReplayPlaybackControls from '../components/replay/ReplayPlaybackControls.vue';
 import CryptoPositionPanel from '../components/crypto/CryptoPositionPanel.vue';
 import CryptoChartWorkspace from '../components/crypto/CryptoChartWorkspace.vue';
 import CryptoReviewPanel from '../components/crypto/CryptoReviewPanel.vue';
@@ -203,16 +203,17 @@ async function retrain() {
           <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
         </div>
         <div class="crypto-terminal-side">
-          <section class="crypto-playback" aria-label="回放控制">
-            <div class="crypto-playback-heading">
-              <button type="button" class="crypto-icon" :aria-label="playing?'暂停回放':'自动回放'" :disabled="!playing&&(locked||s.status!=='active'||s.ending)" @click="playing=!playing"><Pause v-if="playing" :size="16" /><Play v-else :size="16" /></button>
-              <div><strong>{{ relativeTime(s.elapsedMinutes) }}</strong><small>{{ s.attemptInfo.kind==='first'?'首次盲测':`复练 #${s.attemptInfo.attemptNumber}` }} · {{ s.config.leverage }}倍</small></div>
-              <UiSelect v-model="preferences.playbackSpeed" class="crypto-playback-speed" aria-label="自动回放倍率" title="调整播放间隔；每次仍推进 1 分钟，事件发生后暂停"><option v-for="speed in CRYPTO_PLAYBACK_SPEEDS" :key="speed" :value="speed">{{ speed }}×</option></UiSelect>
-            </div>
-            <div class="crypto-playback-progress"><div><span>练习进度</span><span>{{ Math.round(progress*100)/100 }}%</span></div><progress :value="progress" max="100" aria-label="练习进度" /></div>
-            <div class="crypto-playback-steps"><UiButton v-for="n in [1,5,15]" :key="n" variant="secondary" :disabled="locked||s.status!=='active'" @click="advance(n)">推进 {{ n }} 分钟</UiButton></div>
-            <div class="crypto-playback-actions"><UiButton variant="secondary" class="crypto-finish" :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton><UiButton variant="secondary" :disabled="locked" @click="fresh">新开一局</UiButton></div>
-          </section>
+          <ReplayPlaybackControls
+            class="crypto-playback"
+            :label="relativeTime(s.elapsedMinutes)" :detail="`${s.attemptInfo.kind==='first'?'首次盲测':`复练 #${s.attemptInfo.attemptNumber}`} · ${s.config.leverage}倍`"
+            :playing="playing" :speed="preferences.playbackSpeed" :speeds="CRYPTO_PLAYBACK_SPEEDS.map(value=>({value,label:`${value}×`}))"
+            :steps="[1,5,15].map(value=>({value,label:`推进 ${value} 分钟`}))" :progress="progress"
+            play-label="自动回放" pause-label="暂停回放" speed-label="自动回放倍率" help="倍率调整播放间隔；每次仍推进 1 分钟，成交或风险事件后暂停。"
+            :play-disabled="!playing&&(locked||s.status!=='active'||s.ending)" :steps-disabled="locked||s.status!=='active'"
+            @toggle="playing=!playing" @speed="preferences.playbackSpeed=Number($event)" @step="advance"
+          >
+            <template #actions><UiButton variant="secondary" class="crypto-finish" :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton><UiButton variant="secondary" :disabled="locked" @click="fresh">新开一局</UiButton></template>
+          </ReplayPlaybackControls>
           <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(priceDraft)||priceDragging||Boolean(cancellation)||Boolean(orderEditor)" @command="command" />
         </div>
       </div>

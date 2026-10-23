@@ -1,6 +1,6 @@
 <script setup>
 import { ChartCandlestick } from "lucide-vue-next";
-import { toRef } from "vue";
+import { computed, toRef } from "vue";
 
 import { useReplayChartPresentation } from "../../composables/useReplayChartPresentation.js";
 import { formatDisplayDate } from "../../utils/datePresentation.js";
@@ -8,6 +8,7 @@ import CandlestickChart from "../CandlestickChart.vue";
 import ReplayIndicatorWorkspace from "./ReplayIndicatorWorkspace.vue";
 
 const props = defineProps({
+  account:{type:Object,default:()=>({})},
   bars: {
     type: Array,
     default: () => [],
@@ -37,7 +38,6 @@ const props = defineProps({
 const {
   period,
   periodOptions,
-  latestQuote,
   chart,
   selectPeriod,
   setIndicators,
@@ -47,6 +47,10 @@ const {
   sessionInterval: toRef(props, "sessionInterval"),
   observationBars: toRef(props, "observationBars"),
   stepMinutes: toRef(props, "stepMinutes"),
+});
+const costLines = computed(() => {
+  const cost = Number(props.account.averageCost), quantity = Number(props.account.positionQuantity);
+  return quantity > 0 && cost > 0 && Number.isFinite(cost) ? [{id:'ashare-position-cost',price:props.account.averageCost,reference:'entry',label:'持仓成本',compactLabel:`成本 ${cost.toFixed(2)} · ${quantity}股`,contracts:quantity,color:'#2563eb',dashed:false}] : [];
 });
 </script>
 
@@ -89,17 +93,6 @@ const {
       </div>
     </header>
 
-    <div v-if="latestQuote" class="replay-chart-panel__quote">
-      <span class="replay-chart-panel__quote-label">
-        {{ latestQuote.label }}
-      </span>
-      <span>开 <strong>{{ latestQuote.open }}</strong></span>
-      <span>高 <strong class="replay-chart-panel__rise">{{ latestQuote.high }}</strong></span>
-      <span>低 <strong class="replay-chart-panel__fall">{{ latestQuote.low }}</strong></span>
-      <span>收 <strong>{{ latestQuote.close }}</strong></span>
-      <span>额 <strong>{{ latestQuote.amount }}</strong></span>
-    </div>
-
     <ReplayIndicatorWorkspace
       :bars="chart.bars"
       @chart-indicators-change="setIndicators"
@@ -108,6 +101,9 @@ const {
       <CandlestickChart
         :key="chart.key"
         :bars="chart.bars"
+        compact
+        volume-unit="股"
+        :price-lines="costLines"
         :trades="chart.trades"
         :indicators="chart.indicators"
       />
@@ -188,39 +184,6 @@ const {
   color: var(--ql-accent);
   background: var(--ql-color-bg-surface-strong);
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
-}
-
-.replay-chart-panel__quote {
-  display: flex;
-  min-height: 42px;
-  align-items: center;
-  gap: 18px;
-  overflow-x: auto;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--ql-line);
-  color: var(--ql-color-text-muted);
-  font-family: "SF Mono", "SFMono-Regular", Menlo, monospace;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.replay-chart-panel__quote strong {
-  color: var(--ql-ink);
-  font-size: 12px;
-}
-
-.replay-chart-panel__quote-label {
-  color: var(--ql-accent);
-  font-family: inherit;
-  font-weight: 700;
-}
-
-.replay-chart-panel__quote .replay-chart-panel__rise {
-  color: var(--ql-rise);
-}
-
-.replay-chart-panel__quote .replay-chart-panel__fall {
-  color: var(--ql-fall);
 }
 
 .replay-chart-panel__chart {

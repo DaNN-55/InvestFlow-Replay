@@ -1,5 +1,5 @@
 <script setup>
-import { AlertCircle, RefreshCw, X } from "lucide-vue-next";
+import { AlertCircle, RefreshCw, Settings2, X } from "lucide-vue-next";
 import {
   computed,
   onActivated,
@@ -18,12 +18,16 @@ import ReplayIntradayPanel from "../components/replay/ReplayIntradayPanel.vue";
 import ReplayReviewPanel from "../components/replay/ReplayReviewPanel.vue";
 import ReplayOrderDecisionDialog from "../components/replay/ReplayOrderDecisionDialog.vue";
 import ReplaySetupPanel from "../components/replay/ReplaySetupPanel.vue";
+import ReplayPlaybackControls from "../components/replay/ReplayPlaybackControls.vue";
+import { REPLAY_AUTOPLAY_SPEEDS } from "../utils/replayAutoplay.js";
+import { isReplayBarOrderModel } from "../utils/replayOrderRules.js";
 import ReplayTradingPanel from "../components/replay/ReplayTradingPanel.vue";
 import UiButton from "../components/ui/UiButton.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import UiDrawer from "../components/ui/UiDrawer.vue";
 import { useReplayAttempt } from "../composables/useReplayAttempt.js";
 import { api } from "../services/api.js";
+import { moneyAmount } from "../utils/cryptoMoneyPresentation.js";
 
 const {
   session,
@@ -34,6 +38,14 @@ const {
   commands,
 } = useReplayAttempt();
 
+const playbackSteps = computed(() => {
+  const s = session.value;
+  if (!s) return [];
+  if (s.interval === 'hybrid') return [{value:'minute',label:`推进 ${s.stepMinutes ?? 1} 分钟`},{value:'day',label:'推进 1 天'}];
+  const pending = s.pendingOrders?.length ?? 0;
+  const label = s.status === 'completed' ? '本局演练已完成' : pending ? `${isReplayBarOrderModel(s.executionModelVersion)?'检查':'执行'} ${pending} 笔委托并推进` : `${s.account.positionQuantity>0?'持仓不动':'空仓观望'}，推进${s.interval==='1m'?'一分钟':'一天'}`;
+  return [{value:s.interval==='1m'?'minute':'day',label}];
+});
 const router = useRouter();
 const resumable = shallowRef(null);
 const historyError = shallowRef("");
@@ -69,6 +81,20 @@ const orderPanelSide = shallowRef("buy");
 const orderDraftResetToken = shallowRef(0);
 const reviewDialogOpen = shallowRef(false);
 const cancelRetrainOpen = shallowRef(false);
+const finishConfirmOpen = shallowRef(false);
+const settingsOpen = shallowRef(false);
+const frozenCosts = computed(() => {
+  const s = session.value, c = s?.costConfig ?? {};
+  const percent = value => value == null ? '—' : `${(Number(value)*100).toLocaleString('en-US',{maximumFractionDigits:6})}%`;
+  return [
+    ['起始资金 · 元',moneyAmount(s?.account?.initialCapital),s?.account?.initialCapital],
+    ['佣金率',percent(c.commissionRate),c.commissionRate],
+    ['最低佣金 · 元',moneyAmount(c.minCommission),c.minCommission],
+    ['卖出印花税率',percent(c.stampTaxRate),c.stampTaxRate],
+    ['双向过户费率',percent(c.transferFeeRate),c.transferFeeRate],
+    ['滑点 · bps',c.slippageBps ?? '—',c.slippageBps],
+  ];
+});
 let benchmarkRequestSequence = 0;
 let benchmarkPollTimer = null;
 
@@ -171,6 +197,7 @@ function shouldIgnoreShortcut(event) {
 function handleShortcut(event) {
   if (
     shouldIgnoreShortcut(event) ||
+    finishConfirmOpen.value ||
     !attemptState.value.hasSession ||
     attemptState.value.isBusy ||
     attemptState.value.isCompleted ||
@@ -206,14 +233,14 @@ function handleManualAdvance(mode = "minute") {
   commands.advance(mode);
 }
 
-function handleFinish() {
-  commands.finish();
+function requestFinish() {
+  if (attemptState.value.isBusy || session.value?.status === 'completed') return;
+  if (autoplay.value.playing) commands.toggleAutoplay();
+  finishConfirmOpen.value = true;
 }
-
-function handleSkipAndRestart() {
-  orderPanelOpen.value = false;
-  orderDraftResetToken.value += 1;
-  commands.skipAndRestart();
+async function handleFinish() {
+  const finished = await commands.finish();
+  if (finished) finishConfirmOpen.value = false;
 }
 
 async function cancelRetrain() {
@@ -299,14 +326,7 @@ onBeforeUnmount(() => {
             <p class="market-replay__eyebrow">决策台 / 行情演练</p>
             <h1 class="market-replay__title">历史行情盲测</h1>
           </div>
-          <UiButton
-            variant="secondary"
-            size="sm"
-            :disabled="attemptState.isBusy"
-            @click="handleStartNewSession"
-          >
-            新开一局
-          </UiButton>
+          <UiButton class="market-replay__settings" variant="secondary" size="sm" icon-only aria-label="本局配置" title="本局配置" @click="settingsOpen=true"><Settings2 :size="17" /></UiButton>
         </header>
 
         <ReplayAccountSummary :session="session" />
@@ -328,6 +348,7 @@ onBeforeUnmount(() => {
               :session-interval="session.interval"
               :observation-bars="session.observationBars"
               :step-minutes="session.stepMinutes"
+              :account="session.account"
             />
           </div>
           <aside
@@ -341,6 +362,21 @@ onBeforeUnmount(() => {
               :previous-close="intradayPreviousClose"
               :step-minutes="session.stepMinutes"
             />
+            <ReplayPlaybackControls
+              :label="`已推进 ${session.revealedFutureBars} / ${session.gameLength} ${session.interval==='1m'?'分钟':'交易日'}`"
+              :detail="session.status==='completed'?'本局已结束':session.interval==='hybrid'?`${session.stepMinutes ?? 1}分钟步进`:'历史盲测'"
+              :playing="autoplay.playing" :speed="autoplay.speed" :speeds="REPLAY_AUTOPLAY_SPEEDS" :steps="playbackSteps"
+              :progress="Math.min(100,session.revealedFutureBars / Math.max(1,session.gameLength)*100)"
+              :play-disabled="attemptState.isBusy || session.status==='completed' || orderPanelOpen || finishConfirmOpen"
+              :steps-disabled="attemptState.isBusy || session.status==='completed' || autoplay.playing || orderPanelOpen || finishConfirmOpen"
+              :speed-disabled="attemptState.isBusy || session.status==='completed'" :message="autoplay.message"
+              @toggle="commands.toggleAutoplay" @step="handleManualAdvance" @speed="commands.setAutoplaySpeed"
+            >
+              <template #actions>
+                <UiButton variant="secondary" class="market-replay__finish" :disabled="attemptState.isBusy || session.status==='completed' || orderPanelOpen || finishConfirmOpen" @click="requestFinish">结束本局</UiButton>
+                <UiButton variant="secondary" :disabled="attemptState.isBusy || finishConfirmOpen" @click="handleStartNewSession">新开一局</UiButton>
+              </template>
+            </ReplayPlaybackControls>
             <ReplayOrderDecisionDialog
               :open="orderPanelOpen"
               :side="orderPanelSide"
@@ -363,18 +399,10 @@ onBeforeUnmount(() => {
               :advancing="attemptState.activity === 'advancing'"
               :finishing="attemptState.activity === 'finishing'"
               :revealing="attemptState.activity === 'revealing'"
-              :autoplay-playing="autoplay.playing"
-              :autoplay-speed="autoplay.speed"
-              :autoplay-message="autoplay.message"
               @open-order="openOrderDialog"
               @cancel-order="commands.cancelOrder"
               @open-review="reviewDialogOpen = true"
-              @advance="handleManualAdvance"
-              @finish="handleFinish"
-              @skip="handleSkipAndRestart"
               @reveal="commands.reveal"
-              @toggle-autoplay="commands.toggleAutoplay"
-              @change-autoplay-speed="commands.setAutoplaySpeed"
             />
           </aside>
         </div>
@@ -410,6 +438,15 @@ onBeforeUnmount(() => {
         </UiDrawer>
       </template>
     </template>
+    <UiDrawer :open="settingsOpen" title="本局配置" description="开局后冻结；修改需新开一局。" panel-class="market-replay-settings-drawer" @close="settingsOpen=false">
+      <dl class="market-replay__costs"><div v-for="[label,value,raw] in frozenCosts" :key="label"><dt>{{ label }}</dt><dd :title="raw == null ? undefined : String(raw)">{{ value }}</dd></div></dl>
+    </UiDrawer>
+    <ConfirmDialog
+      :open="finishConfirmOpen" title="结束本局？"
+      :message="`将保留当前持仓，取消 ${session?.pendingOrders?.length ?? 0} 笔未执行委托。结束后不能继续交易，可到演练记录复盘。`"
+      confirm-text="确认结束" cancel-text="继续演练" :busy="attemptState.activity==='finishing'"
+      @cancel="finishConfirmOpen=false" @confirm="handleFinish"
+    />
     <ConfirmDialog
       :open="cancelRetrainOpen"
       title="取消本次复练？"
@@ -424,6 +461,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.market-replay__settings { width:32px;height:32px;min-height:32px;border-radius:7px;padding:0; }
+.market-replay__costs { margin:0;font-size:12px; }.market-replay__costs>div { display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--ql-line); }.market-replay__costs dt { color:var(--ql-color-text-muted); }.market-replay__costs dd { margin:0;font-variant-numeric:tabular-nums; }
+:global(.market-replay-settings-drawer) { width:min(380px,100vw); }
+.market-replay__finish { color:var(--ql-color-danger); }
+
 .market-replay {
   display: flex;
   min-height: 100%;
