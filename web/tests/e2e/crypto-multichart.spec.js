@@ -1115,3 +1115,19 @@ test('maximum quantity equal to the original shows an unchanged preview without 
   await expect(dialog.getByTestId('order-amend-available')).toHaveAttribute('title',session.account.availableBalance);
   expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
 });
+
+
+test('sub-cent funding changes and shortfalls remain visible without changing confirmation eligibility',async({page,request})=>{
+  const {id,session,commands}=await limitPractice(page,request);await page.setViewportSize({width:320,height:953});
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();await panel.getByRole('button',{name:'修改委托价格',exact:true}).first().click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true}),confirm=dialog.getByRole('button',{name:'确认生效',exact:true});
+  for(const [price,label,enabled] of [['49954.9','增加冻结 <0.01 USDT',true],['49945.1','释放冻结 <0.01 USDT',true],['49955','增加冻结 0.01 USDT',true],['49950','冻结不变 0.00 USDT',false],['4937621.2','资金不足，还差 <0.01 USDT',false]]) {
+    const responsePromise=page.waitForResponse(response=>response.url().endsWith('/preview')&&response.request().postDataJSON()?.command?.limitPrice===price&&response.request().postDataJSON()?.command?.remainingContracts==='1');
+    await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill(price);
+    const {preview}=await (await responsePromise).json(),shortfall=price==='4937621.2',text=dialog.getByTestId(shortfall?'order-amend-shortfall':'order-amend-change');
+    await expect(text).toHaveText(label);await expect(text).toHaveAttribute('title',`${shortfall?preview.funds.shortfall:preview.funds.reserveChangeAmount} USDT`);
+    if(enabled) await expect(confirm).toBeEnabled();else await expect(confirm).toBeDisabled();
+    if(shortfall) {expect(Number(preview.funds.shortfall)).toBeGreaterThan(0);expect(Number(preview.funds.shortfall)).toBeLessThan(0.01);await page.screenshot({path:test.info().outputPath('sub-cent-shortfall.png')});}
+  }
+  expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+});
