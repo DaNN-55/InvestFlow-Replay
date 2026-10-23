@@ -193,7 +193,10 @@ export function createCryptoReplayService({ store, snapshotSource, now = () => n
         const { engine } = runtime(session), result = domain(() => engine.apply(session.account, command));
         const before = session.account.orders.find(o => o.id === command.orderId), after = result.state.orders.find(o => o.id === command.orderId);
         const summary = o => ({limitPrice:o.limitPrice, remainingContracts:o.remainingContracts, filledContracts:o.filledContracts, reservedBalance:o.reservedBalance});
-        return { preview: { sessionId:id, revision:session.revision, command, before:summary(before), after:summary(after) } };
+        const reserveChange = new D(after.reservedBalance).minus(before.reservedBalance);
+        const funds = { reserveChangeType:reserveChange.gt(0)?'increase':reserveChange.lt(0)?'release':'unchanged', reserveChangeAmount:reserveChange.abs().toFixed(8),
+          availableBalanceBefore:session.account.account.availableBalance, availableBalanceAfter:result.state.account.availableBalance };
+        return { preview: { sessionId:id, revision:session.revision, command, before:summary(before), after:summary(after), funds } };
       }
       fields(body, ['expectedRevision', 'intent', 'orderType', 'sizingMode', 'amount', 'limitPrice', 'exitPrice', 'exitReference']);
       const session = requireSession(id);

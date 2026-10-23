@@ -984,13 +984,15 @@ test('combined editor previews final reserves read-only, ignores late previews, 
     await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('2');await expect(confirm).toBeEnabled();
     const expected=Number(latestPreview.after.reservedBalance).toLocaleString('en-US',{minimumFractionDigits:8,maximumFractionDigits:8});
     await expect(dialog.getByTestId('order-amend-reserve')).toHaveText(expected);
+    await expect(dialog.getByTestId('order-amend-change')).toContainText('增加冻结');
+    await expect(dialog.getByTestId('order-amend-available')).toHaveText(Number(latestPreview.funds.availableBalanceAfter).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
     releaseOld();await delivered;await expect(dialog.getByTestId('order-amend-reserve')).toHaveText(expected);
     expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
     await page.screenshot({path:test.info().outputPath('combined-order-editor.png')});
     await confirm.evaluate(button=>{button.click();button.click();});await expect(dialog).toHaveCount(0);await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
     expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'amend-order',orderId:order.id,limitPrice:'48000',remainingContracts:'2'});
     const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session,o=saved.orders.find(o=>o.id===order.id);
-    expect(saved.revision).toBe(session.revision+1);expect(o.reservedBalance).toBe(latestPreview.after.reservedBalance);expect(o.filledContracts).toBe(order.filledContracts);
+    expect(saved.account.availableBalance).toBe(latestPreview.funds.availableBalanceAfter);expect(saved.revision).toBe(session.revision+1);expect(o.reservedBalance).toBe(latestPreview.after.reservedBalance);expect(o.filledContracts).toBe(order.filledContracts);
     expect(o.limitPrice).toBe('48000');expect(o.remainingContracts).toBe('2');expect(saved.orders.find(o=>o.id!==order.id)).toEqual(session.orders.find(o=>o.id!==order.id));
     expect(saved.account.position).toEqual(session.account.position);expect(saved.elapsedMinutes).toBe(session.elapsedMinutes);
   } finally {releaseOld();}
@@ -1017,4 +1019,28 @@ test('combined editor keeps a pending market price fixed and previews its new qu
   expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'amend-order',orderId:session.orders[0].id,remainingContracts:'2'});
   const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(Number(saved.orders[0].reservedBalance)).toBe(Number(reserve.replaceAll(',','')));expect(saved.orders[0].limitPrice).toBeNull();expect(saved.account.position).toBeNull();expect(saved.elapsedMinutes).toBe(0);
+});
+
+
+test('amendment dialog shows released or unchanged funds and the exact resulting available balance',async({page,request})=>{
+  const {id,session,commands}=await limitPractice(page,request);
+  await page.setViewportSize({width:320,height:953});
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();
+  await panel.getByRole('button',{name:'修改委托价格',exact:true}).first().click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});
+  for(const [price,qty,label,zero] of [['48000','0.5','释放冻结',false],['24975','2','冻结不变',true]]) {
+    const responsePromise=page.waitForResponse(response=>response.url().endsWith('/preview')&&response.request().postDataJSON()?.command?.limitPrice===price&&response.request().postDataJSON()?.command?.remainingContracts===qty);
+    await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill(price);await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill(qty);
+    const preview=(await (await responsePromise).json()).preview;
+    await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeEnabled();
+    await expect(dialog.getByTestId('order-amend-change')).toContainText(label);
+    await expect(dialog.getByTestId('order-amend-change')).toContainText(Number(preview.funds.reserveChangeAmount).toLocaleString('en-US',{minimumFractionDigits:8,maximumFractionDigits:8}));
+    await expect(dialog.getByTestId('order-amend-available')).toHaveText(Number(preview.funds.availableBalanceAfter).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
+    await expect(dialog.getByTestId('order-amend-available')).toHaveAttribute('title',preview.funds.availableBalanceAfter);
+    if(zero) expect(preview.funds.availableBalanceAfter).toBe(session.account.availableBalance);
+    expect(commands).toHaveLength(0);
+    expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+  }
+  await page.screenshot({path:test.info().outputPath('amendment-funds-320.png')});
+  await dialog.getByRole('button',{name:'取消调整',exact:true}).click();expect(commands).toHaveLength(0);
 });
