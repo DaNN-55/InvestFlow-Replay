@@ -39,6 +39,9 @@ jobs:
               -e 's|src="/landing-replay-review-score.png"|src="./landing-replay-review-score.png"|g' \
               -e 's|src="/landing-replay-review-blind.png"|src="./landing-replay-review-blind.png"|g' \
               -e 's|src="/landing-replay-review-post.png"|src="./landing-replay-review-post.png"|g' \
+              -e 's|src="/landing-replay-ashare-terminal.png"|src="./landing-replay-ashare-terminal.png"|g' \
+              -e 's|src="/landing-replay-crypto-terminal.png"|src="./landing-replay-crypto-terminal.png"|g' \
+              -e 's|src="/landing-replay-history.png"|src="./landing-replay-history.png"|g' \
               web/landing/index.html > _site/index.html
           cp web/public/favicon.png \
              web/public/landing-replay-setup.png \
@@ -46,7 +49,10 @@ jobs:
              web/public/landing-replay-decision.png \
              web/public/landing-replay-review-score.png \
              web/public/landing-replay-review-blind.png \
-             web/public/landing-replay-review-post.png _site/
+             web/public/landing-replay-review-post.png \
+             web/public/landing-replay-ashare-terminal.png \
+             web/public/landing-replay-crypto-terminal.png \
+             web/public/landing-replay-history.png _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

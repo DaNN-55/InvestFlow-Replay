@@ -40,6 +40,10 @@ test("展示页在桌面和窄屏保留产品图比例且没有横向溢出", as
     await page.goto(`${landingUrl}/landing/`);
     await page.locator(".quickstart summary").click();
 
+    for (const image of await page.locator(".evidence-step img").all()) {
+      await image.scrollIntoViewIfNeeded();
+      await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth > 0)).toBe(true);
+    }
     const dimensions = await page.locator(".evidence-step img").evaluateAll((elements) => ({
       images: elements.map((element) => ({
         naturalRatio: element.naturalWidth / element.naturalHeight,
@@ -50,7 +54,7 @@ test("展示页在桌面和窄屏保留产品图比例且没有横向溢出", as
       clientWidth: document.documentElement.clientWidth,
     }));
 
-    expect(dimensions.images).toHaveLength(6);
+    expect(dimensions.images).toHaveLength(3);
     for (const image of dimensions.images) {
       expect(image.naturalRatio).toBeGreaterThan(0);
       expect(image.renderedRatio).toBeGreaterThan(0);
@@ -170,7 +174,7 @@ test("展示页清楚区分离线与真实行情路径，并展示决策证据�
 
   await expect(page.getByRole("link", { name: "先看新手练习步骤" }).first()).toHaveAttribute("href", "#offline-demo");
   await expect(page.getByRole("link", { name: "查看真实行情要求" }).first()).toHaveAttribute("href", "#real-market");
-  await expect(page.getByRole("heading", { name: "第一次使用，先选左边" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "第一次使用，先跑通一次演练" })).toBeVisible();
   await expect(page.locator(".hero-market-mask")).toBeVisible();
   await expect(page.locator(".hero-market-cursor")).toBeVisible();
   await expect(page.locator("#offline-demo").getByRole("heading", { name: "先用示例数据练一遍" })).toBeVisible();
@@ -206,15 +210,16 @@ test("展示页清楚区分离线与真实行情路径，并展示决策证据�
   await expect(copyDownload).toHaveAttribute("aria-label", "已复制下载项目命令");
   await expect(quickstart.locator(".copy-status")).toContainText("已复制下载项目命令");
 
+  await expect(page.locator("#markets")).toContainText("A 股 · 隐去身份，看行情做决策");
+  await expect(page.locator("#markets")).toContainText("合约 · 多周期观察，先确定风险");
+  await expect(page.locator("#markets")).toContainText("目前没有公开行情下载包");
+  await expect(page.locator("#evidence")).toContainText("隔离的合成样例数据");
   const evidence = page.locator(".evidence-step img");
-  await expect(evidence).toHaveCount(6);
+  await expect(evidence).toHaveCount(3);
   const expectedEvidence = [
-    "/landing-replay-setup.png",
-    "/landing-replay-settings.png",
-    "/landing-replay-decision.png",
-    "/landing-replay-review-score.png",
-    "/landing-replay-review-blind.png",
-    "/landing-replay-review-post.png",
+    "/landing-replay-ashare-terminal.png",
+    "/landing-replay-crypto-terminal.png",
+    "/landing-replay-history.png",
   ];
   for (const [index, src] of expectedEvidence.entries()) {
     await expect(evidence.nth(index)).toHaveAttribute("src", src);
@@ -224,7 +229,7 @@ test("展示页清楚区分离线与真实行情路径，并展示决策证据�
   }
 
   const boundaries = page.locator("#boundaries");
-  await expect(boundaries.locator(".version-strip")).toContainText("版本：v0.1.0-alpha.1");
+  await expect(boundaries.locator(".version-strip")).toContainText("已有下载：v0.1.0-alpha.1");
   await expect(boundaries.locator(".version-strip")).toContainText("平台：仅 macOS 已完成本地验收；其他系统待验证。");
   await expect(boundaries.locator(".version-strip")).toContainText("许可：Apache-2.0");
   await expect(boundaries.locator(".boundary-grid")).toContainText("不连接证券账户，不真实下单，不承诺收益。");
@@ -235,12 +240,9 @@ test("Pages 工作流复制展示页引用的证据素材", async () => {
   const workflow = await readFile(workflowUrl, "utf8");
 
   for (const asset of [
-    "landing-replay-setup.png",
-    "landing-replay-settings.png",
-    "landing-replay-decision.png",
-    "landing-replay-review-score.png",
-    "landing-replay-review-blind.png",
-    "landing-replay-review-post.png",
+    "landing-replay-ashare-terminal.png",
+    "landing-replay-crypto-terminal.png",
+    "landing-replay-history.png",
   ]) {
     expect(workflow).toContain(`web/public/${asset}`);
     expect(workflow).toContain(`src="/${asset}"`);
