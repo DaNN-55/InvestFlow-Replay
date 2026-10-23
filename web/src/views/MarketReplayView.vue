@@ -332,8 +332,7 @@ onBeforeUnmount(() => {
         <ReplayAccountSummary :session="session" />
         <ReplayAttemptContext
           :attempt-info="session.attemptInfo"
-          :cancelling="attemptState.activity === 'cancellingRetrain'"
-          @cancel-retrain="cancelRetrainOpen = true"
+          :session-key="session.id"
         />
 
         <div
@@ -440,6 +439,7 @@ onBeforeUnmount(() => {
     </template>
     <UiDrawer :open="settingsOpen" title="本局配置" description="开局后冻结；修改需新开一局。" panel-class="market-replay-settings-drawer" @close="settingsOpen=false">
       <dl class="market-replay__costs"><div v-for="[label,value,raw] in frozenCosts" :key="label"><dt>{{ label }}</dt><dd :title="raw == null ? undefined : String(raw)">{{ value }}</dd></div></dl>
+      <UiButton v-if="session?.attemptInfo?.kind==='retrain' && session.attemptInfo.sourceSessionId" variant="secondary" :disabled="attemptState.isBusy" @click="settingsOpen=false;cancelRetrainOpen=true">取消复练并返回首次结果</UiButton>
     </UiDrawer>
     <ConfirmDialog
       :open="finishConfirmOpen" title="结束本局？"

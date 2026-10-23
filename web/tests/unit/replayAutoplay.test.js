@@ -29,21 +29,10 @@ const attemptSource = readFileSync(
 );
 
 describe("replay autoplay", () => {
-  it("provides distinct slow, normal and fast delays", () => {
-    assert.deepEqual(
-      REPLAY_AUTOPLAY_SPEEDS.map(({ value, label }) => ({ value, label })),
-      [
-        { value: "slow", label: "慢速" },
-        { value: "normal", label: "正常" },
-        { value: "fast", label: "快速" },
-      ],
-    );
-    assert.ok(getReplayAutoplayDelay("slow") > getReplayAutoplayDelay("normal"));
-    assert.ok(getReplayAutoplayDelay("normal") > getReplayAutoplayDelay("fast"));
-    assert.equal(
-      getReplayAutoplayDelay("unsupported"),
-      getReplayAutoplayDelay("normal"),
-    );
+  it("uses the same 1/2/4/8 multipliers as crypto without changing the step size",()=>{
+    assert.deepEqual(REPLAY_AUTOPLAY_SPEEDS.map(({value,label})=>({value,label})),[1,2,4,8].map(n=>({value:String(n),label:`${n}×`})));
+    for(const n of [1,2,4,8]) assert.equal(getReplayAutoplayDelay(n),1100/n);
+    assert.equal(getReplayAutoplayDelay('unsupported'),1100);
   });
 
   it("pauses before pending orders, completion and abnormal states", () => {

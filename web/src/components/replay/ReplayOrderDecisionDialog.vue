@@ -7,6 +7,7 @@ import {
   REPLAY_BUY_REASON_TAG_OPTIONS,
   REPLAY_SELL_REASON_TAG_OPTIONS,
 } from "../../utils/replayReviewPresentation.js";
+import UiTooltip from "../ui/UiTooltip.vue";
 import UiButton from "../ui/UiButton.vue";
 import UiInput from "../ui/UiInput.vue";
 import UiSelect from "../ui/UiSelect.vue";
@@ -112,6 +113,12 @@ watch(
     }
   },
 );
+const orderHelp = computed(() => {
+  const timing = props.sessionInterval==='hybrid'?`下一${props.stepMinutes}分钟开盘尝试成交。`:props.sessionInterval==='1m'?'下一分钟开盘尝试成交。':'下一交易日开盘尝试成交。';
+  const type = !advancedOrders.value ? '' : form.orderType==='stop'?'保护当前持仓，触发后持续退出；受T+1与成交量限制，可撤销。':form.orderType==='limit'?'限价余量当日有效，允许部分成交。':'未成交余量当日继续等待。';
+  const quantity = props.tradingRules ? props.tradingRules.board==='star'?'200股起，超出可逐股递增；不足200股的卖出余额须一次性处理。':'买入100股整数倍；卖出零股余额须一次性处理。' : '';
+  return `${timing}${type}${quantity} 成交量按K线近似，不模拟盘口排队。`;
+});
 </script>
 
 <template>
@@ -126,7 +133,6 @@ watch(
         <header class="replay-order-dialog__header">
           <div>
             <h2>{{ isBuy ? '买入决策记录' : '卖出决策记录' }}</h2>
-            <p>填写时可继续查看左侧行情；关闭后，本次未提交草稿仍会保留。</p>
           </div>
           <button
             type="button"
@@ -141,7 +147,7 @@ watch(
           <form class="replay-order-decision" @submit.prevent="submit">
       <section class="replay-order-decision__section">
         <div class="replay-order-decision__heading">
-          <span>01</span><div><h3>委托规模</h3><p>{{ sessionInterval === "hybrid" ? `当前盘中决策，下一个${stepMinutes}分钟开盘尝试执行。` : sessionInterval === "1m" ? "当前分钟决策，下一分钟开盘尝试执行。" : "收盘后决策，下一交易日开盘尝试执行。" }}</p></div>
+          <span>01</span><div><h3>委托规模<UiTooltip clickable wide label="委托规模说明" :content="orderHelp" /></h3></div>
         </div>
         <div v-if="advancedOrders" class="replay-order-decision__risk-grid">
           <label><span>委托类型</span><UiSelect v-model="form.orderType" aria-label="委托类型">
@@ -153,9 +159,6 @@ watch(
           <label v-if="form.orderType === 'stop'"><span>止损触发价</span>
             <UiInput v-model="form.protectionPrice" aria-label="止损触发价" type="number" min="0.01" step="0.01" /></label>
         </div>
-        <p v-if="advancedOrders" class="replay-order-decision__invalidation-help">
-          {{ form.orderType === 'stop' ? '保护全部当前持仓。触价后持续卖出余量，反弹和跨日不取消；仍受T+1及成交容量限制，可在交易台主动取消。' : form.orderType === 'limit' ? '从下一根K线开始等待价格，允许部分成交；该交易日收盘后余量到期。' : '下一根开盘尝试成交，成交量不足时余量在当日继续等待。' }}
-        </p>
         <div v-if="form.orderType !== 'stop'" class="replay-order-decision__sizing">
           <div class="replay-order-decision__mode">
             <button
@@ -198,16 +201,13 @@ watch(
               {{ value * 100 }}%
             </button>
           </div>
-          <p v-if="tradingRules" class="replay-order-decision__invalidation-help">
-            {{ tradingRules.label }}：{{ tradingRules.board === 'star' ? '200股起，超过部分可逐股递增；不足200股的卖出余额须一次性处理。' : '买入按100股整数倍；卖出零股余额须一次性处理。' }}
-          </p>
           <p v-if="form.inputMode === 'shares' && quantityMessage" role="status" class="replay-order-decision__invalidation-help">{{ quantityMessage }}</p>
         </div>
       </section>
 
       <section class="replay-order-decision__section">
         <div class="replay-order-decision__heading">
-          <span>02</span><div><h3>{{ isBuy ? '为什么买' : '为什么卖' }}</h3><p>记录当时依据，不允许成交后覆盖。</p></div>
+          <span>02</span><div><h3>{{ isBuy ? '为什么买' : '为什么卖' }}<UiTooltip clickable label="判断记录说明" content="收起保留草稿；成交后不能覆盖当时判断。" /></h3></div>
         </div>
         <div class="replay-order-decision__evidence-heading">
           <span>判断理由（至少 1 项）</span>
@@ -244,7 +244,7 @@ watch(
 
       <section v-if="isBuy" class="replay-order-decision__section">
         <div class="replay-order-decision__heading">
-          <span>03</span><div><h3>风险边界</h3><p>止损价与判断失效条件至少填写一项。</p></div>
+          <span>03</span><div><h3>风险边界<UiTooltip clickable wide label="风险边界说明" :content="advancedOrders?'止损价成交后建立持仓保护，触发后持续退出；收盘失效条件只记录和提醒，不自动卖出。':'收盘失效条件只记录和提醒，不自动卖出。'" /></h3></div>
         </div>
         <label>
           <span>风险计划</span>
@@ -252,23 +252,19 @@ watch(
           <small>{{ form.riskPlan.trim().length }} / 1000，至少 10 字</small>
         </label>
         <div class="replay-order-decision__risk-grid">
-          <label><span>止损价</span><UiInput v-model="form.stopLossPrice" type="number" min="0" step="0.01" /></label>
+          <label><span>止损价 / 失效条件（至少一项）</span><UiInput v-model="form.stopLossPrice" aria-label="止损价" type="number" min="0" step="0.01" /></label>
           <label class="replay-order-decision__toggle"><input v-model="form.invalidationEnabled" type="checkbox" /><span>记录收盘确认的失效条件</span></label>
         </div>
-        <p v-if="advancedOrders" class="replay-order-decision__invalidation-help">填写止损价后，买入成交会建立或更新当前持仓的止损保护；触价后持续退出。只填写收盘失效条件则用于记录和提醒，不自动卖出。</p>
         <div v-if="form.invalidationEnabled" class="replay-order-decision__invalidation">
           <UiSelect v-model="form.invalidationOperator"><option value="lte">收盘价 ≤</option><option value="gte">收盘价 ≥</option></UiSelect>
           <UiInput v-model="form.invalidationThreshold" type="number" min="0" step="0.01" placeholder="价格" />
           <UiInput v-model="form.invalidationNote" maxlength="300" placeholder="可选说明" />
         </div>
-        <p v-if="form.invalidationEnabled" class="replay-order-decision__invalidation-help">
-          例如“收盘价 ≤ 10.15”表示只有当天收盘确认跌破才认定买入逻辑失效；这里只记录并用于复盘，不会自动卖出。
-        </p>
       </section>
 
       <section v-else class="replay-order-decision__section">
         <div class="replay-order-decision__heading">
-          <span>03</span><div><h3>退出处理</h3><p>区分止盈、止损和主动调整，保留剩余仓位计划。</p></div>
+          <span>03</span><div><h3>退出处理<UiTooltip clickable label="退出处理说明" content="选择卖出类型，并记录剩余仓位计划。" /></h3></div>
         </div>
         <label class="replay-order-decision__compact">
           <span>卖出类型</span>
@@ -284,7 +280,6 @@ watch(
       </section>
 
       <footer class="replay-order-decision__actions">
-        <span>未提交内容会保留到当前演练结束</span>
         <UiButton type="button" variant="secondary" :disabled="submitting" @click="emit('close')">暂时收起</UiButton>
         <UiButton type="submit" :variant="isBuy ? 'danger' : 'primary'" :loading="submitting" :disabled="!canSubmit">
           提交{{ isBuy ? '买入' : '卖出' }}委托
@@ -325,7 +320,7 @@ watch(
 .replay-order-decision__heading { display: flex; align-items: flex-start; gap: 10px; }
 .replay-order-decision__heading > span { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 7px; color: var(--ql-accent); background: var(--ql-color-primary-soft); font-size: 10px; font-weight: 800; }
 .replay-order-decision__heading h3, .replay-order-decision__heading p { margin: 0; }
-.replay-order-decision__heading h3 { font-size: 14px; }
+.replay-order-decision__heading h3 { display:flex;align-items:center;gap:6px;font-size:14px; }
 .replay-order-decision__heading p { margin-top: 3px; color: var(--ql-color-text-muted); font-size: 10px; }
 .replay-order-decision label { display: grid; gap: 6px; color: var(--ql-color-text-muted); font-size: 11px; font-weight: 700; }
 .replay-order-decision label small { font-size: 10px; font-weight: 400; text-align: right; }

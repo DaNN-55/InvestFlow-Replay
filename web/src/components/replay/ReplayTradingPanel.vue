@@ -10,7 +10,6 @@ import {
 import { computed } from "vue";
 
 import UiButton from "../ui/UiButton.vue";
-import { isReplayBarOrderModel } from "../../utils/replayOrderRules.js";
 import { getReplayReviewEntryState } from "../../utils/replayReviewPresentation.js";
 import ReplayOrderDecisionSnapshot from "./ReplayOrderDecisionSnapshot.vue";
 
@@ -118,9 +117,7 @@ function formatMoney(value) {
           卖出
         </button>
       </div>
-      <p class="replay-trading__decision-hint">{{ isReplayBarOrderModel(session.executionModelVersion) ? '支持当日限价、部分成交与持仓止损；成交量按K线总量近似，不模拟盘口排队。' : '旧会话保留下一开盘模型；新建演练可使用限价、止损和部分成交。' }}</p>
       <p v-if="session.tradingRules" class="replay-trading__decision-hint">{{ session.tradingRules.label }} · {{ session.tradingRules.board === 'star' ? '200股起，可逐股递增' : '买入100股整数倍' }} · T+1</p>
-      <p v-else-if="session.executionModelVersion === 'bar-orders-v1' && session.interval !== '1m' && session.marketKind !== 'synthetic'" class="replay-trading__decision-hint">本局保留原有数量与涨跌停规则；新建一局启用板块规则。</p>
       <p v-if="session.marketEvent?.status === 'rule_unavailable'" role="status" class="replay-trading__decision-hint">本根K线的历史交易规则信息不足，暂不撮合；请查看委托状态或继续观察。</p>
 
       <section v-if="pendingOrders.length" class="replay-trading__pending">
