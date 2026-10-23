@@ -1240,6 +1240,16 @@ test('position and activity money stays compact with full precision while prices
 
 test('completed crypto review and trade history share compact money with raw hover precision',async({page,request})=>{
   const {id,commands}=await openPractice(page,request,{layout:'dual'});
+  await page.goto(`${base}/decision/trade-records?tab=replay&market=crypto-perpetual&session=${id}`);
+  const activeReview=page.getByRole('region',{name:'合约复盘',exact:true});
+  await expect(activeReview).toBeVisible();await expect(activeReview.locator('form')).toHaveCount(0);
+  await expect(activeReview.locator('.review-costs')).not.toHaveAttribute('open','');
+  expect((await activeReview.boundingBox()).height).toBeLessThan(420);
+  await activeReview.getByRole('button',{name:'复盘结算口径',exact:true}).click();
+  await expect(page.locator('.ui-tooltip__content')).toContainText('非实盘清算账单');
+  await page.keyboard.press('Escape');
+  await activeReview.screenshot({path:test.info().outputPath('compact-active-history.png')});
+
   let session=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   const post=async(endpoint,data={})=>{
     const response=await request.post(`${fixture.url}${path}/${id}/${endpoint}`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,...data}});
@@ -1259,11 +1269,14 @@ test('completed crypto review and trade history share compact money with raw hov
     await expect(review).toBeVisible();
     await expect(review.getByTestId('crypto-net-pnl')).toHaveText(display(session.summary.netPnl));
     await expect(review.getByTestId('crypto-net-pnl')).toHaveAttribute('title',session.summary.netPnl);
+    if(name==='history') await expect(review.locator('form')).toHaveCount(0);
+    await review.locator('.review-costs>summary').click();
     const fee=review.locator('.review-facts>div').filter({has:page.getByText('普通成交手续费',{exact:true})}).locator('strong');
     await expect(fee).toHaveText('<0.01');await expect(fee).toHaveAttribute('title',session.totals.tradingFees);
+    await review.getByText(/^执行与风险事件（/).click();
     await expect(review.locator('.timeline')).toContainText(`${quote.contracts} 张 @ ${quote.fillPrice}`);
     await expect(review.getByTestId('crypto-plan-comparison')).toBeVisible();
-    await expect(review.locator('.plan-rows')).toContainText('未定义：部分或全部入场缺少退出价');
+    await expect(review.locator('.plan-rows')).toContainText('计划不完整');
     await review.getByText(/^资金账本（/).click();
     expect(await review.locator('td[title]').count()).toBeGreaterThan(0);
     for(const cell of await review.locator('[title]').all()) {
@@ -1272,7 +1285,7 @@ test('completed crypto review and trade history share compact money with raw hov
     await page.setViewportSize({width:320,height:850});
     await review.scrollIntoViewIfNeeded();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-    await review.locator('.review-facts').screenshot({path:test.info().outputPath(`${name}-money-mobile.png`)});
+    await review.locator('.review-facts').first().screenshot({path:test.info().outputPath(`${name}-money-mobile.png`)});
   }
   expect(commands).toHaveLength(0);
   const after=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;expect(after).toEqual(session);
