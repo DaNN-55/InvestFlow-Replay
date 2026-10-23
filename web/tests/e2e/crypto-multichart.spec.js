@@ -1127,7 +1127,10 @@ test('sub-cent funding changes and shortfalls remain visible without changing co
     const {preview}=await (await responsePromise).json(),shortfall=price==='4937621.2',text=dialog.getByTestId(shortfall?'order-amend-shortfall':'order-amend-change');
     await expect(text).toHaveText(label);await expect(text).toHaveAttribute('title',`${shortfall?preview.funds.shortfall:preview.funds.reserveChangeAmount} USDT`);
     if(enabled) await expect(confirm).toBeEnabled();else await expect(confirm).toBeDisabled();
-    if(shortfall) {expect(Number(preview.funds.shortfall)).toBeGreaterThan(0);expect(Number(preview.funds.shortfall)).toBeLessThan(0.01);await page.screenshot({path:test.info().outputPath('sub-cent-shortfall.png')});}
+    if(shortfall) {
+      await expect(dialog.getByTestId('order-amend-available')).toHaveText('缺口 <0.01');
+      await expect(dialog.getByTestId('order-amend-available')).toHaveAttribute('title',preview.funds.availableBalanceAfter);
+      expect(Number(preview.funds.shortfall)).toBeGreaterThan(0);expect(Number(preview.funds.shortfall)).toBeLessThan(0.01);await page.screenshot({path:test.info().outputPath('sub-cent-shortfall.png')});}
   }
   expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
 });
