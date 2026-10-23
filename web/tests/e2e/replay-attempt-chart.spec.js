@@ -128,11 +128,22 @@ test("创建、推进和周期切换通过 Attempt 与 Chart interface 工作", 
   await expect(page.getByText("已推进 0 / 20 日")).toBeVisible();
   await expect(page.locator("canvas").first()).toBeVisible();
 
+  const playback=page.getByRole('region',{name:'回放控制',exact:true});
+  await playback.getByRole('combobox',{name:'自动播放速度'}).selectOption('slow');
+  await playback.getByRole('button',{name:'自动播放',exact:true}).click();
+  await expect(playback.getByRole('button',{name:'暂停',exact:true})).toBeVisible();
+  await playback.getByRole('button',{name:'暂停',exact:true}).click();
+  await expect(playback.getByRole('button',{name:'自动播放',exact:true})).toBeVisible();
   await page.getByRole("button", { name: "空仓观望，推进一天" }).click();
 
   await expect(page.getByText("已推进 1 / 20 日")).toBeVisible();
   await expect(page.getByText("REV 1")).toBeVisible();
-  await expect(page.getByText("第 251 日", { exact: true })).toBeVisible();
+  const tooltip=await page.evaluate(async()=>{
+    const url=performance.getEntriesByType('resource').find(e=>/\/klinecharts\.js\?v=/.test(e.name)).name,{init}=await import(url);
+    const chart=init({id:document.querySelector('[k-line-chart-id]').getAttribute('k-line-chart-id')});
+    return {type:chart.getStyles().candle.tooltip.showType,count:chart.getDataList().length};
+  });
+  expect(tooltip.type).toBe('rect');expect(tooltip.count).toBe(251);
 
   await page.getByRole("button", { name: "周", exact: true }).click();
 

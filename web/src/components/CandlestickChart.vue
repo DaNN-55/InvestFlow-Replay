@@ -24,6 +24,7 @@ const props = defineProps({
   height: { type: Number, default: 0 },
   colors: { type: Object, default: () => ({}) },
   compact: Boolean,
+  volumeUnit:{type:String,default:'张'},
   showVolume: { type: Boolean, default: true },
   trades: {
     type: Array,
@@ -63,6 +64,7 @@ const chartModel = computed(() => ({
   indicators: props.indicators,
   colors: props.colors,
   compact: props.compact,
+  volumeUnit:props.volumeUnit,
   showVolume: props.showVolume,
 }));
 const { state, drawing, commands } = useReplayKlineChart({

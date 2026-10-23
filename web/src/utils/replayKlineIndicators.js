@@ -74,7 +74,7 @@ export function createReplayBuiltinIndicatorConfig(name, placement = "sub", opti
       ...(options.compact ? { regenerateFigures: () => volumeFigures(options), createTooltipDataSource: ({ kLineDataList, crosshair }) => {
         const index = crosshair?.dataIndex ?? kLineDataList.length - 1;
         const value = kLineDataList[index]?.volume;
-        return { name:"成交量 · 张", calcParamsText:"", icons:[], values:[{ title:"", value:value == null ? "—" : Number(value).toLocaleString("en-US", {maximumFractionDigits:2}) }] };
+        return { name:`成交量 · ${options.volumeUnit ?? "张"}`, calcParamsText:"", icons:[], values:[{ title:"", value:value == null ? "—" : Number(value).toLocaleString("en-US", {maximumFractionDigits:2}) }] };
       } } : {}),
     } : {}),
     ...(name === "MACD" ? { figures: macdFigures() } : {}),
