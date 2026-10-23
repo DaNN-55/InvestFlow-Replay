@@ -6,6 +6,8 @@ import { api } from '../services/api.js';
 import UiButton from '../components/ui/UiButton.vue';
 import UiSelect from '../components/ui/UiSelect.vue';
 import UiDrawer from '../components/ui/UiDrawer.vue';
+import UiModal from '../components/ui/UiModal.vue';
+import UiInput from '../components/ui/UiInput.vue';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import CryptoSetupPanel from '../components/crypto/CryptoSetupPanel.vue';
 import CryptoTradingPanel from '../components/crypto/CryptoTradingPanel.vue';
@@ -14,7 +16,7 @@ import CryptoChartWorkspace from '../components/crypto/CryptoChartWorkspace.vue'
 import CryptoReviewPanel from '../components/crypto/CryptoReviewPanel.vue';
 import { createCryptoReplayController } from '../utils/cryptoReplayController.js';
 import { amount, relativeTime } from '../utils/cryptoReplayPresentation.js';
-import { createPriceDraft, priceDraftCurrent, priceDraftCommand, createPriceCancellation, priceCancellationCurrent, priceCancellationCommand } from '../utils/cryptoPriceDraft.js';
+import { createPriceDraft, priceDraftReached, priceDraftCurrent, priceDraftCommand, createPriceCancellation, priceCancellationCurrent, priceCancellationCommand } from '../utils/cryptoPriceDraft.js';
 import { loadCryptoPreferences, CRYPTO_WORKSPACE_KEY, CRYPTO_PLAYBACK_SPEEDS, cryptoVisiblePeriods } from '../utils/cryptoWorkspacePreferences.js';
 import '../components/crypto/crypto-terminal.css';
 const route=useRoute(),router=useRouter();
@@ -26,9 +28,21 @@ const s=computed(()=>state.value.session);
 const progress=computed(()=>Math.min(100,Math.max(0,Number(s.value?.elapsedMinutes??0)/Math.max(1,Number(s.value?.gameLength??1))*100)));
 const routeMismatch=computed(()=>route.name==='crypto-market-replay'&&typeof route.query.session==='string'&&route.query.session!==s.value?.id);
 const priceDraft=shallowRef(null),priceDragging=ref(false),priceSaving=ref(false),priceNotice=ref('');
-const cancellation=shallowRef(null);
+const cancellation=shallowRef(null),orderEditor=shallowRef(null),orderEditPrice=ref('');
+const orderEditDraft=computed(()=>orderEditor.value?createPriceDraft(orderEditor.value.session,{orderId:orderEditor.value.orderId},Number(orderEditPrice.value)):null);
+function clearOrderEditor() {orderEditor.value=null;orderEditPrice.value='';}
+function requestOrderEdit(target) {
+  if(locked.value) return;
+  const draft=createPriceCancellation(s.value,target);
+  if(draft?.order?.type!=='limit') return;
+  stop();priceNotice.value='';orderEditor.value={...draft,session:s.value};orderEditPrice.value=draft.order.limitPrice;
+}
+function confirmOrderEdit() {
+  if(!orderEditDraft.value) return;
+  return saveChartCommand(priceDraftCommand(s.value,orderEditDraft.value),clearOrderEditor);
+}
 let priceDragSession=null;
-const locked=computed(()=>state.value.busy||Boolean(state.value.pending)||routeMismatch.value||Boolean(priceDraft.value)||priceDragging.value||Boolean(cancellation.value));
+const locked=computed(()=>state.value.busy||Boolean(state.value.pending)||routeMismatch.value||Boolean(priceDraft.value)||priceDragging.value||Boolean(cancellation.value)||Boolean(orderEditor.value));
 const finishOpen=ref(false),settingsOpen=ref(false),playing=ref(false);
 const retraining=ref(false);
 const display=reactive({precision:'auto'});
@@ -88,6 +102,7 @@ async function saveChartCommand(body,clear) {
 }
 watch(()=>[s.value?.id,s.value?.revision],()=>{
   if(priceSaving.value) return;
+  if(orderEditor.value&&!priceCancellationCurrent(s.value,orderEditor.value)) {clearOrderEditor();priceNotice.value='委托已变化，请重新修改价格。';}
   if(priceDraft.value&&!priceDraftCurrent(s.value,priceDraft.value)) {cancelPriceDraft();priceNotice.value='委托、持仓或保护已变化，未确认的调整已取消。';}
   if(cancellation.value&&!priceCancellationCurrent(s.value,cancellation.value)) {clearCancellation();priceNotice.value='委托、持仓或保护已变化，请核对后重新撤销。';}
 });
@@ -130,7 +145,7 @@ async function tick(generation) {
 watch(playing,()=>{playbackGeneration++;clearTimeout(playbackTimer);if(playing.value) schedulePlayback();});
 watch(()=>preferences.value.playbackSpeed,()=>{if(playing.value) schedulePlayback();});
 function stop() {playing.value=false;playbackGeneration++;clearTimeout(playbackTimer);}
-onDeactivated(()=>{stop();cancelPriceDraft();clearCancellation();});onBeforeUnmount(()=>{stop();cancelPriceDraft();clearCancellation();});
+onDeactivated(()=>{stop();cancelPriceDraft();clearCancellation();clearOrderEditor();});onBeforeUnmount(()=>{stop();cancelPriceDraft();clearCancellation();clearOrderEditor();});
 async function finish() {stop();if(await controller.act('finish')) finishOpen.value=false;}
 async function retrain() {
   stop();retraining.value=true;
@@ -151,9 +166,9 @@ async function retrain() {
       <div class="crypto-account" data-testid="crypto-account"><div v-for="[label,value,id] in [['账户权益 · USDT',s.summary.accountEquity,'crypto-equity'],['仓外可用',s.account.availableBalance,'crypto-available'],['委托冻结',s.reservedBalance,'crypto-reserved'],['本次净盈亏',s.summary.netPnl,'crypto-net-summary']]" :key="label"><span>{{ label }}</span><strong :data-testid="id" :title="String(value)">{{ amount(value,display.precision==='full'?8:2) }}</strong></div></div>
       <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed}">
         <div class="crypto-terminal-main">
-          <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(cancellation)" :price-draft="priceDraft" @price-drag="priceDrag" @confirm-price="confirmPriceDraft" @cancel-price="cancelPriceDraft" @request-cancellation="requestCancellation" />
+          <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(cancellation)||Boolean(orderEditor)" :price-draft="orderEditDraft??priceDraft" @price-drag="priceDrag" @confirm-price="confirmPriceDraft" @cancel-price="cancelPriceDraft" @request-cancellation="requestCancellation" />
           <p v-if="s.ending&&s.status!=='completed'" class="crypto-alert" role="status">{{ s.status==='end-blocked'?'结束受阻：预留分钟容量不足，仍有仓位；不能揭晓或复练。':'正在结束：继续推进以退出剩余仓位，不再新开仓。' }}</p>
-          <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(priceDraft)||priceDragging||Boolean(cancellation)" @command="command" @cancel-order="requestCancellation" @records="records" />
+          <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(priceDraft)||priceDragging||Boolean(cancellation)||Boolean(orderEditor)" @command="command" @cancel-order="requestCancellation" @edit-order="requestOrderEdit" @records="records" />
           <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
           <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
         </div>
@@ -168,11 +183,21 @@ async function retrain() {
             <div class="crypto-playback-steps"><UiButton v-for="n in [1,5,15]" :key="n" variant="secondary" :disabled="locked||s.status!=='active'" @click="advance(n)">推进 {{ n }} 分钟</UiButton></div>
             <div class="crypto-playback-actions"><UiButton variant="secondary" class="crypto-finish" :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton><UiButton variant="secondary" :disabled="locked" @click="fresh">新开一局</UiButton></div>
           </section>
-          <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(priceDraft)||priceDragging||Boolean(cancellation)" @command="command" />
+          <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(priceDraft)||priceDragging||Boolean(cancellation)||Boolean(orderEditor)" @command="command" />
         </div>
       </div>
     </template>
     <UiDrawer :open="settingsOpen" title="交易与显示设置" description="交易参数开局后冻结；显示偏好可随时调整。" panel-class="crypto-controls crypto-data-drawer" @close="settingsOpen=false"><label>账户数字精度<UiSelect v-model="display.precision" aria-label="账户数字显示精度"><option value="auto">摘要 · 两位小数</option><option value="full">完整 · 八位小数</option></UiSelect></label><p>布局、各图周期和联动开关会在本浏览器记住。</p><template v-if="s"><dl class="crypto-detail-facts"><div><dt>杠杆 / 持仓</dt><dd>{{ s.config.leverage }}倍 · 逐仓单向</dd></div><div><dt>固定 Maker / Taker</dt><dd>{{ Number(s.frozenRules.makerRate)*100 }}% / {{ Number(s.frozenRules.takerRate)*100 }}%</dd></div><div><dt>单边教学滑点</dt><dd>{{ s.frozenRules.slippageBps }} bps</dd></div></dl></template><button type="button" class="crypto-text-button" @click="settingsOpen=false;openData()">查看数据来源与完整规则</button></UiDrawer>
+    <UiModal :open="Boolean(orderEditor)" title="修改委托价格" description="确认前原委托仍有效。" :busy="state.busy||priceSaving" panel-class="crypto-controls crypto-order-editor" @close="clearOrderEditor">
+      <form v-if="orderEditor" @submit.prevent="confirmOrderEdit">
+        <p class="crypto-muted">{{ orderEditor.order.intent==='reduce'?(orderEditor.order.side==='long'?'平多':'平空'):(orderEditor.order.side==='long'?'开多':'开空') }} · 未成交 {{ orderEditor.order.remainingContracts }} 张</p>
+        <label>新委托价<UiInput v-model="orderEditPrice" aria-label="新委托价" inputmode="decimal" required :disabled="state.busy||priceSaving" /></label>
+        <dl class="crypto-detail-facts"><div><dt>原价格</dt><dd>{{ orderEditor.order.limitPrice }}</dd></div><div><dt>新价格</dt><dd>{{ orderEditDraft?.price??'—' }}</dd></div></dl>
+        <p class="crypto-muted">最小变动 {{ orderEditor.session.contract.tickSz }}，预览按此对齐。</p>
+        <p v-if="orderEditDraft&&priceDraftReached(s,orderEditDraft)" class="crypto-muted" role="status">新价格已越过当前价，下一分钟可能按吃单成交。</p>
+        <div class="crypto-order-editor-actions"><UiButton variant="secondary" :disabled="state.busy||priceSaving" @click="clearOrderEditor">取消调整</UiButton><UiButton type="submit" :disabled="!orderEditDraft||state.busy||priceSaving">确认生效</UiButton></div>
+      </form>
+    </UiModal>
     <ConfirmDialog :open="Boolean(cancellation)" :title="cancellationTitle" :message="cancellationMessage" confirm-text="确认撤销" cancel-text="保留" :busy="state.busy||priceSaving" @cancel="clearCancellation" @confirm="confirmCancellation" />
     <ConfirmDialog :open="finishOpen" title="结束本次练习？" message="结束练习会处理剩余仓位；退出完成后先提交盲评，再揭晓。仅平仓请使用图表下方的持仓操作。" confirm-text="结束并进入盲评" :busy="state.busy" @cancel="finishOpen=false" @confirm="finish" />
   </div>
