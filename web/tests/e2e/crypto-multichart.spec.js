@@ -1235,3 +1235,43 @@ test('position and activity money stays compact with full precision while prices
   const after=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(after).toEqual(session);
 });
+
+test('completed crypto review and trade history share compact money with raw hover precision',async({page,request})=>{
+  const {id,commands}=await openPractice(page,request,{layout:'dual'});
+  let session=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  const post=async(endpoint,data={})=>{
+    const response=await request.post(`${fixture.url}${path}/${id}/${endpoint}`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,...data}});
+    expect(response.status()).toBe(200);session=(await response.json()).session;
+  };
+  await post('actions',{command:{type:'market-open',side:'long',contracts:'0.01'}});
+  await post('advance',{minutes:1});await post('finish');
+  await post('reviews/blind',{review:{thesis:'保持原判断',tradePlan:'小额练习'}});
+  await post('reveal');
+  expect(session.status).toBe('completed');
+  const traceResponse=await request.get(`${fixture.url}${path}/${id}/traces`),events=(await traceResponse.json()).items;
+  const quote=events.find(e=>e.quote)?.quote;expect(quote).toBeTruthy();
+  const display=value=>Number(value)===0?'0.00':Math.abs(Number(value))<0.01?(Number(value)<0?'-<0.01':'<0.01'):Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  for(const [name,url] of [['settlement',`${base}/decision/crypto-replay?session=${id}`],['history',`${base}/decision/trade-records?tab=replay&market=crypto-perpetual&session=${id}`]]) {
+    await page.goto(url);
+    const review=page.getByRole('region',{name:'合约复盘',exact:true});
+    await expect(review).toBeVisible();
+    await expect(review.getByTestId('crypto-net-pnl')).toHaveText(display(session.summary.netPnl));
+    await expect(review.getByTestId('crypto-net-pnl')).toHaveAttribute('title',session.summary.netPnl);
+    const fee=review.locator('.review-facts>div').filter({has:page.getByText('普通成交手续费',{exact:true})}).locator('strong');
+    await expect(fee).toHaveText('<0.01');await expect(fee).toHaveAttribute('title',session.totals.tradingFees);
+    await expect(review.locator('.timeline')).toContainText(`${quote.contracts} 张 @ ${quote.fillPrice}`);
+    await expect(review.getByTestId('crypto-plan-comparison')).toBeVisible();
+    await expect(review.locator('.plan-rows')).toContainText('未定义：部分或全部入场缺少退出价');
+    await review.getByText(/^资金账本（/).click();
+    expect(await review.locator('td[title]').count()).toBeGreaterThan(0);
+    for(const cell of await review.locator('[title]').all()) {
+      const raw=await cell.getAttribute('title');await expect(cell).toHaveText(display(raw));
+    }
+    await page.setViewportSize({width:320,height:850});
+    await review.scrollIntoViewIfNeeded();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await review.locator('.review-facts').screenshot({path:test.info().outputPath(`${name}-money-mobile.png`)});
+  }
+  expect(commands).toHaveLength(0);
+  const after=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;expect(after).toEqual(session);
+});
