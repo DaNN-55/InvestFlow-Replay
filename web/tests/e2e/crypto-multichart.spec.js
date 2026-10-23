@@ -1485,3 +1485,55 @@ test('an original pending action remains retryable after reload even when its re
   await expect(page.getByTestId('crypto-read-stale')).toHaveCount(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(committed);
   expect(committed.revision).toBe(session.revision+1);
 });
+
+test('four-pane projection isolates the drag source and mirrors only matching draft lines through cancel and confirm',async({page,request})=>{
+  const {id,session,commands}=await protectedPractice(page,request);
+  await page.getByRole('button',{name:'图表布局与联动',exact:true}).click();
+  await page.getByRole('button',{name:'四图',exact:true}).click();
+  await page.getByRole('button',{name:'收起布局设置',exact:true}).click();
+  await expect(page.locator('.crypto-chart-tile')).toHaveCount(4);
+  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.length)).toEqual([2,2,2,2]);
+  const stopId=`${id}:stopLoss`,draftId=`${stopId}:draft`,confirm=page.getByRole('region',{name:'确认止盈止损调整'});
+  const getSession=async()=> (await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  await dragProtection(page,2,stopId,49920,{release:false});
+  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.some(item=>item.draggable))).toEqual([false,false,true,false]);
+  const moving=(await nativeCharts(page))[2].lines.find(item=>item.id===stopId);
+  expect(moving.preview).toBe(true);await assertRewardRisk(page,session,{leg:'stopLoss',price:moving.price});
+  expect((await nativeCharts(page))[0].lines.find(item=>item.id===stopId).price).toBe(Number(session.protection.stopLoss.price));
+  expect(commands).toHaveLength(0);expect(await getSession()).toEqual(session);
+  await page.mouse.up();await expect(confirm).toBeVisible();
+  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.filter(item=>item.id===draftId).length)).toEqual([1,0,1,1]);
+  const pending=await nativeCharts(page),price=pending[2].lines.find(item=>item.id===draftId).price;
+  expect(pending.every(chart=>chart.lines.every(item=>!item.draggable))).toBe(true);
+  for(const index of [0,2,3]) {
+    expect(pending[index].lines.find(item=>item.id===stopId).price).toBe(Number(session.protection.stopLoss.price));
+    const draft=pending[index].lines.find(item=>item.id===draftId);
+    expect(draft.price).toBe(price);expect(draft.preview&&draft.dashed).toBe(true);assertProtectionEstimate(draft,session);
+  }
+  await page.locator('.crypto-charts').screenshot({path:test.info().outputPath('projection-quad-desktop.png')});
+  await page.getByRole('button',{name:'取消调整',exact:true}).click();
+  await expect(confirm).toHaveCount(0);
+  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.some(item=>item.draggable))).toEqual([true,true,true,true]);
+  expect((await nativeCharts(page)).every(chart=>chart.lines.every(item=>!item.preview))).toBe(true);
+  expect(commands).toHaveLength(0);expect(await getSession()).toEqual(session);
+
+  await page.setViewportSize({width:390,height:953});
+  await dragProtection(page,0,stopId,49920);await expect(confirm).toBeVisible();
+  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.filter(item=>item.id===draftId).length)).toEqual([1,0,1,1]);
+  const mobileDraft=(await nativeCharts(page))[0].lines.find(item=>item.id===draftId);
+  await assertRewardRisk(page,session,{leg:'stopLoss',price:mobileDraft.price});
+  await expect(page.getByTestId('crypto-protection-draft-estimate')).toHaveText(mobileDraft.estimateText);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+  await confirm.screenshot({path:test.info().outputPath('projection-confirm-390.png')});
+  await page.locator('[data-chart-index="0"]').screenshot({path:test.info().outputPath('projection-draft-390.png')});
+  expect(commands).toHaveLength(0);
+  await page.getByRole('button',{name:'确认生效',exact:true}).click();
+  await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  expect(commands).toHaveLength(1);expect(commands[0].expectedRevision).toBe(session.revision);
+  expect(commands[0].command.type).toBe('set-protection');
+  const committed=await getSession();
+  expect(committed.protection.stopLoss.price).toBe(String(mobileDraft.price));
+  expect(committed.protection.takeProfit).toEqual(session.protection.takeProfit);
+  expect(committed.account).toEqual(session.account);expect(committed.revision).toBe(session.revision+1);
+  await expect.poll(async()=> (await nativeCharts(page)).every(chart=>chart.lines.every(item=>!item.preview))).toBe(true);
+});
