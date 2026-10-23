@@ -749,3 +749,28 @@ test('empty position disables inline margin protection and close controls',async
   await expect(panel.getByRole('button',{name:'持仓详情与完整精度',exact:true})).toBeEnabled();
   expect(commands).toHaveLength(0);
 });
+
+
+test('position data and actions fit desktop and narrow panels without horizontal scrolling',async({page,request})=>{
+  await protectedPractice(page,request);
+  const panel=page.getByTestId('crypto-risk');
+  for(const width of [1543,1280,900,768,390,320]) {
+    await page.setViewportSize({width,height:953});
+    await panel.scrollIntoViewIfNeeded();
+    await expect.poll(()=>panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+    const row=panel.locator('.crypto-position-table');
+    expect(await row.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+    const bounds=await panel.boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(width+1);
+    for(const name of ['调整保证金','止盈止损','市价平全部']) {
+      const button=row.getByRole('button',{name,exact:true}),box=await button.boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x);expect(box.x+box.width).toBeLessThanOrEqual(bounds.x+bounds.width);
+      await button.click();
+      await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');
+    }
+    if(width===1543||width===390) await panel.screenshot({path:test.info().outputPath(`position-${width}.png`)});
+  }
+  await panel.getByRole('button',{name:'持仓详情与完整精度',exact:true}).click();
+  const details=page.getByRole('dialog',{name:'持仓详情与完整精度',exact:true});
+  for(const label of ['标记价格','对应币数','风险率（≤100%触发）']) await expect(details.getByText(label,{exact:true})).toBeVisible();
+});
