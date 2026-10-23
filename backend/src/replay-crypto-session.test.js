@@ -532,3 +532,17 @@ test('quantity amendment persists once with exact remaining size and rejects sta
   c.reopen();assert.deepEqual(c.service.get(s.id).session,s);assert.deepEqual(c.service.command(s.id,body).session,s);ledgerCheck(c,s);
   assert.equal(c.service.audit(s.id,'traces',{limit:200}).items.filter(e=>e.type==='order-quantity-amended').length,1);
 });
+
+
+test('combined preview is read-only and exact, then one atomic command persists and retries once',t=>{
+  const c=context(t);let s=make(c).session;s=mutate(c,s,'combined-order',{type:'limit-open',side:'long',contracts:'2',limitPrice:'49000'}).session;
+  const before=structuredClone(s),command={type:'amend-order',orderId:s.orders[0].id,limitPrice:'48000',remainingContracts:'3'};
+  const traces=c.service.audit(s.id,'traces',{limit:200}),preview=c.service.preview(s.id,{expectedRevision:s.revision,command}).preview;
+  assert.deepEqual(c.service.get(s.id).session,before);assert.deepEqual(c.service.audit(s.id,'traces',{limit:200}),traces);
+  assert.equal(preview.before.reservedBalance,s.orders[0].reservedBalance);assert.equal(preview.after.filledContracts,'0');
+  const body={actionId:'combined',expectedRevision:s.revision,command};s=c.service.command(s.id,body).session;
+  assert.equal(s.revision,before.revision+1);assert.equal(s.orders[0].reservedBalance,preview.after.reservedBalance);assert.equal(s.orders[0].limitPrice,'48000');assert.equal(s.orders[0].remainingContracts,'3');ledgerCheck(c,s);
+  assert.equal(c.service.command(s.id,body).idempotent,true);assert.throws(()=>c.service.preview(s.id,{expectedRevision:before.revision,command}),code('REPLAY_REVISION_CONFLICT'));
+  c.reopen();assert.deepEqual(c.service.get(s.id).session,s);assert.deepEqual(c.service.command(s.id,body).session,s);
+  assert.equal(c.service.audit(s.id,'traces',{limit:200}).items.filter(e=>e.type==='order-updated').length,1);
+});

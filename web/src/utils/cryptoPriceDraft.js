@@ -39,12 +39,12 @@ export function protectionDraftTriggered(session,draft) {
   return draft.leg==='stopLoss'?(long?price>=current:price<=current):(long?price<=current:price>=current);
 }
 
-export function createPriceDraft(session,target,value) {
+export function createPriceDraft(session,target,value,allowUnchanged=false) {
   if(target.orderId==null) return createProtectionDraft(session,target.leg,value);
   const order=session?.orders?.find(order=>order.id===target.orderId);
   if(session?.status!=='active'||session.ending||order?.type!=='limit'||Number(order.remainingContracts)<=0) return null;
   const price=snapProtectionPrice(value,session.contract.tickSz);
-  if(!price||Number(price)===Number(order.limitPrice)) return null;
+  if(!price||(!allowUnchanged&&Number(price)===Number(order.limitPrice))) return null;
   return {kind:'order',sessionId:session.id,revision:session.revision,orderId:order.id,price,oldPrice:order.limitPrice,order:structuredClone(order)};
 }
 
@@ -88,16 +88,29 @@ export function priceCancellationCommand(session,draft) {
 }
 
 
-export function createQuantityDraft(session,target,value) {
+export function createQuantityDraft(session,target,value,allowUnchanged=false) {
   const draft=createPriceCancellation(session,target),text=String(value??'').trim(),lot=String(session?.contract?.lotSz??'');
   if(!draft?.order||text.replace('.','').length>32||!/^\d+(?:\.\d+)?$/.test(text)||!/^\d+(?:\.\d+)?$/.test(lot)) return null;
   const units=v=>{const [whole,fraction='']=v.split('.');return {n:BigInt(whole+fraction),d:10n**BigInt(fraction.length)};};
   const quantity=units(text),step=units(lot),old=units(draft.order.remainingContracts),minimum=units(String(session.contract.minSz??lot));
-  if(quantity.n===0n||step.n===0n||(quantity.n*step.d)%(step.n*quantity.d)!==0n||quantity.n*minimum.d<minimum.n*quantity.d||quantity.n*old.d===old.n*quantity.d) return null;
+  if(quantity.n===0n||step.n===0n||(quantity.n*step.d)%(step.n*quantity.d)!==0n||quantity.n*minimum.d<minimum.n*quantity.d||(!allowUnchanged&&quantity.n*old.d===old.n*quantity.d)) return null;
   const remainingContracts=text.replace(/^0+(?=\d)/,'').replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
   return {...draft,remainingContracts};
 }
 export function quantityDraftCommand(session,draft) {
   if(!priceCancellationCurrent(session,draft)) return null;
   return {expectedRevision:draft.revision,command:{type:'amend-quantity',orderId:draft.orderId,remainingContracts:draft.remainingContracts}};
+}
+
+export function createOrderDraft(session,target,price,quantity) {
+  const base=createPriceCancellation(session,target),size=createQuantityDraft(session,target,quantity,true);
+  if(!base?.order||!size) return null;
+  const priced=base.order.type==='limit'?createPriceDraft(session,target,Number(price),true):null;
+  if(base.order.type==='limit'&&!priced) return null;
+  if(size.remainingContracts===base.order.remainingContracts&&(!priced||priced.price===base.order.limitPrice)) return null;
+  return {...base,price:priced?.price??null,oldPrice:base.order.limitPrice,remainingContracts:size.remainingContracts};
+}
+export function orderDraftCommand(session,draft) {
+  if(!priceCancellationCurrent(session,draft)) return null;
+  return {expectedRevision:draft.revision,command:{type:'amend-order',orderId:draft.orderId,...(draft.order.type==='limit'?{limitPrice:draft.price}:{}),remainingContracts:draft.remainingContracts}};
 }

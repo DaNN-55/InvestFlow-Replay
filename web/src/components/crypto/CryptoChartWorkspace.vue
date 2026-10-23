@@ -28,7 +28,7 @@ const models=computed(()=>prefs.value.periods.map((period,i)=>{
     cancelLabel:line.orderId!=null?`限价委托 #${line.orderId}，${line.price}`:`${line.protectionLeg==='stopLoss'?'自动止损':'自动止盈'}，${line.price}`,
   }));
   const base=props.priceDraft&&lines.find(line=>props.priceDraft.kind==='order'?line.orderId===props.priceDraft.orderId:line.protectionLeg===props.priceDraft.leg);
-  if(base) lines.push({...repriceProtectionLine(base,props.priceDraft.price),id:`${base.id}:draft`,price:props.priceDraft.price,label:`待确认${props.priceDraft.kind==='order'?'委托':props.priceDraft.leg==='stopLoss'?'止损':'止盈'}`,draggable:false,cancellable:false,protectionLeg:null,orderId:null,dashed:true,preview:true});
+  if(base) lines.push({...repriceProtectionLine(base,props.priceDraft.price),id:`${base.id}:draft`,price:props.priceDraft.price,...(props.priceDraft.remainingContracts?{contracts:props.priceDraft.remainingContracts,compactLabel:`待确认 · ${props.priceDraft.remainingContracts}张`}:{}),label:`待确认${props.priceDraft.kind==='order'?'委托':props.priceDraft.leg==='stopLoss'?'止损':'止盈'}`,draggable:false,cancellable:false,protectionLeg:null,orderId:null,dashed:true,preview:true});
   return { bars, lines, showVolume:bars.length>0&&bars.every(bar=>bar.volume!=null) };
 }));
 const draftEstimate=computed(()=>props.priceDraft&&props.priceDraft.kind!=='order'?formatProtectionEstimate(cryptoProtectionEstimate(props.session,props.priceDraft.price)):'');

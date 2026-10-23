@@ -16,7 +16,7 @@ import CryptoChartWorkspace from '../components/crypto/CryptoChartWorkspace.vue'
 import CryptoReviewPanel from '../components/crypto/CryptoReviewPanel.vue';
 import { createCryptoReplayController } from '../utils/cryptoReplayController.js';
 import { amount, relativeTime } from '../utils/cryptoReplayPresentation.js';
-import { createQuantityDraft, quantityDraftCommand, createPriceDraft, priceDraftReached, priceDraftCurrent, priceDraftCommand, createPriceCancellation, priceCancellationCurrent, priceCancellationCommand } from '../utils/cryptoPriceDraft.js';
+import { createOrderDraft, orderDraftCommand, createPriceDraft, priceDraftReached, priceDraftCurrent, priceDraftCommand, createPriceCancellation, priceCancellationCurrent, priceCancellationCommand } from '../utils/cryptoPriceDraft.js';
 import { loadCryptoPreferences, CRYPTO_WORKSPACE_KEY, CRYPTO_PLAYBACK_SPEEDS, cryptoVisiblePeriods } from '../utils/cryptoWorkspacePreferences.js';
 import '../components/crypto/crypto-terminal.css';
 const route=useRoute(),router=useRouter();
@@ -28,18 +28,41 @@ const s=computed(()=>state.value.session);
 const progress=computed(()=>Math.min(100,Math.max(0,Number(s.value?.elapsedMinutes??0)/Math.max(1,Number(s.value?.gameLength??1))*100)));
 const routeMismatch=computed(()=>route.name==='crypto-market-replay'&&typeof route.query.session==='string'&&route.query.session!==s.value?.id);
 const priceDraft=shallowRef(null),priceDragging=ref(false),priceSaving=ref(false),priceNotice=ref('');
-const cancellation=shallowRef(null),orderEditor=shallowRef(null),orderEditValue=ref('');
-const orderEditDraft=computed(()=>orderEditor.value?(orderEditor.value.field==='quantity'?createQuantityDraft(orderEditor.value.session,{orderId:orderEditor.value.orderId},orderEditValue.value):createPriceDraft(orderEditor.value.session,{orderId:orderEditor.value.orderId},Number(orderEditValue.value))):null);
-function clearOrderEditor() {orderEditor.value=null;orderEditValue.value='';}
+const cancellation=shallowRef(null),orderEditor=shallowRef(null),orderEditPrice=ref(''),orderEditQuantity=ref('');
+const orderPreview=shallowRef(null),orderPreviewBusy=ref(false),orderPreviewError=ref('');
+let orderPreviewGeneration=0;
+const orderEditDraft=computed(()=>orderEditor.value?createOrderDraft(orderEditor.value.session,{orderId:orderEditor.value.orderId},orderEditPrice.value,orderEditQuantity.value):null);
+const orderEditBody=computed(()=>orderEditDraft.value?orderDraftCommand(s.value,orderEditDraft.value):null);
+const orderPreviewReady=computed(()=>Boolean(orderEditBody.value&&orderPreview.value?.key===JSON.stringify(orderEditBody.value)&&!orderPreviewBusy.value&&!orderPreviewError.value));
+const orderChartDraft=computed(()=>orderEditDraft.value?.order.type==='limit'?orderEditDraft.value:priceDraft.value);
+function clearOrderEditor() {orderPreviewGeneration++;orderEditor.value=null;orderEditPrice.value='';orderEditQuantity.value='';orderPreview.value=null;orderPreviewBusy.value=false;orderPreviewError.value='';}
 function requestOrderEdit(target) {
   if(locked.value) return;
   const draft=createPriceCancellation(s.value,target);
-  if(!draft?.order||(target.field!=='quantity'&&draft.order.type!=='limit')) return;
-  stop();priceNotice.value='';orderEditor.value={...draft,session:s.value,field:target.field??'price'};orderEditValue.value=target.field==='quantity'?draft.order.remainingContracts:draft.order.limitPrice;
+  if(!draft?.order) return;
+  stop();priceNotice.value='';orderEditor.value={...draft,session:s.value};orderEditPrice.value=draft.order.limitPrice??'';orderEditQuantity.value=draft.order.remainingContracts;
 }
+async function refreshOrderPreview() {
+  const generation=++orderPreviewGeneration,body=orderEditBody.value;
+  orderPreview.value=null;orderPreviewError.value='';orderPreviewBusy.value=false;
+  if(!body) return;
+  orderPreviewBusy.value=true;
+  try {
+    const {preview}=await api.cryptoPreview(orderEditor.value.sessionId,body);
+    if(generation!==orderPreviewGeneration) return;
+    if(preview.sessionId!==orderEditor.value?.sessionId||preview.revision!==body.expectedRevision) throw new Error('委托已变化，请重新预览');
+    orderPreview.value={...preview,key:JSON.stringify(body)};
+  } catch(error) {
+    if(generation!==orderPreviewGeneration) return;
+    if(error.code==='REPLAY_REVISION_CONFLICT') {clearOrderEditor();await controller.sync();priceNotice.value='委托已变化，请核对后重新修改。';return;}
+    orderPreviewError.value=({INSUFFICIENT_CASH:'可用资金不足，请降低价格或数量。',OVER_REDUCTION:'数量超过可平仓余量，含其他平仓委托。',ORDER_SIZE_LIMIT:'数量超过本局委托上限。'})[error.code]??error.message??'暂时无法预览，请重试';
+  }
+  finally {if(generation===orderPreviewGeneration) orderPreviewBusy.value=false;}
+}
+watch(orderEditBody,refreshOrderPreview);
 function confirmOrderEdit() {
-  if(!orderEditDraft.value) return;
-  return saveChartCommand(orderEditor.value.field==='quantity'?quantityDraftCommand(s.value,orderEditDraft.value):priceDraftCommand(s.value,orderEditDraft.value),clearOrderEditor);
+  if(!orderPreviewReady.value) return;
+  return saveChartCommand(orderEditBody.value,clearOrderEditor);
 }
 let priceDragSession=null;
 const locked=computed(()=>state.value.busy||Boolean(state.value.pending)||routeMismatch.value||Boolean(priceDraft.value)||priceDragging.value||Boolean(cancellation.value)||Boolean(orderEditor.value));
@@ -166,7 +189,7 @@ async function retrain() {
       <div class="crypto-account" data-testid="crypto-account"><div v-for="[label,value,id] in [['账户权益 · USDT',s.summary.accountEquity,'crypto-equity'],['仓外可用',s.account.availableBalance,'crypto-available'],['委托冻结',s.reservedBalance,'crypto-reserved'],['本次净盈亏',s.summary.netPnl,'crypto-net-summary']]" :key="label"><span>{{ label }}</span><strong :data-testid="id" :title="String(value)">{{ amount(value,display.precision==='full'?8:2) }}</strong></div></div>
       <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed}">
         <div class="crypto-terminal-main">
-          <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(cancellation)||Boolean(orderEditor)" :price-draft="orderEditor?.field==='quantity'?priceDraft:(orderEditDraft??priceDraft)" @price-drag="priceDrag" @confirm-price="confirmPriceDraft" @cancel-price="cancelPriceDraft" @request-cancellation="requestCancellation" />
+          <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(cancellation)||Boolean(orderEditor)" :price-draft="orderChartDraft" @price-drag="priceDrag" @confirm-price="confirmPriceDraft" @cancel-price="cancelPriceDraft" @request-cancellation="requestCancellation" />
           <p v-if="s.ending&&s.status!=='completed'" class="crypto-alert" role="status">{{ s.status==='end-blocked'?'结束受阻：预留分钟容量不足，仍有仓位；不能揭晓或复练。':'正在结束：继续推进以退出剩余仓位，不再新开仓。' }}</p>
           <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(priceDraft)||priceDragging||Boolean(cancellation)||Boolean(orderEditor)" @command="command" @cancel-order="requestCancellation" @edit-order="requestOrderEdit" @records="records" />
           <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
@@ -188,15 +211,22 @@ async function retrain() {
       </div>
     </template>
     <UiDrawer :open="settingsOpen" title="交易与显示设置" description="交易参数开局后冻结；显示偏好可随时调整。" panel-class="crypto-controls crypto-data-drawer" @close="settingsOpen=false"><label>账户数字精度<UiSelect v-model="display.precision" aria-label="账户数字显示精度"><option value="auto">摘要 · 两位小数</option><option value="full">完整 · 八位小数</option></UiSelect></label><p>布局、各图周期和联动开关会在本浏览器记住。</p><template v-if="s"><dl class="crypto-detail-facts"><div><dt>杠杆 / 持仓</dt><dd>{{ s.config.leverage }}倍 · 逐仓单向</dd></div><div><dt>固定 Maker / Taker</dt><dd>{{ Number(s.frozenRules.makerRate)*100 }}% / {{ Number(s.frozenRules.takerRate)*100 }}%</dd></div><div><dt>单边教学滑点</dt><dd>{{ s.frozenRules.slippageBps }} bps</dd></div></dl></template><button type="button" class="crypto-text-button" @click="settingsOpen=false;openData()">查看数据来源与完整规则</button></UiDrawer>
-    <UiModal :open="Boolean(orderEditor)" :title="orderEditor?.field==='quantity'?'修改剩余数量':'修改委托价格'" description="确认前原委托仍有效。" :busy="state.busy||priceSaving" panel-class="crypto-controls crypto-order-editor" @close="clearOrderEditor">
+    <UiModal :open="Boolean(orderEditor)" title="修改委托" description="确认前原委托仍有效。" :busy="state.busy||priceSaving" panel-class="crypto-controls crypto-order-editor" @close="clearOrderEditor">
       <form v-if="orderEditor" @submit.prevent="confirmOrderEdit">
-        <p class="crypto-muted">{{ orderEditor.order.intent==='reduce'?(orderEditor.order.side==='long'?'平多':'平空'):(orderEditor.order.side==='long'?'开多':'开空') }} · 未成交 {{ orderEditor.order.remainingContracts }} 张</p>
-        <label>{{ orderEditor.field==='quantity'?'新剩余数量 · 张':'新委托价' }}<UiInput v-model="orderEditValue" :aria-label="orderEditor.field==='quantity'?'新剩余数量':'新委托价'" inputmode="decimal" required :disabled="state.busy||priceSaving" /></label>
-        <dl class="crypto-detail-facts"><div><dt>{{ orderEditor.field==='quantity'?'原剩余数量 · 张':'原价格' }}</dt><dd>{{ orderEditor.field==='quantity'?orderEditor.order.remainingContracts:orderEditor.order.limitPrice }}</dd></div><div><dt>{{ orderEditor.field==='quantity'?'新剩余数量 · 张':'新价格' }}</dt><dd>{{ (orderEditor.field==='quantity'?orderEditDraft?.remainingContracts:orderEditDraft?.price)??'—' }}</dd></div></dl>
-        <p v-if="orderEditor.field==='quantity'" class="crypto-muted">已成交 {{ orderEditor.order.filledContracts }} 张保持不变。数量需符合 {{ orderEditor.session.contract.lotSz }} 张步长；全部取消请撤单。</p>
-        <p v-else class="crypto-muted">最小变动 {{ orderEditor.session.contract.tickSz }}，预览按此对齐。</p>
-        <p v-if="orderEditor.field!=='quantity'&&orderEditDraft&&priceDraftReached(s,orderEditDraft)" class="crypto-muted" role="status">新价格已越过当前价，下一分钟可能按吃单成交。</p>
-        <div class="crypto-order-editor-actions"><UiButton variant="secondary" :disabled="state.busy||priceSaving" @click="clearOrderEditor">取消调整</UiButton><UiButton type="submit" :disabled="!orderEditDraft||state.busy||priceSaving">确认生效</UiButton></div>
+        <p class="crypto-muted">{{ orderEditor.order.intent==='reduce'?(orderEditor.order.side==='long'?'平多':'平空'):(orderEditor.order.side==='long'?'开多':'开空') }} · 已成交 {{ orderEditor.order.filledContracts }} 张保持不变</p>
+        <div class="crypto-order-editor-fields"><label v-if="orderEditor.order.type==='limit'">委托价格<UiInput v-model="orderEditPrice" aria-label="新委托价" inputmode="decimal" required :disabled="state.busy||priceSaving" /></label><label>剩余数量 · 张<UiInput v-model="orderEditQuantity" aria-label="新剩余数量" inputmode="decimal" required :disabled="state.busy||priceSaving" /></label></div>
+        <table class="crypto-order-comparison">
+          <thead><tr><th scope="col">项目</th><th scope="col">修改前</th><th scope="col">修改后</th></tr></thead><tbody>
+          <tr><th scope="row">委托价</th><td>{{ orderEditor.order.limitPrice??'市价' }}</td><td>{{ orderEditor.order.type==='market'?'市价':orderEditDraft?.price??'—' }}</td></tr>
+          <tr><th scope="row">剩余 · 张</th><td>{{ orderEditor.order.remainingContracts }}</td><td>{{ orderEditDraft?.remainingContracts??'—' }}</td></tr>
+          <tr><th scope="row">冻结 · USDT</th><td>{{ amount(orderEditor.order.reservedBalance,8) }}</td><td data-testid="order-amend-reserve">{{ orderPreviewReady?amount(orderPreview.after.reservedBalance,8):'—' }}</td></tr>
+        </tbody>
+        </table>
+        <p v-if="orderPreviewBusy" class="crypto-muted" role="status">核算冻结资金…</p>
+        <p v-if="orderPreviewError" class="crypto-muted" role="alert">{{ orderPreviewError }} <button type="button" class="crypto-text-button" @click="refreshOrderPreview">重新预览</button></p>
+        <p class="crypto-muted">{{ orderEditor.order.type==='limit'?`价格按 ${orderEditor.session.contract.tickSz} 对齐；`:'' }}数量步长 {{ orderEditor.session.contract.lotSz }} 张，全部取消请撤单。</p>
+        <p v-if="orderEditDraft?.order.type==='limit'&&priceDraftReached(s,orderEditDraft)" class="crypto-muted" role="status">新价格已越过当前价，下一分钟可能按吃单成交。</p>
+        <div class="crypto-order-editor-actions"><UiButton variant="secondary" :disabled="state.busy||priceSaving" @click="clearOrderEditor">取消调整</UiButton><UiButton type="submit" :disabled="!orderPreviewReady||state.busy||priceSaving">确认生效</UiButton></div>
       </form>
     </UiModal>
     <ConfirmDialog :open="Boolean(cancellation)" :title="cancellationTitle" :message="cancellationMessage" confirm-text="确认撤销" cancel-text="保留" :busy="state.busy||priceSaving" @cancel="clearCancellation" @confirm="confirmCancellation" />
