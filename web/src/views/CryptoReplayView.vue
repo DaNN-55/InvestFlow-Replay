@@ -225,12 +225,12 @@ async function retrain() {
           <thead><tr><th scope="col">项目</th><th scope="col">修改前</th><th scope="col">修改后</th></tr></thead><tbody>
           <tr><th scope="row">委托价</th><td>{{ orderEditor.order.limitPrice??'市价' }}</td><td>{{ orderEditor.order.type==='market'?'市价':orderEditDraft?.price??'—' }}</td></tr>
           <tr><th scope="row">剩余 · 张</th><td>{{ orderEditor.order.remainingContracts }}</td><td>{{ orderEditDraft?.remainingContracts??'—' }}</td></tr>
-          <tr><th scope="row">冻结 · USDT</th><td>{{ amount(orderEditor.order.reservedBalance,8) }}</td><td data-testid="order-amend-reserve">{{ orderPreviewReady?amount(orderPreview.after.reservedBalance,8):'—' }}</td></tr>
+          <tr><th scope="row">冻结 · USDT</th><td :title="String(orderEditor.order.reservedBalance)">{{ amount(orderEditor.order.reservedBalance,2) }}</td><td data-testid="order-amend-reserve" :title="orderPreviewReady?orderPreview.after.reservedBalance:''">{{ orderPreviewReady?amount(orderPreview.after.reservedBalance,2):'—' }}</td></tr>
           <tr><th scope="row">可用 · USDT</th><td :title="String(orderEditor.session.account.availableBalance)">{{ amount(orderEditor.session.account.availableBalance,2) }}</td><td data-testid="order-amend-available" :title="orderPreviewReady?orderPreview.funds.availableBalanceAfter:''">{{ orderPreviewReady?amount(orderPreview.funds.availableBalanceAfter,2):'—' }}</td></tr>
         </tbody>
         </table>
-        <p v-if="orderPreviewReady" class="crypto-muted" data-testid="order-amend-change">{{ ({increase:'增加冻结',release:'释放冻结',unchanged:'冻结不变'})[orderPreview.funds.reserveChangeType] }} {{ amount(orderPreview.funds.reserveChangeAmount,8) }} USDT</p>
-        <p v-if="orderPreviewReady&&!orderPreview.funds.affordable" class="crypto-muted" role="alert" data-testid="order-amend-shortfall">资金不足，还差 {{ amount(orderPreview.funds.shortfall,8) }} USDT</p>
+        <p v-if="orderPreviewReady" class="crypto-muted" data-testid="order-amend-change" :title="`${orderPreview.funds.reserveChangeAmount} USDT`">{{ ({increase:'增加冻结',release:'释放冻结',unchanged:'冻结不变'})[orderPreview.funds.reserveChangeType] }} {{ amount(orderPreview.funds.reserveChangeAmount,2) }} USDT</p>
+        <p v-if="orderPreviewReady&&!orderPreview.funds.affordable" class="crypto-muted" role="alert" data-testid="order-amend-shortfall" :title="`${orderPreview.funds.shortfall} USDT`">资金不足，还差 {{ amount(orderPreview.funds.shortfall,2) }} USDT</p>
         <template v-if="orderPreviewReady&&!orderPreview.funds.affordable"><UiButton variant="secondary" :disabled="!(Number(orderPreview.funds.maximumRemainingContracts)>0)||state.busy||priceSaving" @click="applyMaximumOrderQuantity">调整到最大可用数量 · {{ orderPreview.funds.maximumRemainingContracts }} 张</UiButton><p v-if="orderPreview.funds.maximumRemainingContracts==='0'" class="crypto-muted">可用资金不足最小委托数量。</p></template>
         <p v-if="orderPreviewReady&&orderPreview.changed===false" class="crypto-muted">与原委托一致，无需修改。</p>
         <p v-if="orderPreviewBusy" class="crypto-muted" role="status">核算冻结资金…</p>
