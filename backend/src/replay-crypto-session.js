@@ -35,7 +35,7 @@ function protective(value) {
 }
 function normalizeCommand(input) {
   const schemas = { "market-open": ["side", "contracts", "protection"], "limit-open": ["side", "contracts", "limitPrice", "protection"],
-    "market-close": ["contracts"], "limit-close": ["contracts", "limitPrice"], "amend-limit": ["orderId", "limitPrice"], "amend-quantity": ["orderId", "remainingContracts"], "cancel-order": ["orderId"], "cancel-all-orders": [],
+    "market-close": ["contracts"], "limit-close": ["contracts", "limitPrice"], "amend-limit": ["orderId", "limitPrice"], "amend-quantity": ["orderId", "remainingContracts"], "amend-order": ["orderId", "limitPrice", "remainingContracts"], "cancel-order": ["orderId"], "cancel-all-orders": [],
     "set-protection": ["stopLoss", "takeProfit"], "cancel-protection": ["leg"], "add-margin": ["amount"], "advance": ["minutes"], "finish": [], "set-plan": ["mode", "manualExitPrice", "reason"] };
   const allowed = schemas[input?.type]; if (!allowed) fail("INVALID_REQUEST", "不支持该合约动作");
   fields(input, ["type", ...allowed]);
@@ -184,6 +184,17 @@ export function createCryptoReplayService({ store, snapshotSource, now = () => n
   return {
     present,
     preview(id, body) {
+      if (body?.command) {
+        fields(body, ['expectedRevision', 'command']);
+        const session = requireSession(id);
+        if (body.expectedRevision !== session.revision) fail('REPLAY_REVISION_CONFLICT', '委托已变化，请重新预览', 409);
+        const command = normalizeCommand(body.command);
+        if (command.type !== 'amend-order') fail('INVALID_REQUEST', '此预览仅支持修改委托');
+        const { engine } = runtime(session), result = domain(() => engine.apply(session.account, command));
+        const before = session.account.orders.find(o => o.id === command.orderId), after = result.state.orders.find(o => o.id === command.orderId);
+        const summary = o => ({limitPrice:o.limitPrice, remainingContracts:o.remainingContracts, filledContracts:o.filledContracts, reservedBalance:o.reservedBalance});
+        return { preview: { sessionId:id, revision:session.revision, command, before:summary(before), after:summary(after) } };
+      }
       fields(body, ['expectedRevision', 'intent', 'orderType', 'sizingMode', 'amount', 'limitPrice', 'exitPrice', 'exitReference']);
       const session = requireSession(id);
       if (body.expectedRevision !== session.revision) fail('REPLAY_REVISION_CONFLICT', '会话已变化，请等待同步后重新预览', 409);

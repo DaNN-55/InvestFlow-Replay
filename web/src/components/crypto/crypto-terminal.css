@@ -86,3 +86,9 @@
 .crypto-activity-price strong { min-width:0; }
 .crypto-controls.crypto-order-editor.ui-modal__panel { width:min(420px,calc(100vw - 32px));min-height:0;max-height:calc(100vh - 32px);border-radius:12px;background:var(--ql-panel);color:var(--ql-ink); }
 .crypto-order-editor-actions { display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px; }
+
+.crypto-order-editor-fields { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px; }
+.crypto-order-comparison { width:100%;table-layout:fixed;border-collapse:collapse;margin:16px 0;font-size:11px;font-variant-numeric:tabular-nums; }
+.crypto-order-comparison th,.crypto-order-comparison td { padding:8px 3px;border-bottom:1px solid var(--ql-line);text-align:right;overflow-wrap:anywhere;font-weight:400; }
+.crypto-order-comparison th:first-child { text-align:left;color:var(--ql-color-text-muted); }
+@media(max-width:359px) { .crypto-order-editor-fields { grid-template-columns:1fr; } }

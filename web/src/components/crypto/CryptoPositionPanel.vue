@@ -16,7 +16,7 @@ const position=computed(()=>props.session.account.position), plan=computed(()=>r
 const floatingReturn=computed(()=>cryptoProtectionEstimate(props.session,props.session.currentPrices.mark)?.returnPercent);
 const pnlTone=computed(()=>Number(props.session.risk?.unrealizedPnl)>0?'profit':Number(props.session.risk?.unrealizedPnl)<0?'loss':'neutral');
 const disabled=computed(()=>props.busy||props.blocked||props.session.status!=='active'||props.session.ending);
-const historyTypes=['order-submitted','order-amended','order-quantity-amended','order-filled','order-cancelled','order-rejected'];
+const historyTypes=['order-submitted','order-amended','order-updated','order-quantity-amended','order-filled','order-cancelled','order-rejected'];
 const fillTypes=['order-filled','protection-filled','end-filled'];
 const activityRows=computed(()=>{
   if(tab.value==='当前委托') return props.session.orders.map(order=>activityRow(order,null));
@@ -24,7 +24,7 @@ const activityRows=computed(()=>{
   for(const event of props.traces) {
     if(event.order) orders.set(event.order.id,{...event.order});
     if(event.type==='order-amended'&&orders.has(event.orderId)) orders.set(event.orderId,{...orders.get(event.orderId),limitPrice:event.limitPrice});
-    if(event.type==='order-quantity-amended'&&orders.has(event.orderId)) orders.set(event.orderId,{...orders.get(event.orderId),remainingContracts:event.remainingContracts,contracts:event.contracts,filledContracts:event.filledContracts});
+    if(['order-quantity-amended','order-updated'].includes(event.type)&&orders.has(event.orderId)) orders.set(event.orderId,{...orders.get(event.orderId),limitPrice:event.limitPrice,remainingContracts:event.remainingContracts,contracts:event.contracts,filledContracts:event.filledContracts});
     if((tab.value==='成交'?fillTypes:historyTypes).includes(event.type)) rows.push(activityRow(orders.get(event.orderId)??event.order??{},event));
   }
   return rows;
@@ -40,7 +40,7 @@ function activityRow(order,event) {
     price:event?.quote?.fillPrice??event?.limitPrice??order.limitPrice,
     market:!filled&&order.type==='market',
     quantity:event?.quote?.contracts??event?.remainingContracts??event?.unfilledContracts??order.remainingContracts??order.contracts,
-    quantityLabel:filled?'成交量':!event||event.type==='order-amended'||event.type==='order-quantity-amended'||event.type==='order-cancelled'?'未成交':'委托量',
+    quantityLabel:filled?'成交量':!event||event.type==='order-amended'||event.type==='order-quantity-amended'||event.type==='order-updated'||event.type==='order-cancelled'?'未成交':'委托量',
     priceLabel:filled?'成交价':'委托价'};
 }
 function showActivity(row) { selectedActivity.value=row;drawer.value='activity'; }

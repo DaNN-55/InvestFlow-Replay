@@ -102,3 +102,15 @@ test('remaining quantity draft requires exact lot steps and preserves captured f
   assert.deepEqual(quantityDraftCommand(s,draft),{expectedRevision:4,command:{type:'amend-quantity',orderId:2,remainingContracts:'2.5'}});
   const changed=structuredClone(s);changed.orders[0].filledContracts='2.5';changed.orders[0].remainingContracts='0.5';assert.equal(quantityDraftCommand(changed,draft),null);
 });
+
+
+test('combined order draft permits either field or both to change and preserves the captured revision',async()=>{
+  const {createOrderDraft,orderDraftCommand}=await import('../../src/utils/cryptoPriceDraft.js');
+  const s=session();s.contract.lotSz='0.01';s.orders=[{id:2,type:'limit',limitPrice:'49000',remainingContracts:'1',filledContracts:'2'}];
+  assert.equal(createOrderDraft(s,{orderId:2},'49000','1'),null);
+  for(const [price,qty] of [['48000','1'],['49000','2'],['48000','2']]) {
+    const draft=createOrderDraft(s,{orderId:2},price,qty);
+    assert.deepEqual(orderDraftCommand(s,draft),{expectedRevision:4,command:{type:'amend-order',orderId:2,limitPrice:price,remainingContracts:qty}});
+    const changed=structuredClone(s);changed.revision++;assert.equal(orderDraftCommand(changed,draft),null);
+  }
+});

@@ -403,3 +403,18 @@ test('pending market quantity amendment executes only the confirmed remaining qu
   assert.equal(s.elapsedMinutes,0);assert.equal(s.account.position,null);assert.equal(s.orders[0].filledContracts,'0');bridge(s);
   const next=advance(e,s);assert.equal(next.state.account.position.contracts,'2');assert.equal(next.state.account.position.side,'short');bridge(next.state);
 });
+
+
+test('combined amendment reserves the final price and remaining size once without touching partial fills',()=>{
+  const source=sample();set(source,'last',0,{volumeContracts:'2'});const e=engine(source);
+  let s=act(e,e.create({startingCash:'405'}),{type:'limit-open',side:'long',contracts:'4',limitPrice:'50000'});s=advance(e,s).state;
+  const before=clone(s),o=s.orders[0];assert.equal(o.filledContracts,'2');
+  // Increasing quantity at the old price alone is unaffordable; the combined lower price fits.
+  assert.throws(()=>e.apply(s,{type:'amend-quantity',orderId:o.id,remainingContracts:'3'}),error('INSUFFICIENT_CASH'));
+  const result=e.apply(s,{type:'amend-order',orderId:o.id,limitPrice:'30000',remainingContracts:'3'}),after=result.state;
+  assert.deepEqual(s,before);assert.equal(after.orders[0].filledContracts,'2');assert.equal(after.orders[0].remainingContracts,'3');assert.equal(after.orders[0].contracts,'5');assert.equal(after.orders[0].limitPrice,'30000');
+  assert.deepEqual(after.account.position,before.account.position);assert.deepEqual(after.totals,before.totals);assert.equal(after.elapsedMinutes,before.elapsedMinutes);bridge(after);
+  assert.equal(result.events.length,1);assert.equal(result.events[0].type,'order-updated');
+  assert.throws(()=>e.apply(s,{type:'amend-order',orderId:o.id,limitPrice:'60000',remainingContracts:'3'}),error('INSUFFICIENT_CASH'));assert.deepEqual(s,before);
+  assert.throws(()=>e.apply(s,{type:'amend-order',orderId:o.id,limitPrice:'30000',remainingContracts:'0.001'}));assert.deepEqual(s,before);
+});

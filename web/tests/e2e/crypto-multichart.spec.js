@@ -870,7 +870,7 @@ test('pending market order cancellation shows its direction and market price bef
 
 for(const [side,intent] of [['long','increase'],['short','reduce']]) test(`${side} ${intent} inline limit editor previews without mutation and confirms only its captured order`,async({page,request})=>{
   const {id,session,order,buy,commands}=await limitPractice(page,request,side,intent);
-  const panel=page.getByTestId('crypto-risk'),dialog=page.getByRole('dialog',{name:'修改委托价格',exact:true});
+  const panel=page.getByTestId('crypto-risk'),dialog=page.getByRole('dialog',{name:'修改委托',exact:true});
   const target=buy?49930:50070;
   await page.setViewportSize({width:390,height:953});
   await panel.getByRole('button',{name:'当前委托',exact:false}).click();
@@ -893,7 +893,7 @@ for(const [side,intent] of [['long','increase'],['short','reduce']]) test(`${sid
   await confirm.evaluate(button=>{button.click();button.click();});await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
   expect(commands).toHaveLength(1);expect(commands[0].expectedRevision).toBe(session.revision);
-  expect(commands[0].command).toEqual({type:'amend-limit',orderId:order.id,limitPrice:String(target)});
+  expect(commands[0].command).toEqual({type:'amend-order',orderId:order.id,limitPrice:String(target),remainingContracts:order.remainingContracts});
   const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(saved.orders.find(o=>o.id===order.id).limitPrice).toBe(String(target));
   expect(saved.orders.find(o=>o.id===order.id).remainingContracts).toBe(order.remainingContracts);
@@ -906,8 +906,9 @@ test('inline limit editor refuses a stale price after another writer changes the
   const {id,session,order,commands}=await limitPractice(page,request);
   const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();
   await panel.getByRole('button',{name:'修改委托价格',exact:true}).first().click();
-  const dialog=page.getByRole('dialog',{name:'修改委托价格',exact:true});
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});
   await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill('49930');
+  await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeEnabled();
   const changed=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,command:{type:'amend-limit',orderId:order.id,limitPrice:'49800'}}});expect(changed.status()).toBe(200);
   await dialog.getByRole('button',{name:'确认生效',exact:true}).click();await expect(dialog).toHaveCount(0);
   await expect(page.getByText('已重新同步操作结果，请核对当前委托或保护后重新操作。',{exact:true})).toBeVisible();
@@ -919,7 +920,7 @@ test('inline limit editor refuses a stale price after another writer changes the
 
 for(const intent of ['increase','reduce']) test(`${intent} remaining quantity editor confirms only unfilled size and preserves siblings and fills`,async({page,request})=>{
   const {id,session,order,commands}=await limitPractice(page,request,'long',intent);
-  const panel=page.getByTestId('crypto-risk'),dialog=page.getByRole('dialog',{name:'修改剩余数量',exact:true});
+  const panel=page.getByTestId('crypto-risk'),dialog=page.getByRole('dialog',{name:'修改委托',exact:true});
   await page.setViewportSize({width:320,height:953});
   await panel.getByRole('button',{name:'当前委托',exact:false}).click();
   const target=()=>panel.locator('.crypto-activity-row').filter({hasText:Number(order.limitPrice).toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4})});
@@ -927,7 +928,7 @@ for(const intent of ['increase','reduce']) test(`${intent} remaining quantity ed
   await expect(dialog).toBeVisible();const input=dialog.getByRole('textbox',{name:'新剩余数量',exact:true}),confirm=dialog.getByRole('button',{name:'确认生效',exact:true});
   await expect(input).toHaveValue('1');await expect(confirm).toBeDisabled();
   await input.fill('0');await expect(confirm).toBeDisabled();await input.fill('0.001');await expect(confirm).toBeDisabled();
-  await input.fill('2');await expect(confirm).toBeEnabled();await expect(dialog).toContainText('原剩余数量');await expect(dialog).toContainText('新剩余数量');
+  await input.fill('2');await expect(confirm).toBeEnabled();await expect(dialog).toContainText('修改前');await expect(dialog).toContainText('修改后');
   await expect(dialog).toContainText('已成交 0 张保持不变');expect(commands).toHaveLength(0);
   expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session.orders).toEqual(session.orders);
   await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);expect(commands).toHaveLength(0);
@@ -935,7 +936,7 @@ for(const intent of ['increase','reduce']) test(`${intent} remaining quantity ed
   await page.screenshot({path:test.info().outputPath('remaining-quantity.png')});
   await confirm.evaluate(button=>{button.click();button.click();});await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
-  expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'amend-quantity',orderId:order.id,remainingContracts:'2'});expect(commands[0].expectedRevision).toBe(session.revision);
+  expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'amend-order',orderId:order.id,limitPrice:order.limitPrice,remainingContracts:'2'});expect(commands[0].expectedRevision).toBe(session.revision);
   let saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   expect(saved.orders.find(o=>o.id===order.id).remainingContracts).toBe('2');expect(saved.orders.find(o=>o.id===order.id).filledContracts).toBe(order.filledContracts);
   expect(saved.orders.find(o=>o.id===order.id).limitPrice).toBe(order.limitPrice);expect(saved.orders.find(o=>o.id!==order.id)).toEqual(session.orders.find(o=>o.id!==order.id));
@@ -946,7 +947,7 @@ for(const intent of ['increase','reduce']) test(`${intent} remaining quantity ed
   saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;expect(saved.orders.find(o=>o.id===order.id).remainingContracts).toBe('0.5');
   expect(saved.orders.find(o=>o.id===order.id).filledContracts).toBe(order.filledContracts);expect(saved.account.position).toEqual(session.account.position);
   await panel.getByRole('button',{name:'历史委托',exact:true}).click();const history=panel.locator('.crypto-activity-row').last();
-  await expect(history).toContainText('委托数量已调整');await history.getByRole('button',{name:'委托详情',exact:true}).click();
+  await expect(history).toContainText('委托已调整');await history.getByRole('button',{name:'委托详情',exact:true}).click();
   await expect(page.getByRole('dialog',{name:'委托详情',exact:true})).toContainText('原剩余量');
 });
 
@@ -954,10 +955,66 @@ test('quantity editor rejects stale confirmation instead of restoring older rema
   const {id,session,order,commands}=await limitPractice(page,request);
   const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();
   await panel.getByRole('button',{name:'修改剩余数量',exact:true}).first().click();
-  const dialog=page.getByRole('dialog',{name:'修改剩余数量',exact:true});await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('2');
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('2');
+  await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeEnabled();
   const changed=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:session.revision,command:{type:'amend-quantity',orderId:order.id,remainingContracts:'0.5'}}});expect(changed.status()).toBe(200);
   await dialog.getByRole('button',{name:'确认生效',exact:true}).click();await expect(dialog).toHaveCount(0);
   await expect(page.getByText('已重新同步操作结果，请核对当前委托或保护后重新操作。',{exact:true})).toBeVisible();
   expect(commands).toHaveLength(1);expect(commands[0].expectedRevision).toBe(session.revision);
   const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;expect(saved.orders.find(o=>o.id===order.id).remainingContracts).toBe('0.5');
+});
+
+
+test('combined editor previews final reserves read-only, ignores late previews, and commits both fields once',async({page,request})=>{
+  const {id,session,order,commands}=await limitPractice(page,request);
+  let releaseOld,markSeen,markDelivered,latestPreview;
+  const gate=new Promise(resolve=>{releaseOld=resolve;}),seen=new Promise(resolve=>{markSeen=resolve;}),delivered=new Promise(resolve=>{markDelivered=resolve;});
+  await page.route('**/preview',async route=>{
+    const command=route.request().postDataJSON().command;
+    if(command?.type!=='amend-order') return route.fallback();
+    const response=await route.fetch({url:`${fixture.url}${new URL(route.request().url()).pathname}`});
+    if(command.remainingContracts==='1') {markSeen();await gate;await route.fulfill({response});markDelivered();}
+    else {latestPreview=(await response.json()).preview;await route.fulfill({response});}
+  });
+  try {
+    const panel=page.getByTestId('crypto-risk');await page.setViewportSize({width:390,height:953});
+    await panel.getByRole('button',{name:'当前委托',exact:false}).click();await panel.getByRole('button',{name:'修改委托价格',exact:true}).first().click();
+    const dialog=page.getByRole('dialog',{name:'修改委托',exact:true}),confirm=dialog.getByRole('button',{name:'确认生效',exact:true});
+    await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill('48000');await seen;await expect(confirm).toBeDisabled();
+    await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('2');await expect(confirm).toBeEnabled();
+    const expected=Number(latestPreview.after.reservedBalance).toLocaleString('en-US',{minimumFractionDigits:8,maximumFractionDigits:8});
+    await expect(dialog.getByTestId('order-amend-reserve')).toHaveText(expected);
+    releaseOld();await delivered;await expect(dialog.getByTestId('order-amend-reserve')).toHaveText(expected);
+    expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+    await page.screenshot({path:test.info().outputPath('combined-order-editor.png')});
+    await confirm.evaluate(button=>{button.click();button.click();});await expect(dialog).toHaveCount(0);await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+    expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'amend-order',orderId:order.id,limitPrice:'48000',remainingContracts:'2'});
+    const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session,o=saved.orders.find(o=>o.id===order.id);
+    expect(saved.revision).toBe(session.revision+1);expect(o.reservedBalance).toBe(latestPreview.after.reservedBalance);expect(o.filledContracts).toBe(order.filledContracts);
+    expect(o.limitPrice).toBe('48000');expect(o.remainingContracts).toBe('2');expect(saved.orders.find(o=>o.id!==order.id)).toEqual(session.orders.find(o=>o.id!==order.id));
+    expect(saved.account.position).toEqual(session.account.position);expect(saved.elapsedMinutes).toBe(session.elapsedMinutes);
+  } finally {releaseOld();}
+});
+
+test('failed combined reserve preview cannot submit or alter the original order',async({page,request})=>{
+  const {id,session,commands}=await limitPractice(page,request);
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();await panel.getByRole('button',{name:'修改剩余数量',exact:true}).first().click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});
+  await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill('1000000');await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('100');
+  await expect(dialog.getByRole('alert')).toBeVisible();await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeDisabled();
+  expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+  await dialog.getByRole('button',{name:'取消调整',exact:true}).click();await expect(dialog).toHaveCount(0);
+});
+
+test('combined editor keeps a pending market price fixed and previews its new quantity reserve',async({page,request})=>{
+  const {id,commands}=await openPractice(page,request,{layout:'dual'});
+  const placed=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:0,command:{type:'market-open',side:'short',contracts:'1'}}});expect(placed.status()).toBe(200);
+  const {session}=await placed.json();await page.reload();await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();await panel.getByRole('button',{name:'修改剩余数量',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});await expect(dialog.getByRole('textbox',{name:'新委托价',exact:true})).toHaveCount(0);
+  await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('2');const confirm=dialog.getByRole('button',{name:'确认生效',exact:true});await expect(confirm).toBeEnabled();
+  const reserve=await dialog.getByTestId('order-amend-reserve').textContent();await confirm.click();await expect(dialog).toHaveCount(0);await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+  expect(commands).toHaveLength(1);expect(commands[0].command).toEqual({type:'amend-order',orderId:session.orders[0].id,remainingContracts:'2'});
+  const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(Number(saved.orders[0].reservedBalance)).toBe(Number(reserve.replaceAll(',','')));expect(saved.orders[0].limitPrice).toBeNull();expect(saved.account.position).toBeNull();expect(saved.elapsedMinutes).toBe(0);
 });
