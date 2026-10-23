@@ -35,6 +35,7 @@ const orderEditDraft=computed(()=>orderEditor.value?createOrderDraft(orderEditor
 const orderEditBody=computed(()=>orderEditDraft.value?orderDraftCommand(s.value,orderEditDraft.value):null);
 const orderPreviewReady=computed(()=>Boolean(orderEditBody.value&&orderPreview.value?.key===JSON.stringify(orderEditBody.value)&&!orderPreviewBusy.value&&!orderPreviewError.value));
 const fundingAmount=value=>Number(value)>0&&Number(value)<0.01?'<0.01':amount(value,2);
+const availableBalanceAmount=value=>Number(value)<0&&Number(value)>-0.01?'缺口 <0.01':amount(value,2);
 const orderCanConfirm=computed(()=>orderPreviewReady.value&&orderPreview.value.funds.affordable===true&&orderPreview.value.changed!==false);
 const orderChartDraft=computed(()=>orderEditDraft.value?.order.type==='limit'&&(orderEditDraft.value.price!==orderEditDraft.value.order.limitPrice||orderEditDraft.value.remainingContracts!==orderEditDraft.value.order.remainingContracts)?orderEditDraft.value:priceDraft.value);
 function clearOrderEditor() {orderPreviewGeneration++;orderEditor.value=null;orderEditPrice.value='';orderEditQuantity.value='';orderPreview.value=null;orderPreviewBusy.value=false;orderPreviewError.value='';}
@@ -227,7 +228,7 @@ async function retrain() {
           <tr><th scope="row">委托价</th><td>{{ orderEditor.order.limitPrice??'市价' }}</td><td>{{ orderEditor.order.type==='market'?'市价':orderEditDraft?.price??'—' }}</td></tr>
           <tr><th scope="row">剩余 · 张</th><td>{{ orderEditor.order.remainingContracts }}</td><td>{{ orderEditDraft?.remainingContracts??'—' }}</td></tr>
           <tr><th scope="row">冻结 · USDT</th><td :title="String(orderEditor.order.reservedBalance)">{{ amount(orderEditor.order.reservedBalance,2) }}</td><td data-testid="order-amend-reserve" :title="orderPreviewReady?orderPreview.after.reservedBalance:''">{{ orderPreviewReady?amount(orderPreview.after.reservedBalance,2):'—' }}</td></tr>
-          <tr><th scope="row">可用 · USDT</th><td :title="String(orderEditor.session.account.availableBalance)">{{ amount(orderEditor.session.account.availableBalance,2) }}</td><td data-testid="order-amend-available" :title="orderPreviewReady?orderPreview.funds.availableBalanceAfter:''">{{ orderPreviewReady?amount(orderPreview.funds.availableBalanceAfter,2):'—' }}</td></tr>
+          <tr><th scope="row">可用 · USDT</th><td :title="String(orderEditor.session.account.availableBalance)">{{ amount(orderEditor.session.account.availableBalance,2) }}</td><td data-testid="order-amend-available" :title="orderPreviewReady?orderPreview.funds.availableBalanceAfter:''">{{ orderPreviewReady?availableBalanceAmount(orderPreview.funds.availableBalanceAfter):'—' }}</td></tr>
         </tbody>
         </table>
         <p v-if="orderPreviewReady" class="crypto-muted" data-testid="order-amend-change" :title="`${orderPreview.funds.reserveChangeAmount} USDT`">{{ ({increase:'增加冻结',release:'释放冻结',unchanged:'冻结不变'})[orderPreview.funds.reserveChangeType] }} {{ fundingAmount(orderPreview.funds.reserveChangeAmount) }} USDT</p>
