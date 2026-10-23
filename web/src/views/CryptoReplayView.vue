@@ -60,11 +60,14 @@ function requestCancellation(target) {
   if(!draft) return;
   stop();priceNotice.value='';cancellation.value=draft;
 }
-const cancellationTitle=computed(()=>cancellation.value?.kind==='order'?'撤销限价委托？':cancellation.value?.leg==='stopLoss'?'撤销自动止损？':'撤销自动止盈？');
+const cancellationTitle=computed(()=>cancellation.value?.kind==='order'?(cancellation.value.order.type==='limit'?'撤销限价委托？':'撤销市价委托？'):cancellation.value?.leg==='stopLoss'?'撤销自动止损？':'撤销自动止盈？');
 const cancellationMessage=computed(()=>{
   const draft=cancellation.value;
   if(!draft) return '';
-  if(draft.kind==='order') return `委托 #${draft.orderId} · ${draft.order.limitPrice} · 未成交 ${draft.order.remainingContracts} 张。仅撤销未成交部分，释放相应冻结资金；已成交持仓及其保护不变。`;
+  if(draft.kind==='order') {
+    const order=draft.order,direction=order.intent==='reduce'?(order.side==='long'?'平多':'平空'):(order.side==='long'?'开多':'开空');
+    return `${direction} · 委托价 ${order.type==='limit'?order.limitPrice:'市价'} · 剩余未成交 ${order.remainingContracts} 张。仅撤销此委托的未成交部分。`;
+  }
   const label=draft.leg==='stopLoss'?'止损':'止盈',sibling=draft.protection[draft.leg==='stopLoss'?'takeProfit':'stopLoss'];
   return `${label} ${draft.protection[draft.leg].price} · ${draft.protection.contracts} 张。${draft.protection.triggeredLeg?'已触发；撤销仅停止剩余退出，不恢复已平仓数量。':sibling?'仅撤销这一条，另一条保护保留。':'撤销后不再自动保护该持仓。'}`;
 });
@@ -150,7 +153,7 @@ async function retrain() {
         <div class="crypto-terminal-main">
           <CryptoChartWorkspace v-model="preferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(cancellation)" :price-draft="priceDraft" @price-drag="priceDrag" @confirm-price="confirmPriceDraft" @cancel-price="cancelPriceDraft" @request-cancellation="requestCancellation" />
           <p v-if="s.ending&&s.status!=='completed'" class="crypto-alert" role="status">{{ s.status==='end-blocked'?'结束受阻：预留分钟容量不足，仍有仓位；不能揭晓或复练。':'正在结束：继续推进以退出剩余仓位，不再新开仓。' }}</p>
-          <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(priceDraft)||priceDragging||Boolean(cancellation)" @command="command" @records="records" />
+          <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||Boolean(priceDraft)||priceDragging||Boolean(cancellation)" @command="command" @cancel-order="requestCancellation" @records="records" />
           <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
           <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
         </div>

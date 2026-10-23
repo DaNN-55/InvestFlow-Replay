@@ -69,7 +69,7 @@ export function createPriceCancellation(session,target) {
   if(session?.status!=='active'||session.ending) return null;
   if(target.orderId!=null) {
     const order=session.orders?.find(order=>order.id===target.orderId);
-    return order?.type==='limit'&&Number(order.remainingContracts)>0?{kind:'order',sessionId:session.id,revision:session.revision,orderId:order.id,order:structuredClone(order)}:null;
+    return ['limit','market'].includes(order?.type)&&Number(order.remainingContracts)>0?{kind:'order',sessionId:session.id,revision:session.revision,orderId:order.id,order:structuredClone(order)}:null;
   }
   const leg=target.leg;
   if(!['stopLoss','takeProfit'].includes(leg)||!session.account?.position||!session.protection?.[leg]||(session.protection.triggeredLeg&&session.protection.triggeredLeg!==leg)) return null;

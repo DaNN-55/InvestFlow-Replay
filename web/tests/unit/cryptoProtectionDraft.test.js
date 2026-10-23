@@ -58,7 +58,7 @@ test('limit draft uses exact order identity and captured revision without changi
   }
 });
 
-test('chart cancellation captures one remaining limit order, validates its version, and never cancels the sibling',async()=>{
+test('order cancellation captures remaining quantity and revision for limit and pending market orders',async()=>{
   const {createPriceCancellation,priceCancellationCurrent,priceCancellationCommand}=await import('../../src/utils/cryptoPriceDraft.js');
   const s=session();s.orders=[{id:2,type:'limit',limitPrice:'49000',contracts:'3',remainingContracts:'1',filledContracts:'2'},{id:3,type:'limit',limitPrice:'48000',remainingContracts:'1'}];
   const before=structuredClone(s),draft=createPriceCancellation(s,{orderId:2});assert.deepEqual(s,before);
@@ -66,7 +66,13 @@ test('chart cancellation captures one remaining limit order, validates its versi
   for(const change of [s=>s.revision++,s=>s.id='other',s=>s.orders.shift(),s=>s.orders[0].remainingContracts='0.5',s=>s.ending=true]) {
     const changed=structuredClone(before);change(changed);assert.equal(priceCancellationCurrent(changed,draft),false);assert.equal(priceCancellationCommand(changed,draft),null);
   }
-  assert.equal(createPriceCancellation(s,{orderId:9}),null);s.orders[0].type='market';assert.equal(createPriceCancellation(s,{orderId:2}),null);
+  assert.equal(createPriceCancellation(s,{orderId:9}),null);
+  s.orders[0].type='market';delete s.orders[0].limitPrice;
+  const market=createPriceCancellation(s,{orderId:2});
+  assert.equal(market.order.remainingContracts,'1');
+  assert.deepEqual(priceCancellationCommand(s,market),{expectedRevision:4,command:{type:'cancel-order',orderId:2}});
+  const partial=structuredClone(s);partial.orders[0].remainingContracts='0.5';assert.equal(priceCancellationCommand(partial,market),null);
+  s.orders[0].remainingContracts='0';assert.equal(createPriceCancellation(s,{orderId:2}),null);
 });
 
 test('chart cancellation targets a single actual protective leg, including an already-triggered remaining exit',async()=>{
