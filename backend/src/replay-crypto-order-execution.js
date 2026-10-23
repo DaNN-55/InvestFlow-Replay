@@ -120,8 +120,7 @@ export function createCryptoOrderReplay({ rules, scenario: input, dataVersion, s
       : marketQuote(o.remainingContracts, direction(o.side, false), knownLast(s), s.leverage);
     return money(new D(q.initialMargin).plus(q.fee));
   }
-  function reserve(s, o) {
-    const required = reserveEstimate(s, o);
+  function reserve(s, o, required = reserveEstimate(s, o)) {
     if (new D(s.account.availableBalance).lt(required)) return false;
     o.reservedBalance = required; s.account.availableBalance = money(new D(s.account.availableBalance).minus(required));
     s.reservedBalance = money(new D(s.reservedBalance).plus(required)); return true;
@@ -410,7 +409,10 @@ export function createCryptoOrderReplay({ rules, scenario: input, dataVersion, s
           const oldRemainingContracts = o.remainingContracts, oldPrice = o.limitPrice, oldReserve = o.reservedBalance;
           // apply() mutates a clone, so failed reserves leave both the order and cash intact.
           release(s, o); o.remainingContracts = remaining.toFixed(); o.contracts = contracts.toFixed(); if (o.type === "limit") o.limitPrice = price;
-          if (!reserve(s, o)) fail("INSUFFICIENT_CASH", "Cover the amended margin and taker fee before confirmation");
+          const required = reserveEstimate(s, o), projectedAvailable = new D(s.account.availableBalance).minus(required);
+          if (projectedAvailable.lt(0)) throw Object.assign(new Error("可用资金不足"), { code:"INSUFFICIENT_CASH", amendmentPreview:{
+            order:{...structuredClone(o),reservedBalance:required}, availableBalanceAfter:money(projectedAvailable), shortfall:money(projectedAvailable.negated()) } });
+          reserve(s, o, required);
           o.resting = false; o.blockedAtMinute = null; o.submittedMinute = s.elapsedMinutes;
           s.orders = [...s.orders.filter((x) => x.id !== o.id), o];
           emit(events, s, command.type === "amend-order" ? "order-updated" : "order-quantity-amended", { orderId: o.id, oldPrice, oldRemainingContracts, remainingContracts: o.remainingContracts,

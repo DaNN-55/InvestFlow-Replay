@@ -998,14 +998,35 @@ test('combined editor previews final reserves read-only, ignores late previews, 
   } finally {releaseOld();}
 });
 
-test('failed combined reserve preview cannot submit or alter the original order',async({page,request})=>{
+test('insufficient funds show a live shortfall and only the latest affordable preview can confirm',async({page,request})=>{
   const {id,session,commands}=await limitPractice(page,request);
+  await page.setViewportSize({width:320,height:953});
   const panel=page.getByTestId('crypto-risk');await panel.getByRole('button',{name:'当前委托',exact:false}).click();await panel.getByRole('button',{name:'修改剩余数量',exact:true}).first().click();
-  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true});
-  await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill('1000000');await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('100');
-  await expect(dialog.getByRole('alert')).toBeVisible();await expect(dialog.getByRole('button',{name:'确认生效',exact:true})).toBeDisabled();
-  expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
-  await dialog.getByRole('button',{name:'取消调整',exact:true}).click();await expect(dialog).toHaveCount(0);
+  const dialog=page.getByRole('dialog',{name:'修改委托',exact:true}),confirm=dialog.getByRole('button',{name:'确认生效',exact:true});
+  let lastShortfall;
+  for(const price of ['1000000','500000']) {
+    const responsePromise=page.waitForResponse(response=>response.url().endsWith('/preview')&&response.request().postDataJSON()?.command?.limitPrice===price&&response.request().postDataJSON()?.command?.remainingContracts==='100');
+    await dialog.getByRole('textbox',{name:'新委托价',exact:true}).fill(price);await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('100');
+    const {preview}=await (await responsePromise).json();expect(preview.funds.affordable).toBe(false);
+    await expect(dialog.getByTestId('order-amend-shortfall')).toContainText(Number(preview.funds.shortfall).toLocaleString('en-US',{minimumFractionDigits:8,maximumFractionDigits:8}));
+    await expect(confirm).toBeDisabled();
+    if(lastShortfall) expect(Number(preview.funds.shortfall)).toBeLessThan(lastShortfall);lastShortfall=Number(preview.funds.shortfall);
+    expect(commands).toHaveLength(0);expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+  }
+  await page.screenshot({path:test.info().outputPath('order-funds-shortfall.png')});
+  let release,seen;const gate=new Promise(resolve=>{release=resolve;}),pending=new Promise(resolve=>{seen=resolve;});
+  await page.route('**/preview',async route=>{
+    if(route.request().postDataJSON()?.command?.remainingContracts!=='1') return route.fallback();
+    const response=await route.fetch({url:`${fixture.url}${new URL(route.request().url()).pathname}`});seen();await gate;await route.fulfill({response});
+  });
+  try {
+    await dialog.getByRole('textbox',{name:'新剩余数量',exact:true}).fill('1');await pending;
+    await expect(confirm).toBeDisabled();await expect(dialog.getByTestId('order-amend-shortfall')).toHaveCount(0);
+    release();await expect(confirm).toBeEnabled();await expect(dialog.getByTestId('order-amend-shortfall')).toHaveCount(0);
+    await confirm.click();await expect(dialog).toHaveCount(0);await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
+    expect(commands).toHaveLength(1);expect(commands[0].command).toMatchObject({type:'amend-order',limitPrice:'500000',remainingContracts:'1'});
+    const saved=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;expect(Number(saved.account.availableBalance)).toBeGreaterThanOrEqual(0);expect(saved.elapsedMinutes).toBe(session.elapsedMinutes);
+  } finally {release();}
 });
 
 test('combined editor keeps a pending market price fixed and previews its new quantity reserve',async({page,request})=>{

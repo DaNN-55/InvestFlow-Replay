@@ -34,6 +34,7 @@ let orderPreviewGeneration=0;
 const orderEditDraft=computed(()=>orderEditor.value?createOrderDraft(orderEditor.value.session,{orderId:orderEditor.value.orderId},orderEditPrice.value,orderEditQuantity.value):null);
 const orderEditBody=computed(()=>orderEditDraft.value?orderDraftCommand(s.value,orderEditDraft.value):null);
 const orderPreviewReady=computed(()=>Boolean(orderEditBody.value&&orderPreview.value?.key===JSON.stringify(orderEditBody.value)&&!orderPreviewBusy.value&&!orderPreviewError.value));
+const orderCanConfirm=computed(()=>orderPreviewReady.value&&orderPreview.value.funds.affordable===true);
 const orderChartDraft=computed(()=>orderEditDraft.value?.order.type==='limit'?orderEditDraft.value:priceDraft.value);
 function clearOrderEditor() {orderPreviewGeneration++;orderEditor.value=null;orderEditPrice.value='';orderEditQuantity.value='';orderPreview.value=null;orderPreviewBusy.value=false;orderPreviewError.value='';}
 function requestOrderEdit(target) {
@@ -61,7 +62,7 @@ async function refreshOrderPreview() {
 }
 watch(orderEditBody,refreshOrderPreview);
 function confirmOrderEdit() {
-  if(!orderPreviewReady.value) return;
+  if(!orderCanConfirm.value) return;
   return saveChartCommand(orderEditBody.value,clearOrderEditor);
 }
 let priceDragSession=null;
@@ -224,11 +225,12 @@ async function retrain() {
         </tbody>
         </table>
         <p v-if="orderPreviewReady" class="crypto-muted" data-testid="order-amend-change">{{ ({increase:'增加冻结',release:'释放冻结',unchanged:'冻结不变'})[orderPreview.funds.reserveChangeType] }} {{ amount(orderPreview.funds.reserveChangeAmount,8) }} USDT</p>
+        <p v-if="orderPreviewReady&&!orderPreview.funds.affordable" class="crypto-muted" role="alert" data-testid="order-amend-shortfall">资金不足，还差 {{ amount(orderPreview.funds.shortfall,8) }} USDT</p>
         <p v-if="orderPreviewBusy" class="crypto-muted" role="status">核算冻结资金…</p>
         <p v-if="orderPreviewError" class="crypto-muted" role="alert">{{ orderPreviewError }} <button type="button" class="crypto-text-button" @click="refreshOrderPreview">重新预览</button></p>
         <p class="crypto-muted">{{ orderEditor.order.type==='limit'?`价格按 ${orderEditor.session.contract.tickSz} 对齐；`:'' }}数量步长 {{ orderEditor.session.contract.lotSz }} 张，全部取消请撤单。</p>
         <p v-if="orderEditDraft?.order.type==='limit'&&priceDraftReached(s,orderEditDraft)" class="crypto-muted" role="status">新价格已越过当前价，下一分钟可能按吃单成交。</p>
-        <div class="crypto-order-editor-actions"><UiButton variant="secondary" :disabled="state.busy||priceSaving" @click="clearOrderEditor">取消调整</UiButton><UiButton type="submit" :disabled="!orderPreviewReady||state.busy||priceSaving">确认生效</UiButton></div>
+        <div class="crypto-order-editor-actions"><UiButton variant="secondary" :disabled="state.busy||priceSaving" @click="clearOrderEditor">取消调整</UiButton><UiButton type="submit" :disabled="!orderCanConfirm||state.busy||priceSaving">确认生效</UiButton></div>
       </form>
     </UiModal>
     <ConfirmDialog :open="Boolean(cancellation)" :title="cancellationTitle" :message="cancellationMessage" confirm-text="确认撤销" cancel-text="保留" :busy="state.busy||priceSaving" @cancel="clearCancellation" @confirm="confirmCancellation" />

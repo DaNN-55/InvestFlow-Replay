@@ -190,12 +190,19 @@ export function createCryptoReplayService({ store, snapshotSource, now = () => n
         if (body.expectedRevision !== session.revision) fail('REPLAY_REVISION_CONFLICT', '委托已变化，请重新预览', 409);
         const command = normalizeCommand(body.command);
         if (command.type !== 'amend-order') fail('INVALID_REQUEST', '此预览仅支持修改委托');
-        const { engine } = runtime(session), result = domain(() => engine.apply(session.account, command));
-        const before = session.account.orders.find(o => o.id === command.orderId), after = result.state.orders.find(o => o.id === command.orderId);
+        const { engine } = runtime(session);
+        let result, insufficient;
+        try { result = engine.apply(session.account, command); }
+        catch (error) {
+          if (error.code === 'INSUFFICIENT_CASH' && error.amendmentPreview) insufficient = error.amendmentPreview;
+          else domain(() => { throw error; });
+        }
+        const before = session.account.orders.find(o => o.id === command.orderId), after = insufficient?.order ?? result.state.orders.find(o => o.id === command.orderId);
         const summary = o => ({limitPrice:o.limitPrice, remainingContracts:o.remainingContracts, filledContracts:o.filledContracts, reservedBalance:o.reservedBalance});
         const reserveChange = new D(after.reservedBalance).minus(before.reservedBalance);
         const funds = { reserveChangeType:reserveChange.gt(0)?'increase':reserveChange.lt(0)?'release':'unchanged', reserveChangeAmount:reserveChange.abs().toFixed(8),
-          availableBalanceBefore:session.account.account.availableBalance, availableBalanceAfter:result.state.account.availableBalance };
+          affordable:!insufficient, shortfall:insufficient?.shortfall??'0.00000000',
+          availableBalanceBefore:session.account.account.availableBalance, availableBalanceAfter:insufficient?.availableBalanceAfter??result.state.account.availableBalance };
         return { preview: { sessionId:id, revision:session.revision, command, before:summary(before), after:summary(after), funds } };
       }
       fields(body, ['expectedRevision', 'intent', 'orderType', 'sizingMode', 'amount', 'limitPrice', 'exitPrice', 'exitReference']);
