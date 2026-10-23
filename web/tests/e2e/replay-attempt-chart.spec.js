@@ -125,11 +125,16 @@ test("创建、推进和周期切换通过 Attempt 与 Chart interface 工作", 
   await page.getByRole("button", { name: "开始日线盲测" }).click();
 
   await expect(page.getByRole("heading", { name: "历史行情盲测" })).toBeVisible();
+  const notice=page.getByRole('status',{name:'演练类型提醒',exact:true});
+  await expect(notice).toHaveClass(/--first/);
+  await notice.getByRole('button',{name:'关闭演练提醒'}).click();
+  await expect(notice).not.toBeVisible();
+
   await expect(page.getByText("已推进 0 / 20 日")).toBeVisible();
   await expect(page.locator("canvas").first()).toBeVisible();
 
   const playback=page.getByRole('region',{name:'回放控制',exact:true});
-  await playback.getByRole('combobox',{name:'自动播放速度'}).selectOption('slow');
+  await playback.getByRole('combobox',{name:'自动播放速度'}).selectOption('1');
   await playback.getByRole('button',{name:'自动播放',exact:true}).click();
   await expect(playback.getByRole('button',{name:'暂停',exact:true})).toBeVisible();
   await playback.getByRole('button',{name:'暂停',exact:true}).click();
@@ -138,6 +143,7 @@ test("创建、推进和周期切换通过 Attempt 与 Chart interface 工作", 
 
   await expect(page.getByText("已推进 1 / 20 日")).toBeVisible();
   await expect(page.getByText("REV 1")).toBeVisible();
+  await expect(notice).not.toBeVisible();
   const tooltip=await page.evaluate(async()=>{
     const url=performance.getEntriesByType('resource').find(e=>/\/klinecharts\.js\?v=/.test(e.name)).name,{init}=await import(url);
     const chart=init({id:document.querySelector('[k-line-chart-id]').getAttribute('k-line-chart-id')});
@@ -251,4 +257,41 @@ test("揭晓后复盘先填写判断结果与两项评分", async ({ page }) => 
     .first()
     .evaluate((element) => element.getBoundingClientRect().top);
   expect(scoreRowTop).toBeLessThan(firstFieldTop);
+});
+
+
+test('retrain notice dismisses automatically and cancellation stays in settings',async({page})=>{
+  const retrain=replaySession(0);retrain.attemptInfo={kind:'retrain',attemptNumber:2,sourceSessionId:'first-result',countsTowardFirstScore:false};
+  await page.route('**/api/quant/replay/sessions',async route=>{
+    if(route.request().method()==='POST') return route.fulfill({json:{session:retrain}});
+    await route.fallback();
+  });
+  await page.getByRole('button',{name:'开始日线盲测'}).click();
+  const notice=page.getByRole('status',{name:'演练类型提醒',exact:true});
+  await expect(notice).toHaveClass(/--retrain/);await expect(notice).toContainText('正在复练');
+  await page.setViewportSize({width:320,height:850});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await notice.screenshot({path:test.info().outputPath('retrain-notice-mobile.png')});
+  await expect(notice).not.toBeVisible({timeout:7500});
+  await page.getByRole('button',{name:'本局配置',exact:true}).click();
+  const settings=page.getByRole('dialog',{name:'本局配置',exact:true});
+  await settings.getByRole('button',{name:'取消复练并返回首次结果',exact:true}).click();
+  const confirmation=page.getByRole('dialog',{name:'取消本次复练？',exact:true});
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole('button',{name:'取消',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'历史行情盲测'})).toBeVisible();
+});
+
+test('8x playback uses the same daily advance request and pauses without another step',async({page})=>{
+  await page.getByRole('button',{name:'开始日线盲测'}).click();
+  const playback=page.getByRole('region',{name:'回放控制',exact:true});
+  await playback.getByRole('combobox',{name:'自动播放速度'}).selectOption('8');
+  let calls=0;page.on('request',req=>{if(req.url().endsWith('/advance')&&req.method()==='POST') calls++;});
+  const response=page.waitForResponse(res=>res.url().endsWith('/advance'));
+  await playback.getByRole('button',{name:'自动播放',exact:true}).click();
+  expect((await response).status()).toBe(200);
+  await playback.getByRole('button',{name:'暂停',exact:true}).click();
+  await expect(playback.getByRole('button',{name:'自动播放',exact:true})).toBeVisible();
+  const paused=calls;await page.waitForTimeout(300);expect(calls).toBe(paused);
+  await expect(playback.getByRole('combobox',{name:'自动播放速度'})).toHaveValue('8');
 });

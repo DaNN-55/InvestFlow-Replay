@@ -1,112 +1,28 @@
 <script setup>
-import { Eye, RotateCcw, ShieldCheck } from "lucide-vue-next";
-import { computed } from "vue";
-
-import { getReplayAttemptPresentation } from "../../utils/replayHistoryPresentation.js";
-
-const props = defineProps({
-  attemptInfo: {
-    type: Object,
-    default: null,
-  },
-  cancelling: { type: Boolean, default: false },
-});
-
-const emit = defineEmits(["cancelRetrain"]);
-
-const presentation = computed(() =>
-  getReplayAttemptPresentation(props.attemptInfo),
-);
+import { Eye, ShieldCheck, X } from 'lucide-vue-next';
+import { computed, shallowRef, watch, onBeforeUnmount, onDeactivated } from 'vue';
+import { getReplayAttemptPresentation } from '../../utils/replayHistoryPresentation.js';
+const props=defineProps({attemptInfo:{type:Object,default:null},sessionKey:{type:String,default:''}});
+const presentation=computed(()=>getReplayAttemptPresentation(props.attemptInfo));
+const visible=shallowRef(false);
+let timer;
+function dismiss(){visible.value=false;clearTimeout(timer);}
+watch(()=>`${props.sessionKey}:${presentation.value.kind}:${props.attemptInfo?.attemptNumber ?? 1}`,()=>{
+  clearTimeout(timer);visible.value=true;timer=setTimeout(dismiss,6000);
+},{immediate:true});
+onBeforeUnmount(()=>clearTimeout(timer));
+onDeactivated(dismiss);
 </script>
-
 <template>
-  <section
-    class="replay-attempt-context"
-    :class="`replay-attempt-context--${presentation.kind}`"
-    aria-label="本局演练次数"
-  >
-    <component
-      :is="presentation.kind === 'retrain' ? Eye : ShieldCheck"
-      :size="17"
-    />
-    <div>
-      <strong>{{ presentation.label }}</strong>
-      <small v-if="presentation.kind === 'retrain'">
-        已知真实标的与历史结果，用于验证和修正方法，不计入首次盲测成绩。
-      </small>
-      <small v-else>
-        这是该历史场景的首次匿名作答，成绩进入首次盲测统计。
-      </small>
-    </div>
-    <button
-      v-if="presentation.kind === 'retrain' && attemptInfo?.sourceSessionId"
-      type="button"
-      class="replay-attempt-context__cancel"
-      :disabled="cancelling"
-      @click="emit('cancelRetrain')"
-    >
-      <RotateCcw :size="13" />
-      {{ cancelling ? "正在取消…" : "取消复练并返回首次结果" }}
-    </button>
+  <section v-if="visible" class="replay-attempt-context" :class="`replay-attempt-context--${presentation.kind}`" role="status" aria-label="演练类型提醒">
+    <Eye v-if="presentation.kind==='retrain'" :size="16" /><ShieldCheck v-else :size="16" />
+    <span>{{ presentation.kind==='retrain'?'正在复练 · 不计入首次成绩':'首次盲测 · 计入首次成绩' }}</span>
+    <button type="button" aria-label="关闭演练提醒" @click="dismiss"><X :size="15" /></button>
   </section>
 </template>
-
 <style scoped>
-.replay-attempt-context {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 11px 13px;
-  border: 1px solid rgba(5, 150, 105, 0.16);
-  border-radius: 10px;
-  color: #047857;
-  background: var(--ql-color-success-soft);
-}
-
-.replay-attempt-context--retrain {
-  border-color: rgba(217, 119, 6, 0.18);
-  color: #b45309;
-  background: var(--ql-color-warning-soft);
-}
-
-.replay-attempt-context > div {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.replay-attempt-context__cancel {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  padding: 4px 7px;
-  border: 0;
-  border-radius: 6px;
-  color: inherit;
-  background: transparent;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.replay-attempt-context__cancel:hover:not(:disabled) {
-  background: rgba(217, 119, 6, 0.1);
-}
-
-.replay-attempt-context__cancel:disabled { cursor: wait; opacity: 0.55; }
-
-.replay-attempt-context strong {
-  color: inherit;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
-.replay-attempt-context small {
-  color: var(--ql-color-text-muted);
-  font-size: 10px;
-  line-height: 1.55;
-}
+.replay-attempt-context { position:fixed;z-index:60;top:60px;right:20px;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 32px);box-sizing:border-box;padding:10px 12px;border:1px solid var(--ql-color-success);border-radius:7px;background:color-mix(in srgb,var(--ql-color-success) 12%,var(--ql-color-bg-surface-strong));color:var(--ql-color-success);box-shadow:var(--ql-shadow-xs);font-size:12px; }
+.replay-attempt-context--retrain { border-color:var(--ql-color-warning);background:color-mix(in srgb,var(--ql-color-warning) 12%,var(--ql-color-bg-surface-strong));color:var(--ql-color-warning); }
+.replay-attempt-context span { min-width:0;overflow-wrap:anywhere; }.replay-attempt-context>svg { flex-shrink:0; }
+.replay-attempt-context button { display:grid;place-items:center;flex-shrink:0;padding:3px;border:0;border-radius:4px;color:inherit;background:transparent;cursor:pointer; }.replay-attempt-context button:focus-visible { outline:2px solid currentColor;outline-offset:2px; }
 </style>

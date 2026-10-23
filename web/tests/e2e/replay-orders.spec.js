@@ -25,8 +25,8 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   expect(controls.y).toBeGreaterThanOrEqual(intraday.y+intraday.height);
   expect(controls.y+controls.height).toBeLessThanOrEqual(trading.y);
   expect(controls.height).toBeLessThan(180);
-  await playback.getByRole('combobox',{name:'自动播放速度'}).selectOption('fast');
-  await expect(playback.getByRole('combobox',{name:'自动播放速度'})).toHaveValue('fast');
+  await playback.getByRole('combobox',{name:'自动播放速度'}).selectOption('8');
+  await expect(playback.getByRole('combobox',{name:'自动播放速度'})).toHaveValue('8');
   await expect(page.locator('[data-price-line-id="ashare-position-cost"]')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'新开一局',exact:true})).toHaveCount(1);
   await expect(page.locator('.market-replay__header').getByRole('button',{name:'新开一局',exact:true})).toHaveCount(0);
@@ -49,6 +49,20 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   await form.getByRole("combobox", { name: "委托类型" }).selectOption("limit");
   await form.getByRole("spinbutton", { name: "委托限价" }).fill("10");
   await form.getByRole("spinbutton", { name: "委托股数" }).fill("5000");
+  await expect(page.getByText(/本局保留原有数量/)).toHaveCount(0);
+  await expect(page.getByText(/成交量按K线总量近似/)).toHaveCount(0);
+  await form.getByRole('button',{name:'委托规模说明',exact:true}).click();
+  await expect(page.locator('.ui-tooltip__content')).toContainText('限价余量当日有效');
+  await page.keyboard.press('Escape');
+  await form.getByRole('button',{name:'关闭决策面板',exact:true}).click();
+  await page.getByRole('button',{name:'买入',exact:true}).click();
+  await expect(form.getByRole('spinbutton',{name:'委托限价'})).toHaveValue('10');
+  await expect(form.getByRole('spinbutton',{name:'委托股数'})).toHaveValue('5000');
+  await page.setViewportSize({width:390,height:850});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await form.screenshot({path:test.info().outputPath('compact-order-mobile.png')});
+  await page.setViewportSize({width:1280,height:900});
+
   await form.getByText("回踩", { exact: true }).click();
   await expect(form.getByRole("checkbox", { name: "回踩", exact: true })).toBeChecked();
   await form.getByLabel("核心判断").fill("价格回踩到事先确定的支撑范围");

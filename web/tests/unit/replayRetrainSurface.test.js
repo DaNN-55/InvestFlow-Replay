@@ -64,9 +64,9 @@ describe("replay retrain frontend surface", () => {
     assert.match(viewSource, /ReplayAttemptContext/u);
     assert.match(viewSource, /:attempt-info="session\.attemptInfo"/u);
     assert.match(contextSource, /getReplayAttemptPresentation/u);
-    assert.match(contextSource, /首次匿名作答/u);
-    assert.match(contextSource, /不计入首次盲测成绩/u);
-    assert.match(contextSource, /overflow-wrap: anywhere/u);
+    assert.match(contextSource, /首次盲测/u);
+    assert.match(contextSource, /不计入首次成绩/u);
+    assert.match(contextSource, /overflow-wrap:\s*anywhere/u);
   });
 
   it("passes all, first and retrain filters through the history query", () => {
@@ -105,8 +105,8 @@ describe("replay retrain frontend surface", () => {
   });
 
   it("can delete an accidental explicit retrain and restore its first result", () => {
-    assert.match(contextSource, /取消复练并返回首次结果/u);
-    assert.match(contextSource, /attemptInfo\?\.sourceSessionId/u);
+    assert.match(viewSource, /取消复练并返回首次结果/u);
+    assert.match(viewSource, /attemptInfo\.sourceSessionId/u);
     assert.doesNotMatch(viewSource, /localStorage/u);
     assert.match(attemptComposableSource, /sessionController\.cancelRetrain\(\)/u);
     assert.match(viewSource, /首次成绩和复盘不会改变/u);

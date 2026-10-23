@@ -7,6 +7,7 @@ import {
 } from "vue";
 
 import {
+  REPLAY_AUTOPLAY_SPEEDS,
   getReplayAutoplayDelay,
   getReplayAutoplayStopReason,
 } from "../utils/replayAutoplay.js";
@@ -20,7 +21,7 @@ export function useReplayAutoplay({
   blindDraft,
 }) {
   const playing = shallowRef(false);
-  const speed = shallowRef("normal");
+  const speed = shallowRef("1");
   const message = shallowRef("");
   let timerId = null;
   let stepInFlight = false;
@@ -132,10 +133,10 @@ export function useReplayAutoplay({
   }
 
   function setSpeed(nextSpeed) {
-    if (!["slow", "normal", "fast"].includes(nextSpeed)) {
+    if (!REPLAY_AUTOPLAY_SPEEDS.some(option=>option.value===String(nextSpeed))) {
       return;
     }
-    speed.value = nextSpeed;
+    speed.value = String(nextSpeed);
     if (playing.value) {
       message.value = `自动播放中 · ${speedLabel(nextSpeed)}`;
       scheduleNext(playbackToken);
@@ -143,11 +144,7 @@ export function useReplayAutoplay({
   }
 
   function speedLabel(value) {
-    return {
-      slow: "慢速",
-      normal: "正常",
-      fast: "快速",
-    }[value];
+    return `${value}×`;
   }
 
   watch(

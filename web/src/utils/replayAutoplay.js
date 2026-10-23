@@ -1,16 +1,9 @@
 import { isReplayBarOrderModel } from "./replayOrderRules.js";
 
-export const REPLAY_AUTOPLAY_SPEEDS = Object.freeze([
-  { value: "slow", label: "慢速", delayMs: 2200 },
-  { value: "normal", label: "正常", delayMs: 1100 },
-  { value: "fast", label: "快速", delayMs: 450 },
-]);
+export const REPLAY_AUTOPLAY_SPEEDS = Object.freeze([1,2,4,8].map(speed=>({value:String(speed),label:`${speed}×`,delayMs:1100/speed})));
 
 export function getReplayAutoplayDelay(speed) {
-  return (
-    REPLAY_AUTOPLAY_SPEEDS.find((item) => item.value === speed)?.delayMs ??
-    REPLAY_AUTOPLAY_SPEEDS[1].delayMs
-  );
+  return REPLAY_AUTOPLAY_SPEEDS.find(item=>item.value===String(speed))?.delayMs ?? 1100;
 }
 
 function formatPrice(value) {
