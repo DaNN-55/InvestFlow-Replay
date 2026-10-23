@@ -51,7 +51,7 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   await form.getByRole("spinbutton", { name: "委托股数" }).fill("5000");
   await expect(page.getByText(/本局保留原有数量/)).toHaveCount(0);
   await expect(page.getByText(/成交量按K线总量近似/)).toHaveCount(0);
-  await form.getByRole('button',{name:'委托规模说明',exact:true}).click();
+  await form.getByRole('button',{name:'委托规模说明',exact:true}).hover();
   await expect(page.locator('.ui-tooltip__content')).toContainText('限价余量当日有效');
   await page.keyboard.press('Escape');
   await form.getByRole('button',{name:'关闭决策面板',exact:true}).click();
@@ -133,6 +133,20 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   await expect(playback.getByRole('button',{name:'结束本局',exact:true})).toBeDisabled();
   const completed=(await (await request.get(`${fixture.url}/api/quant/replay/sessions/${session.id}`)).json()).session;
   expect(completed.status).toBe('completed');
+  await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5180'}/decision/trade-records?tab=replay&market=ashare&session=${session.id}`);
+  const snapshot=page.locator('.replay-history-detail__orders .replay-order-snapshot').first();
+  await expect(snapshot).toBeVisible();
+  const summary=snapshot.locator('summary'),action=summary.locator('.replay-order-snapshot__action');
+  await expect(action).toContainText('查看当时决策');await expect(action.locator('svg')).toHaveCount(1);
+  const row=await summary.boundingBox(),button=await action.boundingBox();
+  expect(button.x+button.width).toBeGreaterThan(row.x+row.width-3);
+  await summary.click();await expect(snapshot.locator('dl')).toBeVisible();
+  await summary.click();await expect(snapshot.locator('dl')).not.toBeVisible();
+  await page.setViewportSize({width:390,height:850});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await snapshot.screenshot({path:test.info().outputPath('decision-row-mobile.png')});
+  await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5180'}/decision/market-replay`);
+
   await playback.getByRole('button',{name:'新开一局',exact:true}).click();
   await expect(page.getByRole('heading',{name:'这次怎么练？',exact:true})).toBeVisible();
   const preserved=(await (await request.get(`${fixture.url}/api/quant/replay/sessions/${session.id}`)).json()).session;

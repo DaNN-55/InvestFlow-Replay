@@ -283,6 +283,8 @@ function isPositiveMetric(metric) {
             {{ formatScore(item.scoreCard.total) }}
           </strong>
           <small>/ 100</small>
+</div>
+        <div class="replay-history-detail__score-summary-side">
           <small class="replay-history-detail__algorithm">
             算法 {{ item.scoreCard.algorithmVersion || "旧版评分" }}
             <span
@@ -295,8 +297,6 @@ function isPositiveMetric(metric) {
               {{ attemptPresentation.scoreNote }}
             </span>
           </small>
-        </div>
-        <div class="replay-history-detail__score-summary-side">
           <span
             class="replay-history-detail__collapse-hint replay-history-detail__collapse-hint--open"
             title="折叠评分"
@@ -411,7 +411,9 @@ function isPositiveMetric(metric) {
               :key="record.key"
               class="replay-history-detail__order"
             >
-              <header>
+              <ReplayOrderDecisionSnapshot inline :decision="record.value.decision" :side="column.side">
+                <template #heading>
+              <span class="replay-history-detail__order-heading">
                 <span :class="`replay-history-detail__side--${column.side}`">
                   {{
                     record.kind === "pending"
@@ -442,11 +444,9 @@ function isPositiveMetric(metric) {
                       : `${Number(record.value.ratio) * 100}%`
                   }}
                 </span>
-              </header>
-              <ReplayOrderDecisionSnapshot
-                :decision="record.value.decision"
-                :side="column.side"
-              />
+              </span>
+                </template>
+              </ReplayOrderDecisionSnapshot>
             </article>
           </div>
           <p v-else class="replay-history-detail__order-empty">
@@ -936,7 +936,7 @@ function isPositiveMetric(metric) {
   padding: 0.75rem;
 }
 
-.replay-history-detail__order header {
+.replay-history-detail__order-heading {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
@@ -945,7 +945,7 @@ function isPositiveMetric(metric) {
   font-size: 0.75rem;
 }
 
-.replay-history-detail__order header strong {
+.replay-history-detail__order-heading strong {
   color: var(--ql-color-text-strong);
 }
 
@@ -972,13 +972,13 @@ function isPositiveMetric(metric) {
 }
 
 .replay-history-detail__score-summary {
-  align-items: end;
+  align-items: center;
   box-sizing: border-box;
   cursor: pointer;
   display: flex;
   justify-content: space-between;
   list-style: none;
-  min-height: 80px;
+  min-height: 58px;
   padding: 0.5625rem 1rem;
 }
 
@@ -1010,8 +1010,10 @@ function isPositiveMetric(metric) {
 
 .replay-history-detail__score-summary-side {
   align-items: center;
-  display: grid;
-  place-items: center;
+  display: flex;
+  gap:10px;
+  margin-left:auto;
+  text-align:right;
 }
 
 .replay-history-detail__collapse-hint {
@@ -1038,8 +1040,8 @@ function isPositiveMetric(metric) {
 }
 
 .replay-history-detail__algorithm {
-  display: block;
-  margin-top: 0.25rem;
+  display:inline;
+  margin:0;
 }
 
 .replay-history-detail__score-meta {
@@ -1152,4 +1154,8 @@ function isPositiveMetric(metric) {
     grid-template-columns: 1fr;
   }
 }
+</style>
+
+<style scoped>
+.replay-history-detail__order-heading { flex:1;min-width:0; }.replay-history-detail__score-summary { gap:8px;flex-wrap:wrap; }
 </style>

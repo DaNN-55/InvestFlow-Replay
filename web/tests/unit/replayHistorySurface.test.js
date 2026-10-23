@@ -175,7 +175,7 @@ describe("replay history tracking surface", () => {
     assert.match(tooltipSource, /TooltipTrigger/u);
     assert.match(
       detailSource,
-      /\.replay-history-detail__score-summary \{[\s\S]*?min-height: 80px;[\s\S]*?padding: 0\.5625rem 1rem;/u,
+      /\.replay-history-detail__score-summary \{[\s\S]*?min-height: 58px;[\s\S]*?padding: 0\.5625rem 1rem;/u,
     );
     assert.match(scorePresentationSource, /description:/u);
     assert.ok(
