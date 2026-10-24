@@ -1,0 +1,2829 @@
+{
+  "version": 1,
+  "meta": {
+    "title": "InvestFlow Replay · 架构与运行流程",
+    "summary": "两条历史行情训练路径，共用本机 API，分别冻结规则、执行决策并保留复盘。",
+    "project": "InvestFlow-Replay · /Users/dan/Programs/InvestFlow-Replay",
+    "generatedAt": "2026-10-24T16:53:09+08:00",
+    "commit": "d03a77ce66819896b284269693dfc345ea61348a",
+    "dirty": true,
+    "demo": false,
+    "scope": "只读检查当前入口、前端控制器、Node API 与领域模块、Python 行情供给、SQLite/DuckDB/JSON 边界及合约资产准备。未读取个人账本、未启动业务服务；工作区已有项目内 skill 与模板文件。",
+    "limitations": [
+      "图中“已确认”指已核对代码或配置，不表示该行为已在正式服务运行验证；未确认运行事项见“待核实”。",
+      "同步连线表示主流程等待调用返回，异步连线表示不等待的预取或进程内后台任务；不等同于 JavaScript 是否使用 async。",
+      "ADR-0001 记录初批 bar-orders-v1；当前 createReplaySession 还会冻结板块版 bar-orders-v2，旧会话继续保留原模型。",
+      "合约执行器中的 engine 是 Node 纯计算对象，不是 Python 行情引擎；普通合约训练不实时访问 OKX。",
+      "两类演练存于 SQLite，手工交易追踪存于 JSON；共用页面入口不意味着自动转换或共用统计。",
+      "源码未做修改；本次验证目标为 skill 的真实项目分析成果与地图交互，不是整套业务或外部行情服务验收。"
+    ]
+  },
+  "sources": [
+    {
+      "id": "startup",
+      "kind": "static",
+      "path": "run.sh",
+      "locator": "uvicorn / standalone-server / Vite；默认 8775 / 3110 / 5180",
+      "line": 93,
+      "note": "启动脚本分别启动三个本机进程并检查 HTTP 就绪；本次没有执行启动脚本。"
+    },
+    {
+      "id": "routes",
+      "kind": "static",
+      "path": "web/src/router/index.js",
+      "locator": "router.routes",
+      "line": 6,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "vite",
+      "kind": "static",
+      "path": "web/vite.config.js",
+      "locator": "server.proxy / build.rollupOptions.input",
+      "line": 4,
+      "note": "开发时 /api 代理到 Node；landing 是独立静态构建入口。"
+    },
+    {
+      "id": "api-client",
+      "kind": "static",
+      "path": "web/src/services/api.js",
+      "locator": "request / api",
+      "line": 9,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "a-ui",
+      "kind": "static",
+      "path": "web/src/composables/useReplaySession.js",
+      "locator": "useReplaySession / createSession / submitOrder",
+      "line": 36,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "a-ui-restore",
+      "kind": "static",
+      "path": "web/src/composables/useReplaySession.js",
+      "locator": "refreshSession / localStorage / 409 刷新",
+      "line": 82,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "backend",
+      "kind": "static",
+      "path": "backend/src/standalone-server.js",
+      "locator": "createApp / createOkxHistoryPoolSource",
+      "line": 15,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "composition",
+      "kind": "static",
+      "path": "backend/src/app.js",
+      "locator": "createApp：Database → Store → Interaction / CryptoService",
+      "line": 857,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "http-create",
+      "kind": "static",
+      "path": "backend/src/app.js",
+      "locator": "POST /api/quant/replay/sessions",
+      "line": 1529,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "http-actions",
+      "kind": "static",
+      "path": "backend/src/app.js",
+      "locator": "actions / advance / reveal / reviews 路由",
+      "line": 1568,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "benchmark-prefetch",
+      "kind": "static",
+      "path": "backend/src/app.js",
+      "locator": "benchmarks 成功后 fire-and-forget 预取",
+      "line": 1328,
+      "note": "预取错误被 catch；不能把接口返回当作预取完成。"
+    },
+    {
+      "id": "interaction",
+      "kind": "static",
+      "path": "backend/src/replay-interaction.js",
+      "locator": "createReplayInteraction：按 market 分派",
+      "line": 1211,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "visible",
+      "kind": "static",
+      "path": "backend/src/replay-interaction.js",
+      "locator": "presentReplaySession：截取可见行情与隐藏身份",
+      "line": 904,
+      "note": "未揭晓仅呈现 observationBars + revealedFutureBars；揭晓后扩大可见窗口。"
+    },
+    {
+      "id": "a-create",
+      "kind": "static",
+      "path": "backend/src/replay-lifecycle.js",
+      "locator": "createReplayLifecycle.createSession",
+      "line": 31,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "a-prefetch",
+      "kind": "static",
+      "path": "backend/src/replay-lifecycle.js",
+      "locator": "创建后异步补充未见标的",
+      "line": 97,
+      "note": "仅表示异步发起预取；主创建响应不等待预取完成，失败被捕获。"
+    },
+    {
+      "id": "a-day",
+      "kind": "static",
+      "path": "backend/src/replay-lifecycle.js",
+      "locator": "advanceSession(mode=day)：循环与事务",
+      "line": 138,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "store",
+      "kind": "static",
+      "path": "backend/src/replay-lifecycle-store.js",
+      "locator": "createReplayLifecycleStore",
+      "line": 1,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "engine-client",
+      "kind": "static",
+      "path": "backend/src/engine-client.js",
+      "locator": "createEngineClient / requestJson",
+      "line": 59,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "engine-api",
+      "kind": "static",
+      "path": "engine/replay_engine/app.py",
+      "locator": "FastAPI / benchmarks / scenarios / lifespan",
+      "line": 44,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "engine-scenario",
+      "kind": "static",
+      "path": "engine/replay_engine/service.py",
+      "locator": "ReplayMarketSupply.create_scenario",
+      "line": 270,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "engine-maintenance",
+      "kind": "static",
+      "path": "engine/replay_engine/service.py",
+      "locator": "start_maintenance / maintain_once",
+      "line": 65,
+      "note": "tdx provider 由 lifespan 开启 daemon thread；fixture 不启维护。"
+    },
+    {
+      "id": "maintenance-policy",
+      "kind": "static",
+      "path": "engine/replay_engine/replay_cache_policy.py",
+      "locator": "MAINTENANCE_INTERVAL / RETRY_SECONDS",
+      "line": 10,
+      "note": "代码间隔为 60 秒，重试窗口 300 秒；实际线程状态未检查。"
+    },
+    {
+      "id": "engine-prefetch",
+      "kind": "static",
+      "path": "engine/replay_engine/service.py",
+      "locator": "prefetch_replay_stocks / Lock / 未见标的",
+      "line": 195,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "tdx-cache",
+      "kind": "static",
+      "path": "engine/replay_engine/tdx_market_cache.py",
+      "locator": "TdxMarketDataProvider.prepare_replay_cache",
+      "line": 1293,
+      "note": "初始化后台线程与维护线程不同；失败保留可用历史缓存。"
+    },
+    {
+      "id": "tdx-client",
+      "kind": "static",
+      "path": "engine/replay_engine/tdx_market_cache.py",
+      "locator": "TdxMarketDataProvider._resolved_client_factory",
+      "line": 1154,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "daily-cache",
+      "kind": "static",
+      "path": "engine/replay_engine/tdx_market_cache.py",
+      "locator": "TdxMarketCache / DuckDB schema",
+      "line": 284,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "daily-scenario",
+      "kind": "static",
+      "path": "engine/replay_engine/data_store.py",
+      "locator": "DuckDbBarStore.create_replay_scenario",
+      "line": 922,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "minute-scenario",
+      "kind": "static",
+      "path": "engine/replay_engine/minute_replay.py",
+      "locator": "TdxMinuteReplayProvider / 五分钟缓存与 hybrid 场景",
+      "line": 669,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "engine-paths",
+      "kind": "config",
+      "path": "engine/replay_engine/config.py",
+      "locator": "STORAGE_ROOT / MARKET_DB_PATH / MINUTE_REPLAY_DB_PATH",
+      "line": 11,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "app-paths",
+      "kind": "config",
+      "path": "backend/src/standalone-storage.js",
+      "locator": "resolveStandaloneStoragePaths",
+      "line": 3,
+      "note": "replay.sqlite 与 trade-records 根路径受 STORAGE_ROOT 影响；合约资产目录另由 CRYPTO_DATA_ROOT 决定。"
+    },
+    {
+      "id": "db-schema",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "createDatabase / replay_sessions / orders / reviews",
+      "line": 1093,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-create",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "createReplaySession：冻结场景、规则与首次计数",
+      "line": 2502,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-retrain",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "retrainReplaySession：复制冻结场景到新会话",
+      "line": 2579,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-order",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "submitReplayOrder：actionId / revision / pending",
+      "line": 3721,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-advance",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "advanceReplaySession：撮合、账户、成交与事件同事务",
+      "line": 4637,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-day-tx",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "runInReplayTransaction：整日推进失败回滚",
+      "line": 4618,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "order-exec",
+      "kind": "static",
+      "path": "backend/src/replay-order-execution.js",
+      "locator": "executeReplayOrders：纯函数、OHLC、共享容量与部分成交",
+      "line": 30,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "board-rules",
+      "kind": "static",
+      "path": "backend/src/replay-board-rules.js",
+      "locator": "replayBoardRules / BOARD_ORDER_MODEL",
+      "line": 2,
+      "note": "板块规则按下一可执行 bar 的日期选择；旧会话继续用冻结执行模型。"
+    },
+    {
+      "id": "db-blind",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "saveReplayBlindReview：completed 后保存一次",
+      "line": 4034,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-reveal",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "revealReplaySession：完成且已盲评才能揭晓",
+      "line": 4535,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-post",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "saveReplayPostReview：揭晓后一次保存",
+      "line": 4146,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-corrections",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "appendReplayReviewCorrection：保留原评，追加修正",
+      "line": 4270,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-playbooks",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "createReplayPlaybookVersion：战法版本",
+      "line": 3375,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "comparison",
+      "kind": "static",
+      "path": "backend/src/replay-comparison.js",
+      "locator": "buildReplayComparison",
+      "line": 195,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "analytics",
+      "kind": "static",
+      "path": "backend/src/replay-training-analytics.js",
+      "locator": "buildReplayTrainingAnalytics",
+      "line": 269,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "crypto-service",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-session.js",
+      "locator": "createCryptoReplayService / create / runtime / present",
+      "line": 93,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "crypto-create",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-session.js",
+      "locator": "create：选资产、SHA256冻结文档、初始状态",
+      "line": 224,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "crypto-command",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-session.js",
+      "locator": "execute：规范命令后 mutateCryptoSession",
+      "line": 157,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "crypto-preview",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-session.js",
+      "locator": "preview：只计算，不写账本",
+      "line": 186,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "crypto-pool",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-pool.js",
+      "locator": "createOkxHistoryPoolSource / exposureConflict",
+      "line": 40,
+      "note": "当前池指针、目录与数据字节会校验；已发布池损坏不静默回退旧样本。"
+    },
+    {
+      "id": "crypto-assets",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-data.js",
+      "locator": "verifyCryptoRelease / prepareCryptoRelease",
+      "line": 89,
+      "note": "离线导入先校验冻结字节再发布指针；不包含用户账本，不是训练时实时拉取行情。"
+    },
+    {
+      "id": "crypto-download",
+      "kind": "static",
+      "path": "engine/scripts/download_okx_pool.py",
+      "locator": "candles / funding / main",
+      "line": 31,
+      "note": "独立 Python 下载脚本访问 OKX 历史 API 与资金费 ZIP；本次没有执行下载。"
+    },
+    {
+      "id": "crypto-cli",
+      "kind": "static",
+      "path": "backend/scripts/crypto-data.mjs",
+      "locator": "status / check / prepare",
+      "line": 6,
+      "note": "数据准备 CLI 不随普通训练请求自动运行。"
+    },
+    {
+      "id": "crypto-exec",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-order-execution.js",
+      "locator": "createCryptoOrderReplay / apply",
+      "line": 24,
+      "note": "Node 内的纯计算模块，使用 Decimal；资金费与强平为冻结教学模型，不是连接交易所下单。"
+    },
+    {
+      "id": "crypto-calc",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-calculations.js",
+      "locator": "createCryptoCalculator / TEACHING_LIQUIDATION_VERSION",
+      "line": 42,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "crypto-tx",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-persistence.js",
+      "locator": "createCryptoPersistence / mutateCryptoReplaySession",
+      "line": 48,
+      "note": "BEGIN IMMEDIATE 内校验 actionId、revision，保存状态、资金分录、轨迹与事件；异常回滚。"
+    },
+    {
+      "id": "crypto-snapshot-schema",
+      "kind": "static",
+      "path": "backend/src/replay-crypto-persistence.js",
+      "locator": "initializeCryptoReplaySchema：快照、轨迹、资金分录",
+      "line": 10,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "crypto-controller",
+      "kind": "static",
+      "path": "web/src/utils/cryptoReplayController.js",
+      "locator": "createCryptoReplayController / send / retry",
+      "line": 4,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "crypto-reader",
+      "kind": "static",
+      "path": "web/src/utils/cryptoSessionReader.js",
+      "locator": "createCryptoSessionReader：版本批次、增量与一次重读",
+      "line": 20,
+      "note": "只接受完整核验批次；不是跨 HTTP 请求的数据库事务。读取重试不重放写动作。"
+    },
+    {
+      "id": "crypto-confirm",
+      "kind": "static",
+      "path": "web/src/utils/cryptoModificationConfirmation.js",
+      "locator": "createCryptoModificationConfirmation",
+      "line": 15,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "crypto-chart",
+      "kind": "static",
+      "path": "web/src/utils/cryptoChartProjection.js",
+      "locator": "projectCryptoCharts",
+      "line": 8,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "history-ui",
+      "kind": "static",
+      "path": "web/src/composables/useReplayHistory.js",
+      "locator": "useReplayHistory：market=all / listReplaySessions",
+      "line": 11,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "archive-ui",
+      "kind": "static",
+      "path": "web/src/composables/useTradeRecordArchive.js",
+      "locator": "useTradeRecordArchive：JSON档案读取与纪律统计",
+      "line": 158,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "records-view",
+      "kind": "static",
+      "path": "web/src/views/TradeRecordsView.vue",
+      "locator": "primaryTab：records / replay / playbooks",
+      "line": 36,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "trade-file-read",
+      "kind": "static",
+      "path": "backend/src/app.js",
+      "locator": "readTradeRecords：逐文件解析并分开返回损坏项",
+      "line": 879,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "trade-file-write",
+      "kind": "static",
+      "path": "backend/src/app.js",
+      "locator": "saveTradeRecordFile：校验→临时文件→rename",
+      "line": 916,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "trade-license",
+      "kind": "static",
+      "path": "backend/src/app.js",
+      "locator": "issueTradeLicense：冻结许可与费用设置",
+      "line": 965,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "trade-event",
+      "kind": "static",
+      "path": "backend/src/app.js",
+      "locator": "recordTradeExecutionEvent：执行事件与账本重算",
+      "line": 1083,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "trade-math",
+      "kind": "static",
+      "path": "backend/src/trade-license.js",
+      "locator": "calculateTradeLicense：风险预算与仓位上限",
+      "line": 21,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "trade-ledger",
+      "kind": "static",
+      "path": "backend/src/trade-ledger.js",
+      "locator": "calculateTradeLedger：从执行事件推导账户",
+      "line": 29,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "adr-first-orders",
+      "kind": "docs",
+      "path": "docs/adr/0001-replay-bar-orders.md",
+      "locator": "Decision：初版 bar-orders-v1",
+      "line": 11,
+      "note": "此 ADR 记录初批实现；当前新建板块会话已由 db.js 选择 bar-orders-v2，旧模型仍保留。"
+    },
+    {
+      "id": "playbook-link",
+      "kind": "static",
+      "path": "backend/src/replay-lifecycle.js",
+      "locator": "linkBlindReviewToPlaybook：保存版本引用与快照",
+      "line": 228,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "db-finish",
+      "kind": "static",
+      "path": "backend/src/db.js",
+      "locator": "finishReplaySession：提前结束与未执行委托处理",
+      "line": 3914,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    },
+    {
+      "id": "archive-load",
+      "kind": "static",
+      "path": "web/src/composables/useTradeRecordArchive.js",
+      "locator": "refresh / save / readErrors",
+      "line": 158,
+      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "web",
+      "label": "Vue 交互界面",
+      "kind": "entry",
+      "summary": "配置演练、看图决策与复盘",
+      "position": {
+        "x": 0,
+        "y": 230
+      },
+      "status": "fact",
+      "sourceIds": [
+        "routes",
+        "api-client",
+        "a-ui",
+        "crypto-controller",
+        "records-view"
+      ],
+      "note": "",
+      "details": [
+        "三条路由分别进入 A 股、合约和交易追踪；浏览器通过 /api 请求 Node。",
+        "开发时 Vite 代理 /api；默认 Web 5180、Node 3110、Engine 8775 均是脚本配置值，未确认当前是否在运行。",
+        "浏览器保存会话 ID；合约还保存 pending 请求，行情与正式账本由后端管理。",
+        "landing 是独立静态介绍入口，不承担演练业务。"
+      ],
+      "objects": [
+        "可见会话",
+        "待确认合约请求",
+        "交易追踪单"
+      ]
+    },
+    {
+      "id": "api",
+      "label": "Node 本机 API",
+      "kind": "module",
+      "summary": "统一路由与两类训练的分派",
+      "position": {
+        "x": 300,
+        "y": 230
+      },
+      "status": "fact",
+      "sourceIds": [
+        "backend",
+        "composition",
+        "interaction"
+      ],
+      "note": "",
+      "details": [
+        "Express 进程中同时装配 A 股生命周期、合约服务与手工交易追踪。",
+        "下方可展开的领域模块都在这个 Node 进程内，不是独立部署的微服务。",
+        "按 market 分派；统一列表可查两市场，读取结果按揭晓状态过滤。"
+      ],
+      "objects": [
+        "演练会话",
+        "委托与成交",
+        "盲评与复盘",
+        "交易追踪单"
+      ]
+    },
+    {
+      "id": "engine",
+      "label": "Python 行情引擎",
+      "kind": "module",
+      "summary": "准备 A 股历史行情场景",
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "status": "fact",
+      "sourceIds": [
+        "engine-api",
+        "engine-scenario",
+        "minute-scenario"
+      ],
+      "note": "",
+      "details": [
+        "FastAPI 提供 /internal/replay/benchmarks、scenarios、cache/status 等内部接口。",
+        "日线由 DuckDbBarStore 生成；hybrid 使用日线背景与五分钟执行数据。",
+        "不承担 A 股账户撮合，也不承担合约撮合。",
+        "fixture provider 使用确定性离线样例，不启通达信维护线程。"
+      ]
+    },
+    {
+      "id": "market-db",
+      "label": "A 股行情缓存",
+      "kind": "store",
+      "summary": "日线与五分钟行情 DuckDB",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "status": "fact",
+      "sourceIds": [
+        "daily-cache",
+        "daily-scenario",
+        "minute-scenario",
+        "engine-paths"
+      ],
+      "note": "",
+      "details": [
+        "默认 storage/market/market.duckdb 与 minute_replay.duckdb；自定义存储根或显式市场库路径可覆盖。",
+        "行情按覆盖与质量条件挑选，创建会话后行情快照存入 SQLite，与继续变化的缓存分开。"
+      ]
+    },
+    {
+      "id": "tdx",
+      "label": "通达信行情源",
+      "kind": "service",
+      "summary": "日线、五分钟与标的信息",
+      "position": {
+        "x": 900,
+        "y": -210
+      },
+      "status": "fact",
+      "sourceIds": [
+        "tdx-client",
+        "tdx-cache",
+        "minute-scenario"
+      ],
+      "note": "",
+      "details": [
+        "通过行情 provider 获取远端行情并补充本地缓存。",
+        "这是外部依赖；网络可达、完整覆盖和当前更新成功与否，本次没有运行验证。"
+      ]
+    },
+    {
+      "id": "assets",
+      "label": "合约冻结资产",
+      "kind": "store",
+      "summary": "OKX 历史池、小样与规则文件",
+      "position": {
+        "x": 900,
+        "y": 230
+      },
+      "status": "fact",
+      "sourceIds": [
+        "crypto-pool",
+        "crypto-assets",
+        "crypto-cli"
+      ],
+      "note": "",
+      "details": [
+        "Node 默认选择历史池；无已发布历史池时可用固定小样，池损坏不静默换来源。",
+        "目录、数据文件与规则按 SHA256 校验，执行时读取本地 last / mark / funding。",
+        "CRYPTO_DATA_ROOT 单独决定资产目录，不等同于所有账本的 STORAGE_ROOT。",
+        "离线下载、构建、导入与普通训练请求分开，已有合约会话从 SQLite 冻结文档恢复。"
+      ],
+      "objects": [
+        "合约行情窗口",
+        "冻结规则",
+        "场景暴露记录"
+      ]
+    },
+    {
+      "id": "app-db",
+      "label": "演练账本 SQLite",
+      "kind": "store",
+      "summary": "会话、委托、复盘与审计",
+      "position": {
+        "x": 600,
+        "y": 460
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-schema",
+        "app-paths",
+        "crypto-snapshot-schema",
+        "store"
+      ],
+      "note": "",
+      "details": [
+        "默认 storage/app/replay.sqlite，Node 使用 node:sqlite DatabaseSync。",
+        "保存两类会话、行情快照引用、执行版本、账户、事件、复盘、战法与首次计数。",
+        "A 股逐 bar / 按日推进、合约资金分录分别在各自事务中完成。",
+        "rankingDbPath 虽由路径函数返回，当前 createApp 未使用它装配另一套排名库。"
+      ],
+      "objects": [
+        "行情快照",
+        "演练会话",
+        "委托",
+        "成交",
+        "盲评与事后复盘",
+        "战法版本",
+        "合约资金分录"
+      ]
+    },
+    {
+      "id": "trade-files",
+      "label": "交易追踪 JSON",
+      "kind": "store",
+      "summary": "手工交易追踪单独立归档",
+      "position": {
+        "x": 900,
+        "y": 460
+      },
+      "status": "fact",
+      "sourceIds": [
+        "trade-file-read",
+        "trade-file-write",
+        "app-paths"
+      ],
+      "note": "",
+      "details": [
+        "默认 storage/trade-records/*.json，逐单保存。",
+        "保存先序列化并重读校验，再写临时文件并 rename。",
+        "损坏文件独立返回 errors；不能将“未读到”解释成可覆盖。",
+        "与演练 SQLite 是两套来源，页面共用入口不代表自动转换或同步。"
+      ],
+      "objects": [
+        "交易追踪单",
+        "交易许可",
+        "执行事件"
+      ]
+    },
+    {
+      "id": "ashare",
+      "label": "A 股演练生命周期",
+      "kind": "module",
+      "summary": "创建、推进、结束与可见化",
+      "position": {
+        "x": 300,
+        "y": 460
+      },
+      "status": "fact",
+      "sourceIds": [
+        "interaction",
+        "a-create",
+        "a-day",
+        "visible",
+        "store"
+      ],
+      "note": "",
+      "parentId": "api",
+      "details": [
+        "createReplayLifecycle 通过 Store 访问 SQLite，通过 EngineClient 申请行情场景。",
+        "每个新场景有 250 根观察行情；未来行情与身份在揭晓前被过滤。",
+        "按日推进包在外层事务，失败时回滚该次整日推进。"
+      ],
+      "objects": [
+        "A 股会话",
+        "账户",
+        "首次/复练关系"
+      ]
+    },
+    {
+      "id": "a-orders",
+      "label": "A 股委托撮合",
+      "kind": "module",
+      "summary": "下一 bar 触价、容量与持仓",
+      "position": {
+        "x": 0,
+        "y": 700
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-order",
+        "db-advance",
+        "order-exec",
+        "board-rules"
+      ],
+      "note": "",
+      "parentId": "ashare",
+      "details": [
+        "executeReplayOrders 为纯计算，db.js 负责读状态、调用计算并同事务写回。",
+        "支持持续委托、限价、止损、部分成交、撤单与日末到期；受 T+1 与整根 bar 容量限制。",
+        "当前新会话按条件冻结 bar-orders-v2 / v1；已有 legacy-next-open 保持原解释。",
+        "OHLC 触价与整根成交量是教学近似，不表示真实盘口排队。"
+      ],
+      "objects": [
+        "委托",
+        "成交",
+        "账户"
+      ]
+    },
+    {
+      "id": "review",
+      "label": "复盘与训练对照",
+      "kind": "module",
+      "summary": "冻结原评，保留修正与复练",
+      "position": {
+        "x": 300,
+        "y": 700
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-blind",
+        "db-reveal",
+        "db-post",
+        "db-corrections",
+        "comparison",
+        "analytics",
+        "db-playbooks"
+      ],
+      "note": "",
+      "parentId": "ashare",
+      "details": [
+        "A 股先 completed，再保存盲评，然后揭晓；事后复盘在揭晓后保存。",
+        "原始盲评与事后复盘不被修正覆盖；修正记录另存。",
+        "复练复制冻结场景并新建会话，首次结果与计分归属保留。",
+        "战法版本可以被盲评引用；开局固定 free，不要求先选战法。",
+        "合约有独立的盲评、揭晓和派生复盘实现，不经过这里的 A 股对照算法。"
+      ],
+      "objects": [
+        "盲评与事后复盘",
+        "战法版本",
+        "首次/复练关系"
+      ]
+    },
+    {
+      "id": "crypto",
+      "label": "合约训练服务",
+      "kind": "module",
+      "summary": "本地资产驱动的合约练习",
+      "position": {
+        "x": 600,
+        "y": 700
+      },
+      "status": "fact",
+      "sourceIds": [
+        "crypto-service",
+        "crypto-create",
+        "crypto-command",
+        "crypto-pool",
+        "crypto-tx"
+      ],
+      "note": "",
+      "parentId": "api",
+      "details": [
+        "与 Express 同进程，创建时加载本地冻结历史与规则，生成摘要后保存 SQLite 文档。",
+        "已有会话从 SQLite 中的冻结文档恢复，检查执行版本、摘要和状态一致性。",
+        "新建用 actionId 派生 ID；写动作校验 actionId 与 expectedRevision。",
+        "无实时下单、交易所私有账户连接或独立后台撮合 Worker。"
+      ],
+      "objects": [
+        "合约会话",
+        "冻结行情文档",
+        "合约资金分录",
+        "执行轨迹"
+      ]
+    },
+    {
+      "id": "crypto-exec",
+      "label": "合约教学执行器",
+      "kind": "module",
+      "summary": "逐分钟执行、资金费与风控",
+      "position": {
+        "x": 900,
+        "y": 700
+      },
+      "status": "fact",
+      "sourceIds": [
+        "crypto-exec",
+        "crypto-calc"
+      ],
+      "note": "",
+      "parentId": "crypto",
+      "details": [
+        "createCryptoOrderReplay 使用 Decimal 计算，不自行访问网络或数据库。",
+        "冻结 last / mark / funding 数据驱动委托、保护、资金费和教学接管模型。",
+        "事件触发时可提前暂停；不是 OKX 真实撮合与清算实现。"
+      ]
+    },
+    {
+      "id": "trade",
+      "label": "手工交易追踪",
+      "kind": "module",
+      "summary": "许可、执行事件与纪律统计",
+      "position": {
+        "x": 900,
+        "y": 700
+      },
+      "status": "fact",
+      "sourceIds": [
+        "trade-file-read",
+        "trade-file-write",
+        "trade-license",
+        "trade-event",
+        "trade-math",
+        "trade-ledger"
+      ],
+      "note": "",
+      "parentId": "api",
+      "details": [
+        "读取 JSON 档案，计算计划价格、风险预算和许可。",
+        "新增、修改或删除执行事件后，从事件重新推导交易账本并保存文件。",
+        "全局执行设置在 SQLite，单笔已签发许可保存参数快照。",
+        "手工记录成交；此模块没有向券商或交易所提交真实委托。"
+      ],
+      "objects": [
+        "交易追踪单",
+        "交易许可",
+        "执行事件"
+      ]
+    },
+    {
+      "id": "maintenance",
+      "label": "行情后台维护",
+      "kind": "job",
+      "summary": "进程内线程维护行情储备",
+      "position": {
+        "x": 600,
+        "y": -210
+      },
+      "status": "fact",
+      "sourceIds": [
+        "engine-maintenance",
+        "maintenance-policy",
+        "tdx-cache",
+        "engine-prefetch"
+      ],
+      "note": "",
+      "parentId": "engine",
+      "details": [
+        "tdx 模式 lifespan 启动 replay-sample-maintenance daemon thread；代码每 60 秒触发检查。",
+        "通达信初始化另有后台同步线程；失败保留旧缓存，并按条件重试。",
+        "预取由页面基准请求或创建后的 fire-and-forget 请求触发；使用 Lock 避免重入。",
+        "不存在从代码中确认的持久队列服务；进程重启后的线程活动需运行证据。"
+      ]
+    },
+    {
+      "id": "import",
+      "label": "合约数据准备 CLI",
+      "kind": "entry",
+      "summary": "下载、构建、校验与离线导入",
+      "position": {
+        "x": 1200,
+        "y": 230
+      },
+      "status": "fact",
+      "sourceIds": [
+        "crypto-download",
+        "crypto-cli",
+        "crypto-assets"
+      ],
+      "note": "",
+      "parentId": "assets",
+      "details": [
+        "Python 独立脚本下载 OKX 历史行情与资金费档案；构建脚本整理本地池。",
+        "crypto-data.mjs prepare 在写入目的目录前校验输入，最后发布已完成目录指针。",
+        "本次未执行这些命令，当前实际资产是否齐全仍待核实。"
+      ]
+    },
+    {
+      "id": "o-snapshot",
+      "label": "冻结行情快照",
+      "kind": "object",
+      "summary": "历史行情与执行规则的固定输入",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "status": "fact",
+      "sourceIds": [
+        "a-create",
+        "db-create",
+        "crypto-create",
+        "crypto-snapshot-schema"
+      ],
+      "note": "",
+      "lifecycle": [
+        "创建：A 股由 Python 产出后嵌入会话；合约加载资产后生成 SHA256 文档。",
+        "读写：Node 创建时保存，推进时按被冻结的模型读取。",
+        "关联：会话持有快照；复练复用源快照，不重新申请新行情。",
+        "边界：A 股在 snapshot_json；合约文档在 replay_crypto_snapshots，并有不可修改触发器。"
+      ]
+    },
+    {
+      "id": "o-session",
+      "label": "演练会话",
+      "kind": "object",
+      "summary": "进度、状态、版本与市场归属",
+      "position": {
+        "x": 320,
+        "y": 0
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-schema",
+        "db-create",
+        "crypto-tx",
+        "visible"
+      ],
+      "note": "",
+      "lifecycle": [
+        "创建：新建或显式复练，写入 replay_sessions。",
+        "状态：active → completed；revealed_at 单独标识是否揭晓。",
+        "读写：生命周期与合约服务经 Store 操作；对外呈现可见会话。",
+        "关联：冻结行情、账户、委托、动作、复盘、首次/复练标记。"
+      ]
+    },
+    {
+      "id": "o-attempt",
+      "label": "首次与复练标记",
+      "kind": "object",
+      "summary": "场景指纹、次数与来源会话",
+      "position": {
+        "x": 640,
+        "y": 0
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-create",
+        "db-retrain",
+        "crypto-pool",
+        "crypto-tx"
+      ],
+      "note": "",
+      "lifecycle": [
+        "创建：场景指纹与 attempt counter 在创建事务内确定。",
+        "字段：attempt_number、attempt_kind、counts_toward_first_score、source_session_id。",
+        "复练：产生新会话并关联源会话，首次结果不会被覆盖。",
+        "合约历史池额外检查已见背景、前缀和相关时间窗口，防止当作全新首次。"
+      ]
+    },
+    {
+      "id": "o-order",
+      "label": "委托",
+      "kind": "object",
+      "summary": "意图、数量与剩余执行状态",
+      "position": {
+        "x": 0,
+        "y": 230
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-order",
+        "order-exec",
+        "crypto-exec"
+      ],
+      "note": "",
+      "lifecycle": [
+        "A 股：replay_orders 保存委托与 execution_json。",
+        "状态：pending / partially_filled → filled、cancelled、expired 或 rejected。",
+        "合约：委托在合约账户状态中，由执行器生成成交等轨迹，不是另一套 replay_orders 行。",
+        "关联：会话与决策理由；一个 A 股委托可以产生多笔成交。"
+      ]
+    },
+    {
+      "id": "o-fill",
+      "label": "A 股成交",
+      "kind": "object",
+      "summary": "每次实际模拟执行的价量费用",
+      "position": {
+        "x": 320,
+        "y": 230
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-advance",
+        "order-exec",
+        "db-schema"
+      ],
+      "note": "",
+      "lifecycle": [
+        "创建：推进时由 executeReplayOrders 返回，再由 db.js 插入 replay_fills。",
+        "读写：账户、委托余量、成交与事件在同一事务更新。",
+        "关联：session_id 与 order_id；部分成交可以有多条。",
+        "边界：不会把下单登记成功当作已经成交。"
+      ]
+    },
+    {
+      "id": "o-account",
+      "label": "会话账户状态",
+      "kind": "object",
+      "summary": "现金、持仓、费用与风险",
+      "position": {
+        "x": 640,
+        "y": 230
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-create",
+        "db-advance",
+        "crypto-tx",
+        "crypto-exec"
+      ],
+      "note": "",
+      "lifecycle": [
+        "创建：会话初始资金与费用/规则快照。",
+        "A 股：现金、总持仓、可卖/锁定数量与成本。",
+        "合约：可用、冻结、保证金等资金桶及持仓状态，使用十进制计算。",
+        "保存：account_json，随 revision 更新；历史会话不按新规则重算。"
+      ]
+    },
+    {
+      "id": "o-review",
+      "label": "盲评与事后复盘",
+      "kind": "object",
+      "summary": "原始判断、后评与独立修正",
+      "position": {
+        "x": 0,
+        "y": 460
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-blind",
+        "db-reveal",
+        "db-post",
+        "db-corrections",
+        "crypto-tx"
+      ],
+      "note": "",
+      "lifecycle": [
+        "A 股：演练完成后、揭晓前保存盲评；揭晓后保存事后复盘。",
+        "原评：首次保存后不覆盖；后续修正另存在 replay_review_corrections。",
+        "合约：独立保存盲评、训练计划、决策与后评，派生分析从动作重算。",
+        "对照：A 股复练比较与合约首次比较入口和算法不同。"
+      ]
+    },
+    {
+      "id": "o-playbook",
+      "label": "战法版本",
+      "kind": "object",
+      "summary": "盲评可引用的规则快照",
+      "position": {
+        "x": 320,
+        "y": 460
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-playbooks",
+        "db-schema",
+        "interaction"
+      ],
+      "note": "",
+      "lifecycle": [
+        "创建：战法内容变更形成新版本。",
+        "关联：盲评保存 playbook/version 引用及内容快照。",
+        "流程：可由已揭晓复盘生成候选并审核。",
+        "边界：A 股开局固定 free，无需预先绑定战法。"
+      ]
+    },
+    {
+      "id": "o-audit",
+      "label": "动作与资金审计",
+      "kind": "object",
+      "summary": "幂等记录、执行轨迹与资金分录",
+      "position": {
+        "x": 640,
+        "y": 460
+      },
+      "status": "fact",
+      "sourceIds": [
+        "db-schema",
+        "crypto-tx",
+        "crypto-snapshot-schema",
+        "crypto-reader"
+      ],
+      "note": "",
+      "lifecycle": [
+        "动作：actionId 与请求保存到 replay_events；重复请求校验是否同一意图。",
+        "合约：replay_account_entries 按 revision，replay_execution_traces 按 sequence 读取。",
+        "保存：同次写动作与账户状态在一个事务内。",
+        "读取：前端分别校验两类游标，不把多次 HTTP 读取称为一个事务。"
+      ]
+    },
+    {
+      "id": "o-trade",
+      "label": "交易追踪单",
+      "kind": "object",
+      "summary": "独立 JSON 档案与交易计划",
+      "position": {
+        "x": 0,
+        "y": 710
+      },
+      "status": "fact",
+      "sourceIds": [
+        "trade-file-read",
+        "trade-file-write",
+        "trade-license",
+        "trade-event"
+      ],
+      "note": "",
+      "lifecycle": [
+        "创建：手工填写计划后保存至 trade-records/*.json。",
+        "状态：草稿、已许可计划、持仓、结束或取消；许可到期可呈现 expired。",
+        "关联：策略描述、许可快照和多条执行事件。",
+        "边界：不是从 A 股/合约演练会话自动导出的同一份记录。"
+      ]
+    },
+    {
+      "id": "o-license",
+      "label": "交易许可快照",
+      "kind": "object",
+      "summary": "冻结风险预算与价格边界",
+      "position": {
+        "x": 320,
+        "y": 710
+      },
+      "status": "fact",
+      "sourceIds": [
+        "trade-license",
+        "trade-math",
+        "trade-file-write"
+      ],
+      "note": "",
+      "lifecycle": [
+        "创建：用户请求签发，校验触发/失败/目标价、盈亏比与风险预算。",
+        "内容：许可范围、数量、有效交易日与执行设置快照。",
+        "保存：随交易追踪 JSON 一起落盘。",
+        "边界：全局设置改变不代表已签发许可自动重写。"
+      ]
+    },
+    {
+      "id": "o-execution",
+      "label": "手工执行事件",
+      "kind": "object",
+      "summary": "买入、加仓、减仓和卖出事实",
+      "position": {
+        "x": 640,
+        "y": 710
+      },
+      "status": "fact",
+      "sourceIds": [
+        "trade-event",
+        "trade-ledger",
+        "trade-file-write"
+      ],
+      "note": "",
+      "lifecycle": [
+        "创建：用户记录实际执行的时间、价格、数量和费用。",
+        "修改：事件可追加、修改、删除，后端从整个事件序列重算交易账本。",
+        "保存：随交易追踪 JSON 原子写入。",
+        "边界：手工记账不是连接券商自动成交。"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "http",
+      "from": "web",
+      "to": "api",
+      "label": "/api 请求（等待返回）",
+      "type": "sync",
+      "status": "fact",
+      "sourceIds": [
+        "api-client",
+        "vite",
+        "http-create",
+        "http-actions"
+      ],
+      "note": ""
+    },
+    {
+      "id": "api-a",
+      "from": "api",
+      "to": "ashare",
+      "label": "分派 A 股生命周期",
+      "type": "sync",
+      "status": "fact",
+      "sourceIds": [
+        "interaction",
+        "a-create"
+      ],
+      "note": ""
+    },
+    {
+      "id": "api-crypto",
+      "from": "api",
+      "to": "crypto",
+      "label": "分派合约训练",
+      "type": "sync",
+      "status": "fact",
+      "sourceIds": [
+        "interaction",
+        "crypto-service"
+      ],
+      "note": ""
+    },
+    {
+      "id": "api-trade",
+      "from": "api",
+      "to": "trade",
+      "label": "手工档案与许可",
+      "type": "sync",
+      "status": "fact",
+      "sourceIds": [
+        "composition",
+        "trade-file-read",
+        "trade-license"
+      ],
+      "note": ""
+    },
+    {
+      "id": "api-db",
+      "from": "api",
+      "to": "app-db",
+      "label": "经 Store 读写本地账本",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "composition",
+        "store",
+        "db-schema",
+        "crypto-tx"
+      ],
+      "note": ""
+    },
+    {
+      "id": "a-engine",
+      "from": "api",
+      "to": "engine",
+      "label": "HTTP 场景与缓存状态",
+      "type": "sync",
+      "status": "fact",
+      "sourceIds": [
+        "a-create",
+        "engine-client",
+        "engine-api",
+        "benchmark-prefetch"
+      ],
+      "note": ""
+    },
+    {
+      "id": "a-prefetch",
+      "from": "api",
+      "to": "engine",
+      "label": "不等待的样本预取",
+      "type": "async",
+      "status": "fact",
+      "sourceIds": [
+        "a-prefetch",
+        "engine-prefetch",
+        "benchmark-prefetch"
+      ],
+      "note": ""
+    },
+    {
+      "id": "engine-cache",
+      "from": "engine",
+      "to": "market-db",
+      "label": "查询与维护本地行情",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "engine-scenario",
+        "daily-scenario",
+        "minute-scenario"
+      ],
+      "note": ""
+    },
+    {
+      "id": "engine-tdx",
+      "from": "engine",
+      "to": "tdx",
+      "label": "按需请求远端行情",
+      "type": "sync",
+      "status": "fact",
+      "sourceIds": [
+        "tdx-client",
+        "tdx-cache",
+        "minute-scenario"
+      ],
+      "note": ""
+    },
+    {
+      "id": "engine-job",
+      "from": "engine",
+      "to": "maintenance",
+      "label": "tdx 模式开启维护线程",
+      "type": "async",
+      "status": "fact",
+      "sourceIds": [
+        "engine-api",
+        "engine-maintenance",
+        "maintenance-policy"
+      ],
+      "note": ""
+    },
+    {
+      "id": "a-orders",
+      "from": "ashare",
+      "to": "a-orders",
+      "label": "事务中调用纯撮合",
+      "type": "sync",
+      "status": "fact",
+      "sourceIds": [
+        "db-advance",
+        "order-exec"
+      ],
+      "note": ""
+    },
+    {
+      "id": "a-review",
+      "from": "ashare",
+      "to": "review",
+      "label": "盲评、揭晓与训练对照",
+      "type": "sync",
+      "status": "fact",
+      "sourceIds": [
+        "interaction",
+        "db-blind",
+        "db-reveal",
+        "comparison"
+      ],
+      "note": ""
+    },
+    {
+      "id": "crypto-assets",
+      "from": "crypto",
+      "to": "assets",
+      "label": "校验并读取冻结历史池",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "crypto-create",
+        "crypto-pool"
+      ],
+      "note": ""
+    },
+    {
+      "id": "crypto-exec",
+      "from": "crypto",
+      "to": "crypto-exec",
+      "label": "执行规范化命令",
+      "type": "sync",
+      "status": "fact",
+      "sourceIds": [
+        "crypto-command",
+        "crypto-exec"
+      ],
+      "note": ""
+    },
+    {
+      "id": "trade-files",
+      "from": "trade",
+      "to": "trade-files",
+      "label": "解析与原子写入档案",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "trade-file-read",
+        "trade-file-write"
+      ],
+      "note": ""
+    },
+    {
+      "id": "import-assets",
+      "from": "import",
+      "to": "assets",
+      "label": "校验、导入后发布指针",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "crypto-assets",
+        "crypto-cli",
+        "crypto-download"
+      ],
+      "note": ""
+    },
+    {
+      "id": "os-session",
+      "from": "o-snapshot",
+      "to": "o-session",
+      "label": "冻结输入 · 可被复练复用",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "db-create",
+        "db-retrain",
+        "crypto-create"
+      ],
+      "note": ""
+    },
+    {
+      "id": "os-attempt",
+      "from": "o-session",
+      "to": "o-attempt",
+      "label": "场景指纹与来源关联",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "db-create",
+        "db-retrain",
+        "crypto-tx"
+      ],
+      "note": ""
+    },
+    {
+      "id": "os-order",
+      "from": "o-session",
+      "to": "o-order",
+      "label": "一个会话 · 多个委托",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "db-schema",
+        "db-order",
+        "crypto-exec"
+      ],
+      "note": ""
+    },
+    {
+      "id": "os-account",
+      "from": "o-session",
+      "to": "o-account",
+      "label": "会话持有账户状态",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "db-schema",
+        "crypto-tx"
+      ],
+      "note": ""
+    },
+    {
+      "id": "order-fill",
+      "from": "o-order",
+      "to": "o-fill",
+      "label": "A 股委托 · 多笔成交",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "db-schema",
+        "db-advance"
+      ],
+      "note": ""
+    },
+    {
+      "id": "fill-account",
+      "from": "o-fill",
+      "to": "o-account",
+      "label": "成交影响资金与持仓",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "order-exec",
+        "db-advance"
+      ],
+      "note": ""
+    },
+    {
+      "id": "os-review",
+      "from": "o-session",
+      "to": "o-review",
+      "label": "原评与独立修正",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "db-schema",
+        "db-blind",
+        "db-corrections",
+        "crypto-tx"
+      ],
+      "note": ""
+    },
+    {
+      "id": "playbook-review",
+      "from": "o-playbook",
+      "to": "o-review",
+      "label": "可选引用冻结战法版本",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "db-playbooks",
+        "db-blind",
+        "playbook-link"
+      ],
+      "note": ""
+    },
+    {
+      "id": "os-audit",
+      "from": "o-session",
+      "to": "o-audit",
+      "label": "动作、轨迹、资金分录",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "db-schema",
+        "crypto-snapshot-schema",
+        "crypto-tx"
+      ],
+      "note": ""
+    },
+    {
+      "id": "trade-license-object",
+      "from": "o-trade",
+      "to": "o-license",
+      "label": "签发并保存许可快照",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "trade-license",
+        "trade-file-write"
+      ],
+      "note": ""
+    },
+    {
+      "id": "trade-execution-object",
+      "from": "o-trade",
+      "to": "o-execution",
+      "label": "执行事件 · 追加或修订",
+      "type": "data",
+      "status": "fact",
+      "sourceIds": [
+        "trade-event",
+        "trade-file-write"
+      ],
+      "note": ""
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "ashare-create",
+      "label": "新建 A 股盲测",
+      "trigger": "用户进入 A 股演练页，选择日线或日内模拟并创建。",
+      "outcome": "成功时得到已冻结且按揭晓阶段过滤的会话；缓存不足时返回明确状态，不创建半份会话。",
+      "steps": [
+        {
+          "id": "a-bench",
+          "title": "读取基准与准备状态",
+          "description": "Web 经 Node 请求 Python 的 benchmarks。引擎返回可选指数与初始化状态；后端在可用时另外发起预取，主响应不等待预取完成。",
+          "nodeIds": [
+            "web",
+            "api",
+            "engine"
+          ],
+          "edgeIds": [
+            "http",
+            "a-engine",
+            "a-prefetch"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "benchmark-prefetch",
+            "engine-api",
+            "engine-scenario"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "缓存初始化中或失败",
+              "targetStepId": "a-cache"
+            }
+          ]
+        },
+        {
+          "id": "a-request",
+          "title": "提交演练配置",
+          "description": "Web 提交长度、基准、资金和成本参数。Node 按 market 选择 A 股路径并校验参数，当前开局训练模式为 free。",
+          "nodeIds": [
+            "web",
+            "api",
+            "ashare"
+          ],
+          "edgeIds": [
+            "http",
+            "api-a"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "a-ui",
+            "interaction",
+            "http-create"
+          ],
+          "note": ""
+        },
+        {
+          "id": "a-scenario",
+          "title": "申请并检查行情场景",
+          "description": "生命周期读取已有场景使用记录，经 EngineClient 请求 Python。引擎从合格的日线/五分钟缓存选择场景；Node 再校验 250 根观察行情、长度、价格与板块支持。",
+          "nodeIds": [
+            "api",
+            "app-db",
+            "ashare",
+            "engine",
+            "market-db"
+          ],
+          "edgeIds": [
+            "api-db",
+            "a-engine",
+            "engine-cache"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "a-create",
+            "engine-scenario",
+            "daily-scenario",
+            "minute-scenario"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "缓存不足或上游返回无效",
+              "targetStepId": "a-unavailable"
+            }
+          ]
+        },
+        {
+          "id": "a-freeze",
+          "title": "冻结场景与初始账户",
+          "description": "通过 Store 在 SQLite 事务内写入快照、资金/成本、评分配置、执行模型、场景指纹和首次计数。事务失败会回滚。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "app-db"
+          ],
+          "edgeIds": [
+            "api-a",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-create",
+            "store",
+            "board-rules"
+          ],
+          "note": ""
+        },
+        {
+          "id": "a-visible",
+          "title": "只返回当前可见会话",
+          "description": "presentReplaySession 截取观察窗口与已推进前缀，隐藏未揭晓的身份与未来行情。Web 保存会话 ID，刷新时重新向后端读取。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "web"
+          ],
+          "edgeIds": [
+            "api-a"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "visible",
+            "a-ui",
+            "a-ui-restore"
+          ],
+          "note": ""
+        },
+        {
+          "id": "a-reserve",
+          "title": "异步补充未见样本",
+          "description": "创建成功后用 fire-and-forget 请求补足未见标的储备；错误被捕获，不阻塞已创建会话。tdx 模式的进程内维护线程还会按条件继续维护缓存。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "engine",
+            "maintenance",
+            "market-db"
+          ],
+          "edgeIds": [
+            "a-prefetch",
+            "engine-job",
+            "engine-cache"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "a-prefetch",
+            "engine-prefetch",
+            "engine-maintenance",
+            "maintenance-policy"
+          ],
+          "note": "",
+          "nextStepId": null
+        },
+        {
+          "id": "a-cache",
+          "title": "初始化线程与重试入口",
+          "description": "缓存未就绪时返回 initialization 状态。tdx provider 的同步线程按需获取通达信行情；失败保留可用历史缓存，并提供 retry/维护重试路径。这里不保证实际网络成功。",
+          "nodeIds": [
+            "engine",
+            "maintenance",
+            "tdx",
+            "market-db"
+          ],
+          "edgeIds": [
+            "engine-job",
+            "engine-tdx",
+            "engine-cache"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "tdx-cache",
+            "engine-api",
+            "engine-maintenance"
+          ],
+          "note": "",
+          "nextStepId": null,
+          "branches": [
+            {
+              "label": "检查或重试基准加载",
+              "targetStepId": "a-bench"
+            }
+          ]
+        },
+        {
+          "id": "a-unavailable",
+          "title": "拒绝创建，保留明确错误",
+          "description": "缺失合格缓存、上游不可用或场景无效时返回错误。场景未通过检查就不会进入创建会话事务，Web 显示错误；当前数据源与覆盖需运行证据。",
+          "nodeIds": [
+            "web",
+            "api",
+            "ashare",
+            "engine"
+          ],
+          "edgeIds": [
+            "http",
+            "a-engine"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "a-create",
+            "engine-client",
+            "engine-scenario",
+            "a-ui"
+          ],
+          "note": "",
+          "nextStepId": null
+        }
+      ]
+    },
+    {
+      "id": "ashare-order",
+      "label": "A 股下单与推进",
+      "trigger": "用户先作出买卖判断并下单，再推进一根 bar 或推进至当日结束。",
+      "outcome": "委托登记和成交分开；推进后账户、成交与事件一致写入。部分成交、拒绝、等待和整日失败分别解释。",
+      "steps": [
+        {
+          "id": "o-submit",
+          "title": "提交决策与动作版本",
+          "description": "Web 提交 actionId、expectedRevision、订单与决策理由。Node 校验数量、订单类型和必要风险判断，分派给 A 股生命周期。",
+          "nodeIds": [
+            "web",
+            "api",
+            "ashare"
+          ],
+          "edgeIds": [
+            "http",
+            "api-a"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "a-ui",
+            "interaction",
+            "db-order"
+          ],
+          "note": ""
+        },
+        {
+          "id": "o-pending",
+          "title": "事务中登记待执行委托",
+          "description": "SQLite 先查 actionId 是否已处理，再检查 revision 和会话状态。新委托登记为 pending，从下一可执行 bar 参与；此时还没有成交。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "app-db"
+          ],
+          "edgeIds": [
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-order",
+            "order-exec"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "版本冲突或不同请求复用 ID",
+              "targetStepId": "o-conflict"
+            }
+          ]
+        },
+        {
+          "id": "o-advance",
+          "title": "选择逐 bar 或按日推进",
+          "description": "逐 bar 在一个事务中推进；mode=day 在外层事务循环至当日最后可用行情，中间状态不返回，任一步失败则整次回滚。",
+          "nodeIds": [
+            "web",
+            "api",
+            "ashare",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-a",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "a-day",
+            "db-day-tx",
+            "db-advance"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "按日推进途中异常",
+              "targetStepId": "o-rollback"
+            }
+          ]
+        },
+        {
+          "id": "o-match",
+          "title": "用下一根行情计算撮合",
+          "description": "db.js 读冻结场景与委托，调用纯函数 executeReplayOrders。按 OHLC、限价/止损、T+1、板块规则、整根 bar 共享成交容量及滑点费用计算；不请求实时盘口。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "a-orders",
+            "app-db"
+          ],
+          "edgeIds": [
+            "a-orders",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-advance",
+            "order-exec",
+            "board-rules"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "限价未到、容量或可卖数量不足",
+              "targetStepId": "o-wait"
+            }
+          ]
+        },
+        {
+          "id": "o-commit",
+          "title": "账户、余量和成交一并落盘",
+          "description": "同一事务写回账户、委托 execution_json、多笔 replay_fills 与动作事件，再提升 revision。部分成交只减少本次已成交量，余量按规则继续等待或到期。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "a-orders",
+            "app-db"
+          ],
+          "edgeIds": [
+            "api-db",
+            "a-orders"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-advance",
+            "order-exec"
+          ],
+          "note": ""
+        },
+        {
+          "id": "o-view",
+          "title": "刷新可见行情与持仓",
+          "description": "API 返回更新后的可见会话，前端重绘当前 K 线、账户与订单。成交来自推进结果，不把提交成功当作成交。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "web"
+          ],
+          "edgeIds": [
+            "api-a"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "visible",
+            "a-ui"
+          ],
+          "note": "",
+          "nextStepId": null
+        },
+        {
+          "id": "o-conflict",
+          "title": "拒绝冲突并刷新状态",
+          "description": "同 ID 不同意图或 revision 不匹配返回 409。A 股前端刷新最新会话并提示用户重新确认；不能将合约 pending 的自动原样重试语义套到这里。",
+          "nodeIds": [
+            "web",
+            "api",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-order",
+            "a-ui-restore"
+          ],
+          "note": "",
+          "nextStepId": null,
+          "branches": [
+            {
+              "label": "刷新后重新作出下单决定",
+              "targetStepId": "o-submit"
+            }
+          ]
+        },
+        {
+          "id": "o-wait",
+          "title": "保留等待或部分成交余量",
+          "description": "价格未触及、容量耗尽或 T+1 限制会形成等待原因；已成交部分保留，未成交部分继续 pending/partially_filled。某些不合法或不可执行订单会明确 rejected。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "a-orders",
+            "app-db"
+          ],
+          "edgeIds": [
+            "a-orders",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "order-exec",
+            "db-advance"
+          ],
+          "note": "",
+          "nextStepId": "o-view",
+          "branches": [
+            {
+              "label": "用户继续推进",
+              "targetStepId": "o-advance"
+            }
+          ]
+        },
+        {
+          "id": "o-rollback",
+          "title": "整日事务回滚",
+          "description": "mode=day 内某次推进抛出异常时，外层事务执行 ROLLBACK，不保留本次按日推进的部分结果。单次失败的 UI 呈现仍由原请求错误处理负责。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "app-db"
+          ],
+          "edgeIds": [
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "a-day",
+            "db-day-tx"
+          ],
+          "note": "",
+          "nextStepId": null
+        }
+      ]
+    },
+    {
+      "id": "review-retrain",
+      "label": "盲评、揭晓与复练",
+      "trigger": "A 股演练结束后，用户保存盲评、揭晓并复盘，再显式复练。",
+      "outcome": "原始判断与首次会话保留，复练生成独立新会话；复练也完成并揭晓后才能比较。",
+      "steps": [
+        {
+          "id": "r-finish",
+          "title": "先完成演练",
+          "description": "自然推进结束或用户提前结束使会话 completed。提前结束沿用冻结模型处理未完成委托，并不等于已经揭晓。",
+          "nodeIds": [
+            "web",
+            "api",
+            "ashare",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-a",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-finish",
+            "db-advance",
+            "visible"
+          ],
+          "note": ""
+        },
+        {
+          "id": "r-blind",
+          "title": "保存揭晓前的原始盲评",
+          "description": "校验正文、理由和风险字段，可选引用战法版本。只允许 completed 且未揭晓时保存第一次盲评；保存后原评不再覆盖。",
+          "nodeIds": [
+            "web",
+            "api",
+            "ashare",
+            "review",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "a-review",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "interaction",
+            "db-blind",
+            "db-playbooks"
+          ],
+          "note": ""
+        },
+        {
+          "id": "r-reveal",
+          "title": "揭晓未来行情与身份",
+          "description": "检查已完成且已有盲评，再写 revealed_at、动作与 revision。visible 层随后允许返回完整训练窗口与标的信息。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "review",
+            "app-db",
+            "web"
+          ],
+          "edgeIds": [
+            "a-review",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-reveal",
+            "visible"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "未完成或缺少盲评",
+              "targetStepId": "r-blocked"
+            }
+          ]
+        },
+        {
+          "id": "r-post",
+          "title": "保存事后复盘",
+          "description": "揭晓后保存第一次事后复盘。原始内容保留；需要补充或更改时使用独立修正记录，而非改写原评。",
+          "nodeIds": [
+            "web",
+            "api",
+            "ashare",
+            "review",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "a-review",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-post",
+            "db-corrections"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "另外添加修正",
+              "targetStepId": "r-correction"
+            }
+          ]
+        },
+        {
+          "id": "r-copy",
+          "title": "用同一场景新建复练会话",
+          "description": "显式 retrain 在 SQLite 事务内复制冻结场景、成本和执行规则，建立新的会话及 attempt/source 关联，重置账户与进度。此路径不重新请求 Python 行情。",
+          "nodeIds": [
+            "web",
+            "api",
+            "ashare",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-a",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-retrain",
+            "a-create",
+            "interaction"
+          ],
+          "note": ""
+        },
+        {
+          "id": "r-compare",
+          "title": "复练完成并揭晓后查看对照",
+          "description": "新会话先重复下单、推进、盲评与揭晓流程；这些操作可结合前两个场景查看。之后比较接口才按场景指纹汇集首次与复练；未揭晓会拒绝对照。跨会话分析使用独立训练分析算法。",
+          "nodeIds": [
+            "web",
+            "api",
+            "ashare",
+            "review",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "a-review",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "interaction",
+            "comparison",
+            "analytics",
+            "db-retrain"
+          ],
+          "note": "",
+          "nextStepId": null
+        },
+        {
+          "id": "r-blocked",
+          "title": "拒绝越过盲评阶段",
+          "description": "演练未完成、原始盲评缺失或已经揭晓时返回 409，不提前开放答案。用户需要先满足阶段条件，再发起新动作。",
+          "nodeIds": [
+            "web",
+            "api",
+            "review",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-blind",
+            "db-reveal"
+          ],
+          "note": "",
+          "nextStepId": null
+        },
+        {
+          "id": "r-correction",
+          "title": "把修正与原始内容分开保存",
+          "description": "修正写入 replay_review_corrections，保留阶段、内容与时间；展示时可以对照原评。修正本身有单独更新/删除接口，不表示原评可被覆盖。",
+          "nodeIds": [
+            "api",
+            "ashare",
+            "review",
+            "app-db"
+          ],
+          "edgeIds": [
+            "a-review",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "db-corrections",
+            "http-actions"
+          ],
+          "note": "",
+          "nextStepId": "r-copy"
+        }
+      ]
+    },
+    {
+      "id": "crypto-flow",
+      "label": "合约训练与失败恢复",
+      "trigger": "用户创建 BTC/ETH USDT 永续练习，提交命令、推进并在刷新或丢响应后恢复。",
+      "outcome": "冻结行情与动作留在本地；资金、事件和版本一致写入。前端只采用已核验完整批次，未知结果重试原请求。",
+      "steps": [
+        {
+          "id": "c-create",
+          "title": "持久保存创建意图再请求",
+          "description": "合约控制器生成 actionId，把完整 pending 请求保存到 localStorage，再提交创建。服务端用该动作标识派生会话 ID，避免同一创建请求重复生成会话。",
+          "nodeIds": [
+            "web",
+            "api",
+            "crypto"
+          ],
+          "edgeIds": [
+            "http",
+            "api-crypto"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-controller",
+            "crypto-create"
+          ],
+          "note": ""
+        },
+        {
+          "id": "c-assets",
+          "title": "校验并冻结本地历史输入",
+          "description": "Node 从本地历史池/小样读取 last、mark、funding 与规则，检查字节摘要及已暴露窗口，生成冻结文档并事务保存初始会话、资金分录和创建事件。普通训练不调用 Python 行情引擎。",
+          "nodeIds": [
+            "api",
+            "crypto",
+            "assets",
+            "app-db"
+          ],
+          "edgeIds": [
+            "crypto-assets",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-create",
+            "crypto-pool",
+            "crypto-tx"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "资产缺失、损坏或未见窗口耗尽",
+              "targetStepId": "c-unavailable"
+            }
+          ]
+        },
+        {
+          "id": "c-read",
+          "title": "读取当前版本的完整画面",
+          "description": "控制器读会话并并行加载各周期可见行情、资金分录和轨迹。reader 校验 revision、分钟前缀和各自游标；完整核心批次成功后才替换画面，同 revision 可以复用已验证前缀。",
+          "nodeIds": [
+            "web",
+            "api",
+            "crypto",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-crypto",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-controller",
+            "crypto-reader",
+            "crypto-service"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "读取版本混杂或失败",
+              "targetStepId": "c-stale"
+            }
+          ]
+        },
+        {
+          "id": "c-preview",
+          "title": "预览并确认修改",
+          "description": "新建委托可计算资金/退出预估；改价改量和图上修改由确认模块先展示预览。预览调用纯计算，不写正式账户；用户确认后才生成写动作。",
+          "nodeIds": [
+            "web",
+            "api",
+            "crypto",
+            "crypto-exec"
+          ],
+          "edgeIds": [
+            "http",
+            "api-crypto",
+            "crypto-exec"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-preview",
+            "crypto-confirm",
+            "crypto-exec",
+            "crypto-chart"
+          ],
+          "note": ""
+        },
+        {
+          "id": "c-apply",
+          "title": "规范命令并逐分钟执行",
+          "description": "写请求携带原 actionId 与 expectedRevision。服务端规范命令，在事务回调中用冻结执行器处理委托、保护、资金费或风控事件；advance 支持 1/5/15 分钟并在事件处暂停。",
+          "nodeIds": [
+            "web",
+            "api",
+            "crypto",
+            "crypto-exec",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-crypto",
+            "crypto-exec",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-command",
+            "crypto-exec",
+            "crypto-tx"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "请求丢响应或结果未知",
+              "targetStepId": "c-retry"
+            }
+          ]
+        },
+        {
+          "id": "c-commit",
+          "title": "账户、审计和动作原子保存",
+          "description": "校验账户桶与业务资金守恒，写回账户状态、revision、执行轨迹、资金分录、训练日志及动作响应快照；异常则回滚。相同 actionId/相同意图返回幂等结果，意图不同或版本冲突则拒绝。",
+          "nodeIds": [
+            "api",
+            "crypto",
+            "crypto-exec",
+            "app-db"
+          ],
+          "edgeIds": [
+            "api-db",
+            "crypto-exec"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-tx",
+            "crypto-snapshot-schema"
+          ],
+          "note": ""
+        },
+        {
+          "id": "c-refresh",
+          "title": "确认写入后再读最新服务端版本",
+          "description": "控制器清除已确认 pending，并重新读取最新会话和完整批次；幂等响应可能是旧提交，所以仍需读最新状态。已有会话从 SQLite 冻结文档恢复，不要求重新使用外部历史池；核心读取失败则保留旧画面并锁写。",
+          "nodeIds": [
+            "web",
+            "api",
+            "crypto",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-crypto",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-controller",
+            "crypto-reader",
+            "crypto-service"
+          ],
+          "note": "",
+          "nextStepId": null
+        },
+        {
+          "id": "c-unavailable",
+          "title": "拒绝新建而保留已有练习",
+          "description": "读取资产阶段失败标记 not-committed；池缺失/损坏或窗口耗尽不编造行情、不重置首次成绩。控制器可清理明确未提交的创建请求；已保存练习仍可从 SQLite 恢复。",
+          "nodeIds": [
+            "web",
+            "api",
+            "crypto",
+            "assets"
+          ],
+          "edgeIds": [
+            "http",
+            "crypto-assets"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-create",
+            "crypto-pool",
+            "crypto-controller"
+          ],
+          "note": "",
+          "nextStepId": null
+        },
+        {
+          "id": "c-stale",
+          "title": "有限重读，失败时保留并锁写",
+          "description": "reader 发现读取版本改变时最多重新取会话并重读一次，不重放写动作。若核心批次仍失败，控制器保留同会话旧完整画面，readStale 禁止新写；场景目录与派生复盘有各自软失败边界。",
+          "nodeIds": [
+            "web",
+            "api",
+            "crypto",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-reader",
+            "crypto-controller"
+          ],
+          "note": "",
+          "nextStepId": null,
+          "branches": [
+            {
+              "label": "再次同步完整画面",
+              "targetStepId": "c-read"
+            }
+          ]
+        },
+        {
+          "id": "c-retry",
+          "title": "原样重试尚未确认的请求",
+          "description": "网络或未知结果时保留 pending；刷新后 retry 重发原 actionId、原 revision 与原请求体。服务端先检查已处理动作，避免重复记账；明确 4xx 拒绝后清理 pending 并按需同步。",
+          "nodeIds": [
+            "web",
+            "api",
+            "crypto",
+            "app-db"
+          ],
+          "edgeIds": [
+            "http",
+            "api-crypto",
+            "api-db"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "crypto-controller",
+            "crypto-tx"
+          ],
+          "note": "",
+          "nextStepId": "c-refresh"
+        }
+      ]
+    },
+    {
+      "id": "trade-archive",
+      "label": "交易追踪与记录来源",
+      "trigger": "用户进入交易追踪页，浏览演练记录，或手工保存计划、签发许可并记录成交。",
+      "outcome": "页面区分两市场的 SQLite 演练记录与手工 JSON 档案；手工执行事件推导其自身账本，不向外部账户下单。",
+      "steps": [
+        {
+          "id": "t-tabs",
+          "title": "同一个入口，读取不同来源",
+          "description": "页面有交易追踪、演练记录和战法页签。演练记录通过 market=all 查询 SQLite 的两类会话；手工档案调用独立 trade-records API 读取 JSON，不自动把演练结果写成手工追踪单。",
+          "nodeIds": [
+            "web",
+            "api",
+            "app-db",
+            "trade",
+            "trade-files"
+          ],
+          "edgeIds": [
+            "http",
+            "api-db",
+            "api-trade",
+            "trade-files"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "records-view",
+            "history-ui",
+            "archive-ui",
+            "trade-file-read"
+          ],
+          "note": ""
+        },
+        {
+          "id": "t-draft",
+          "title": "校验并原子保存手工计划",
+          "description": "Node 规范交易追踪字段，检查目标文件。序列化后重新解析校验，先写唯一临时文件，再 rename 成正式 JSON。此过程不修改演练会话。",
+          "nodeIds": [
+            "web",
+            "api",
+            "trade",
+            "trade-files"
+          ],
+          "edgeIds": [
+            "http",
+            "api-trade",
+            "trade-files"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "trade-file-write"
+          ],
+          "note": "",
+          "branches": [
+            {
+              "label": "发现已有档案损坏",
+              "targetStepId": "t-damaged"
+            }
+          ]
+        },
+        {
+          "id": "t-license",
+          "title": "签发并冻结许可参数",
+          "description": "读取 SQLite 的全局执行设置，结合价格锚点、盈亏比、单笔风险预算与仓位上限计算许可，校验后将许可与参数快照保存进该交易追踪 JSON。",
+          "nodeIds": [
+            "api",
+            "app-db",
+            "trade",
+            "trade-files"
+          ],
+          "edgeIds": [
+            "api-db",
+            "trade-files"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "trade-license",
+            "trade-math",
+            "trade-file-write"
+          ],
+          "note": ""
+        },
+        {
+          "id": "t-execution",
+          "title": "记录执行事件并重算账本",
+          "description": "用户手工提交买入、加仓、减仓或卖出事件。后端从完整事件序列重新计算数量、成本、费用与收益，校验通过后原子保存 JSON；事件编辑和删除同样重算。",
+          "nodeIds": [
+            "web",
+            "api",
+            "trade",
+            "trade-files"
+          ],
+          "edgeIds": [
+            "http",
+            "api-trade",
+            "trade-files"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "trade-event",
+            "trade-ledger",
+            "trade-file-write"
+          ],
+          "note": ""
+        },
+        {
+          "id": "t-view",
+          "title": "重新读取列表、详情与纪律统计",
+          "description": "档案 composable 使用同一份记录完成列表选择、详情与纪律统计。演练历史仍由 useReplayHistory 读取 SQLite；两者的统计口径和恢复入口各自保留。",
+          "nodeIds": [
+            "web",
+            "api",
+            "trade",
+            "trade-files"
+          ],
+          "edgeIds": [
+            "http",
+            "api-trade",
+            "trade-files"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "archive-ui",
+            "history-ui",
+            "records-view"
+          ],
+          "note": "",
+          "nextStepId": null
+        },
+        {
+          "id": "t-damaged",
+          "title": "列出损坏项，阻止误覆盖",
+          "description": "列表逐文件处理并返回 errors。按 ID 查找时，如果发现相关文件损坏返回 409；保存也拒绝覆盖尚未读出的现有文件，不能把解析失败当作不存在。",
+          "nodeIds": [
+            "web",
+            "api",
+            "trade",
+            "trade-files"
+          ],
+          "edgeIds": [
+            "http",
+            "trade-files"
+          ],
+          "status": "fact",
+          "sourceIds": [
+            "trade-file-read",
+            "trade-file-write"
+          ],
+          "note": "",
+          "nextStepId": null
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "q-runtime",
+      "title": "当前实际运行的是哪套参数？",
+      "detail": "地图记录代码默认端口、provider 与目录选择，不读取进程或个人账本。不能由默认值推断当前服务已启动。",
+      "nodeIds": [
+        "web",
+        "api",
+        "engine"
+      ],
+      "neededEvidence": "当次启动环境、进程/端口与健康接口，确认是否正式、Demo 或自定义实例。"
+    },
+    {
+      "id": "q-tdx",
+      "title": "通达信与行情缓存现在是否可用？",
+      "detail": "后台同步、维护与重试路径存在，但实际网络、覆盖与时效未运行核实。",
+      "nodeIds": [
+        "engine",
+        "market-db",
+        "tdx",
+        "maintenance"
+      ],
+      "neededEvidence": "隔离数据根下的健康/缓存状态、初始化日志、覆盖统计和一次场景创建结果。"
+    },
+    {
+      "id": "q-assets",
+      "title": "本地合约资产是否齐全且通过冻结校验？",
+      "detail": "源码定义了历史池、小样、校验与导入流程；本次没有读取或验证实际资产包。",
+      "nodeIds": [
+        "assets",
+        "import",
+        "crypto"
+      ],
+      "neededEvidence": "对明确的隔离资产目录执行 status/check，保留目录版本、SHA256 链与校验结果。"
+    },
+    {
+      "id": "q-concurrency",
+      "title": "并发和丢响应在当前运行环境如何表现？",
+      "detail": "代码有事务、revision、actionId 和前端 pending 恢复，地图按源码解释；尚未执行真实跨窗口、重启与丢响应验证。",
+      "nodeIds": [
+        "api",
+        "app-db",
+        "crypto",
+        "web"
+      ],
+      "neededEvidence": "隔离 SQLite 与合成行情下的并发、同 ID 重试、崩溃回滚、刷新恢复和读取混版测试记录。"
+    },
+    {
+      "id": "q-model",
+      "title": "教学模型与真实执行相差在哪里？",
+      "detail": "A 股 OHLC 触价/共享容量与合约资金费/强平教学规则可从代码确认；与真实市场的误差没有由本次地图测试量化。",
+      "nodeIds": [
+        "a-orders",
+        "crypto-exec"
+      ],
+      "neededEvidence": "独立对照研究和样例验证；本次地图不宣称模拟结果等同实盘。"
+    }
+  ],
+  "changes": []
+}

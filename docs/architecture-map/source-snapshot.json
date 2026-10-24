@@ -1,0 +1,628 @@
+{
+  "commit": "d03a77ce66819896b284269693dfc345ea61348a",
+  "capturedAt": "2026-10-24T16:53:09+08:00",
+  "files": [
+    {
+      "path": "run.sh",
+      "sha256": "d12e7ac803b3aa5d2d442b130a147da62bdbe25069293e0aa34ffe64c7149842",
+      "anchors": [
+        {
+          "id": "startup",
+          "line": 93,
+          "locator": "uvicorn / standalone-server / Vite；默认 8775 / 3110 / 5180"
+        }
+      ]
+    },
+    {
+      "path": "web/src/router/index.js",
+      "sha256": "8c6b676e7437e3276732066b28c8b4ecf3646d6e9d3c5cae3cd0caa893f9466d",
+      "anchors": [
+        {
+          "id": "routes",
+          "line": 6,
+          "locator": "router.routes"
+        }
+      ]
+    },
+    {
+      "path": "web/vite.config.js",
+      "sha256": "c101211c5f50092c2b58866133fb8a91363c080dd0f071ca50e691b2cd4520b5",
+      "anchors": [
+        {
+          "id": "vite",
+          "line": 4,
+          "locator": "server.proxy / build.rollupOptions.input"
+        }
+      ]
+    },
+    {
+      "path": "web/src/services/api.js",
+      "sha256": "5ea45e1ed15397472b2aa984ceae6cd30ef674954924a781b16cfbfb4337e30d",
+      "anchors": [
+        {
+          "id": "api-client",
+          "line": 9,
+          "locator": "request / api"
+        }
+      ]
+    },
+    {
+      "path": "web/src/composables/useReplaySession.js",
+      "sha256": "ea09630e4ef0da54097eb06bd37887a92b2aba68e85dba74dcb5f3ae5092ed36",
+      "anchors": [
+        {
+          "id": "a-ui",
+          "line": 36,
+          "locator": "useReplaySession / createSession / submitOrder"
+        },
+        {
+          "id": "a-ui-restore",
+          "line": 82,
+          "locator": "refreshSession / localStorage / 409 刷新"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/standalone-server.js",
+      "sha256": "b9f6ef0e38ca85b73022efd9755e180a917020226a8573f165846d00c1381f8a",
+      "anchors": [
+        {
+          "id": "backend",
+          "line": 15,
+          "locator": "createApp / createOkxHistoryPoolSource"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/app.js",
+      "sha256": "b13e8e76c108992f0030cc280bb5ef4f956aa753adc3cb8407bd3194298ff92e",
+      "anchors": [
+        {
+          "id": "composition",
+          "line": 857,
+          "locator": "createApp：Database → Store → Interaction / CryptoService"
+        },
+        {
+          "id": "http-create",
+          "line": 1529,
+          "locator": "POST /api/quant/replay/sessions"
+        },
+        {
+          "id": "http-actions",
+          "line": 1568,
+          "locator": "actions / advance / reveal / reviews 路由"
+        },
+        {
+          "id": "benchmark-prefetch",
+          "line": 1328,
+          "locator": "benchmarks 成功后 fire-and-forget 预取"
+        },
+        {
+          "id": "trade-file-read",
+          "line": 879,
+          "locator": "readTradeRecords：逐文件解析并分开返回损坏项"
+        },
+        {
+          "id": "trade-file-write",
+          "line": 916,
+          "locator": "saveTradeRecordFile：校验→临时文件→rename"
+        },
+        {
+          "id": "trade-license",
+          "line": 965,
+          "locator": "issueTradeLicense：冻结许可与费用设置"
+        },
+        {
+          "id": "trade-event",
+          "line": 1083,
+          "locator": "recordTradeExecutionEvent：执行事件与账本重算"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-interaction.js",
+      "sha256": "0bd8cb47b3620b1bfaccd562802842394cf1eab8771fcf7251e71da263a31568",
+      "anchors": [
+        {
+          "id": "interaction",
+          "line": 1211,
+          "locator": "createReplayInteraction：按 market 分派"
+        },
+        {
+          "id": "visible",
+          "line": 904,
+          "locator": "presentReplaySession：截取可见行情与隐藏身份"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-lifecycle.js",
+      "sha256": "1a8ccb8b5c4fc022af935c3fbb88079f1bf67067f910c61f309f9fb9d4454ecc",
+      "anchors": [
+        {
+          "id": "a-create",
+          "line": 31,
+          "locator": "createReplayLifecycle.createSession"
+        },
+        {
+          "id": "a-prefetch",
+          "line": 97,
+          "locator": "创建后异步补充未见标的"
+        },
+        {
+          "id": "a-day",
+          "line": 138,
+          "locator": "advanceSession(mode=day)：循环与事务"
+        },
+        {
+          "id": "playbook-link",
+          "line": 228,
+          "locator": "linkBlindReviewToPlaybook：保存版本引用与快照"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-lifecycle-store.js",
+      "sha256": "89abd0630c2e2bbd0714d540cfefe3fd407bce261067e2885f0a0e30b1029609",
+      "anchors": [
+        {
+          "id": "store",
+          "line": 1,
+          "locator": "createReplayLifecycleStore"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/engine-client.js",
+      "sha256": "7e15974b698d4bf2da5a51d39ffab671ad0e49dd0d9ee7873a57ba5ef94b9a33",
+      "anchors": [
+        {
+          "id": "engine-client",
+          "line": 59,
+          "locator": "createEngineClient / requestJson"
+        }
+      ]
+    },
+    {
+      "path": "engine/replay_engine/app.py",
+      "sha256": "e50836ca0d376ee685d3938fca3118251049beded627e3c552b958853db02fc1",
+      "anchors": [
+        {
+          "id": "engine-api",
+          "line": 44,
+          "locator": "FastAPI / benchmarks / scenarios / lifespan"
+        }
+      ]
+    },
+    {
+      "path": "engine/replay_engine/service.py",
+      "sha256": "3c2dce3483cdd72da8b219d74eac39243f64f437cc451bd2378e152a65b025ce",
+      "anchors": [
+        {
+          "id": "engine-scenario",
+          "line": 270,
+          "locator": "ReplayMarketSupply.create_scenario"
+        },
+        {
+          "id": "engine-maintenance",
+          "line": 65,
+          "locator": "start_maintenance / maintain_once"
+        },
+        {
+          "id": "engine-prefetch",
+          "line": 195,
+          "locator": "prefetch_replay_stocks / Lock / 未见标的"
+        }
+      ]
+    },
+    {
+      "path": "engine/replay_engine/replay_cache_policy.py",
+      "sha256": "8c45c49637bf056a747df8345f3a8424d58e5370f25670acfda2fb29993ced2f",
+      "anchors": [
+        {
+          "id": "maintenance-policy",
+          "line": 10,
+          "locator": "MAINTENANCE_INTERVAL / RETRY_SECONDS"
+        }
+      ]
+    },
+    {
+      "path": "engine/replay_engine/tdx_market_cache.py",
+      "sha256": "4c705b05118651ee7e7386fc37d55d80089ceebac854044d872ae8401f34bce7",
+      "anchors": [
+        {
+          "id": "tdx-cache",
+          "line": 1293,
+          "locator": "TdxMarketDataProvider.prepare_replay_cache"
+        },
+        {
+          "id": "tdx-client",
+          "line": 1154,
+          "locator": "TdxMarketDataProvider._resolved_client_factory"
+        },
+        {
+          "id": "daily-cache",
+          "line": 284,
+          "locator": "TdxMarketCache / DuckDB schema"
+        }
+      ]
+    },
+    {
+      "path": "engine/replay_engine/data_store.py",
+      "sha256": "074b8f30bd0e342b8e78d329a44e5dda0f703d1f30330b6cacea798a81bf68f3",
+      "anchors": [
+        {
+          "id": "daily-scenario",
+          "line": 922,
+          "locator": "DuckDbBarStore.create_replay_scenario"
+        }
+      ]
+    },
+    {
+      "path": "engine/replay_engine/minute_replay.py",
+      "sha256": "b84827dc775ff8cd5cd6494b1cda7bdd79fc1e61881ed9ef80c2d0908e062825",
+      "anchors": [
+        {
+          "id": "minute-scenario",
+          "line": 669,
+          "locator": "TdxMinuteReplayProvider / 五分钟缓存与 hybrid 场景"
+        }
+      ]
+    },
+    {
+      "path": "engine/replay_engine/config.py",
+      "sha256": "c47c900cf869d59f8f90922cbdfda79372d1f43dd23587ce1a44d073e95880d6",
+      "anchors": [
+        {
+          "id": "engine-paths",
+          "line": 11,
+          "locator": "STORAGE_ROOT / MARKET_DB_PATH / MINUTE_REPLAY_DB_PATH"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/standalone-storage.js",
+      "sha256": "3bdceeffeb269f9ee82c5ea8be6399ad45f7b564efbfd022d038350a99cfaf57",
+      "anchors": [
+        {
+          "id": "app-paths",
+          "line": 3,
+          "locator": "resolveStandaloneStoragePaths"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/db.js",
+      "sha256": "3f0955c2ed860c6b032a083b5b6e943047fec5e965b57a05781173fb7ad0b53e",
+      "anchors": [
+        {
+          "id": "db-schema",
+          "line": 1093,
+          "locator": "createDatabase / replay_sessions / orders / reviews"
+        },
+        {
+          "id": "db-create",
+          "line": 2502,
+          "locator": "createReplaySession：冻结场景、规则与首次计数"
+        },
+        {
+          "id": "db-retrain",
+          "line": 2579,
+          "locator": "retrainReplaySession：复制冻结场景到新会话"
+        },
+        {
+          "id": "db-order",
+          "line": 3721,
+          "locator": "submitReplayOrder：actionId / revision / pending"
+        },
+        {
+          "id": "db-advance",
+          "line": 4637,
+          "locator": "advanceReplaySession：撮合、账户、成交与事件同事务"
+        },
+        {
+          "id": "db-day-tx",
+          "line": 4618,
+          "locator": "runInReplayTransaction：整日推进失败回滚"
+        },
+        {
+          "id": "db-blind",
+          "line": 4034,
+          "locator": "saveReplayBlindReview：completed 后保存一次"
+        },
+        {
+          "id": "db-reveal",
+          "line": 4535,
+          "locator": "revealReplaySession：完成且已盲评才能揭晓"
+        },
+        {
+          "id": "db-post",
+          "line": 4146,
+          "locator": "saveReplayPostReview：揭晓后一次保存"
+        },
+        {
+          "id": "db-corrections",
+          "line": 4270,
+          "locator": "appendReplayReviewCorrection：保留原评，追加修正"
+        },
+        {
+          "id": "db-playbooks",
+          "line": 3375,
+          "locator": "createReplayPlaybookVersion：战法版本"
+        },
+        {
+          "id": "db-finish",
+          "line": 3914,
+          "locator": "finishReplaySession：提前结束与未执行委托处理"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-order-execution.js",
+      "sha256": "7c0bb32332e043959eb927dd3150429cedfa8acdcb06411b2c10b39695006a8d",
+      "anchors": [
+        {
+          "id": "order-exec",
+          "line": 30,
+          "locator": "executeReplayOrders：纯函数、OHLC、共享容量与部分成交"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-board-rules.js",
+      "sha256": "576c611d24ee3c44130fd61ec32c84ea6dec701bc81e321808eec7405eea9f17",
+      "anchors": [
+        {
+          "id": "board-rules",
+          "line": 2,
+          "locator": "replayBoardRules / BOARD_ORDER_MODEL"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-comparison.js",
+      "sha256": "328ed4c86665ed345e54c3c5130e1f33fa207fc7c363284d7d83c0e091abfefb",
+      "anchors": [
+        {
+          "id": "comparison",
+          "line": 195,
+          "locator": "buildReplayComparison"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-training-analytics.js",
+      "sha256": "e8209379d232eca3a08f207727eb2b04208467095c32cf4dcac92972a53b48ee",
+      "anchors": [
+        {
+          "id": "analytics",
+          "line": 269,
+          "locator": "buildReplayTrainingAnalytics"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-crypto-session.js",
+      "sha256": "0160bede018d531d0df74fdd66b90bc7102519523d8d4d34358ba2b5d02bdd70",
+      "anchors": [
+        {
+          "id": "crypto-service",
+          "line": 93,
+          "locator": "createCryptoReplayService / create / runtime / present"
+        },
+        {
+          "id": "crypto-create",
+          "line": 224,
+          "locator": "create：选资产、SHA256冻结文档、初始状态"
+        },
+        {
+          "id": "crypto-command",
+          "line": 157,
+          "locator": "execute：规范命令后 mutateCryptoSession"
+        },
+        {
+          "id": "crypto-preview",
+          "line": 186,
+          "locator": "preview：只计算，不写账本"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-crypto-pool.js",
+      "sha256": "e5d0956f675b94b7ae20a0651d400fc51bf382c016672056aba890aadf94a272",
+      "anchors": [
+        {
+          "id": "crypto-pool",
+          "line": 40,
+          "locator": "createOkxHistoryPoolSource / exposureConflict"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-crypto-data.js",
+      "sha256": "e7cf8d6e54a6ea1b0dd96f3ab3773cf9cb26b10991e5e97214ab1ce77f0ec80d",
+      "anchors": [
+        {
+          "id": "crypto-assets",
+          "line": 89,
+          "locator": "verifyCryptoRelease / prepareCryptoRelease"
+        }
+      ]
+    },
+    {
+      "path": "engine/scripts/download_okx_pool.py",
+      "sha256": "938c85896613087e77baf40f971bdfee07222ebf2241ab15e3109d68ab00d6cf",
+      "anchors": [
+        {
+          "id": "crypto-download",
+          "line": 31,
+          "locator": "candles / funding / main"
+        }
+      ]
+    },
+    {
+      "path": "backend/scripts/crypto-data.mjs",
+      "sha256": "e4c4e00ea4cbfd4f6207aeeb6476d646a582cf974123676766b0280374b9b5b6",
+      "anchors": [
+        {
+          "id": "crypto-cli",
+          "line": 6,
+          "locator": "status / check / prepare"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-crypto-order-execution.js",
+      "sha256": "5a8d0bccf8e41d90468b8d21f30772a8b1026975a8ea569d66eab01187d1f821",
+      "anchors": [
+        {
+          "id": "crypto-exec",
+          "line": 24,
+          "locator": "createCryptoOrderReplay / apply"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-crypto-calculations.js",
+      "sha256": "2d7f1e41c02d293d5a1ad034ba005fb4c7627077a75b0c8294d0fa7e6f052d58",
+      "anchors": [
+        {
+          "id": "crypto-calc",
+          "line": 42,
+          "locator": "createCryptoCalculator / TEACHING_LIQUIDATION_VERSION"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/replay-crypto-persistence.js",
+      "sha256": "09f55006fdc77a9e6da6075ce59d134676299d47980941f17654b2eb891e0018",
+      "anchors": [
+        {
+          "id": "crypto-tx",
+          "line": 48,
+          "locator": "createCryptoPersistence / mutateCryptoReplaySession"
+        },
+        {
+          "id": "crypto-snapshot-schema",
+          "line": 10,
+          "locator": "initializeCryptoReplaySchema：快照、轨迹、资金分录"
+        }
+      ]
+    },
+    {
+      "path": "web/src/utils/cryptoReplayController.js",
+      "sha256": "dd2755993562113fae680039d9abe77e328cdb8c1ffa2247d344e9bd0601abf0",
+      "anchors": [
+        {
+          "id": "crypto-controller",
+          "line": 4,
+          "locator": "createCryptoReplayController / send / retry"
+        }
+      ]
+    },
+    {
+      "path": "web/src/utils/cryptoSessionReader.js",
+      "sha256": "40114c67a46ca36c47e536eeff8c161bbe3fff7762e8c9a8cf555cbcbab2bd87",
+      "anchors": [
+        {
+          "id": "crypto-reader",
+          "line": 20,
+          "locator": "createCryptoSessionReader：版本批次、增量与一次重读"
+        }
+      ]
+    },
+    {
+      "path": "web/src/utils/cryptoModificationConfirmation.js",
+      "sha256": "dd8530696b1ab609f9f9ee85662255a45a361649f2f761108d175a60ac76282f",
+      "anchors": [
+        {
+          "id": "crypto-confirm",
+          "line": 15,
+          "locator": "createCryptoModificationConfirmation"
+        }
+      ]
+    },
+    {
+      "path": "web/src/utils/cryptoChartProjection.js",
+      "sha256": "fe103897ac21f84160456d07b232b4690eb328e579d69a0cbbd46688d2d108cf",
+      "anchors": [
+        {
+          "id": "crypto-chart",
+          "line": 8,
+          "locator": "projectCryptoCharts"
+        }
+      ]
+    },
+    {
+      "path": "web/src/composables/useReplayHistory.js",
+      "sha256": "66bc8f64b8c5517f039d3a91fde681ba7954c4896108384e10fc722b8d29a40f",
+      "anchors": [
+        {
+          "id": "history-ui",
+          "line": 11,
+          "locator": "useReplayHistory：market=all / listReplaySessions"
+        }
+      ]
+    },
+    {
+      "path": "web/src/composables/useTradeRecordArchive.js",
+      "sha256": "0fa5997f1b7149eafe921c829919a61eff5156938c763b25cf55df09a9cbb6de",
+      "anchors": [
+        {
+          "id": "archive-ui",
+          "line": 158,
+          "locator": "useTradeRecordArchive：JSON档案读取与纪律统计"
+        },
+        {
+          "id": "archive-load",
+          "line": 158,
+          "locator": "refresh / save / readErrors"
+        }
+      ]
+    },
+    {
+      "path": "web/src/views/TradeRecordsView.vue",
+      "sha256": "8cbbe99a0ab3fdce6795f00369dcd60725c7faf121dec718479f1c9289571683",
+      "anchors": [
+        {
+          "id": "records-view",
+          "line": 36,
+          "locator": "primaryTab：records / replay / playbooks"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/trade-license.js",
+      "sha256": "549518fc24d126448ae5023b553cc072d1c7df2ae6284b57796a2ed36c490c6b",
+      "anchors": [
+        {
+          "id": "trade-math",
+          "line": 21,
+          "locator": "calculateTradeLicense：风险预算与仓位上限"
+        }
+      ]
+    },
+    {
+      "path": "backend/src/trade-ledger.js",
+      "sha256": "9daadc864d4c9d51263189f25fcb64193dbbbac5131ad038ffc355039ec3fb5d",
+      "anchors": [
+        {
+          "id": "trade-ledger",
+          "line": 29,
+          "locator": "calculateTradeLedger：从执行事件推导账户"
+        }
+      ]
+    },
+    {
+      "path": "docs/adr/0001-replay-bar-orders.md",
+      "sha256": "f2b330c25156b441f0ba255a743cd308d1a836b25c6bb95d1c8b6669fc86b4c5",
+      "anchors": [
+        {
+          "id": "adr-first-orders",
+          "line": 11,
+          "locator": "Decision：初版 bar-orders-v1"
+        }
+      ]
+    }
+  ]
+}

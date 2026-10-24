@@ -1,0 +1,36 @@
+{
+  "checks": [
+    "overview has seven root modules and no playback",
+    "scenario starts at trigger with previous disabled",
+    "first step highlights only involved nodes and edge",
+    "enqueue step highlights data and async edges",
+    "previous returns along visited history",
+    "internal renderer is automatically revealed",
+    "failure branch is terminal",
+    "branch backtracking returns to branching step",
+    "success stops before alternate failure result",
+    "switch scenario resets history",
+    "object scenario changes graph view automatically",
+    "object inspector shows lifecycle and code locator",
+    "step evidence remains accessible after node inspection",
+    "module inspector has evidence and internal controls",
+    "collapse hides child",
+    "expand restores child",
+    "edge inspector explains direction and type",
+    "keyboard selection preserves node focus after redraw",
+    "inference filter retains inferred edge and endpoints",
+    "unknown filter exposes unknown node",
+    "questions contain required evidence",
+    "question target resets filter and selects node",
+    "snapshot shows version, scope and explicit limits",
+    "zoom in changes transform",
+    "reset restores fitted transform",
+    "keyboard pan changes transform",
+    "no page-wide horizontal overflow at desktop size"
+  ],
+  "passed": 27,
+  "viewport": {
+    "height": 1000,
+    "width": 1600
+  }
+}
