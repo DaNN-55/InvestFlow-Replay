@@ -1495,8 +1495,13 @@ test('four-pane projection isolates the drag source and mirrors only matching dr
   await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.length)).toEqual([2,2,2,2]);
   const stopId=`${id}:stopLoss`,draftId=`${stopId}:draft`,confirm=page.getByRole('region',{name:'确认止盈止损调整'});
   const getSession=async()=> (await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
-  await dragProtection(page,2,stopId,49920,{release:false});
+  // Clear KLineCharts' 5px drag threshold in the compact 15min pane.
+  await dragProtection(page,2,stopId,49800,{release:false});
   await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.some(item=>item.draggable))).toEqual([false,false,true,false]);
+  await expect.poll(async()=>{
+    const line=(await nativeCharts(page))[2].lines.find(item=>item.id===stopId);
+    return {preview:line?.preview,priceChanged:line?.price!==Number(session.protection.stopLoss.price)};
+  }).toEqual({preview:true,priceChanged:true});
   const moving=(await nativeCharts(page))[2].lines.find(item=>item.id===stopId);
   expect(moving.preview).toBe(true);await assertRewardRisk(page,session,{leg:'stopLoss',price:moving.price});
   expect((await nativeCharts(page))[0].lines.find(item=>item.id===stopId).price).toBe(Number(session.protection.stopLoss.price));
