@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+
+jobs:
+  javascript:
+    name: JavaScript and browser tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      INVESTFLOW_REPLAY_BACKEND_PORT: "5399"
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:5297
+      PLAYWRIGHT_HTML_OPEN: never
+    steps:
+      - uses: actions/checkout@v6
+      - name: Prepare temporary paths
+        run: |
+          echo "INVESTFLOW_REPLAY_STORAGE_ROOT=$RUNNER_TEMP/investflow-ci/storage" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_HTML_OUTPUT_DIR=$RUNNER_TEMP/investflow-ci/playwright-report" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install npm dependencies
+        run: |
+          npm ci --prefix backend
+          npm ci --prefix web
+      - name: Lint frontend
+        run: npm run lint --prefix web
+      - name: Test frontend
+        run: npm run test:unit --prefix web
+      - name: Test backend
+        run: npm test --prefix backend
+      - name: Build frontend
+        run: npm run build --prefix web
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Test browsers
+        working-directory: web
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/investflow-ci"
+          vite_log="$RUNNER_TEMP/investflow-ci/vite.log"
+          npm run dev -- --host 127.0.0.1 --port 5297 --strictPort > "$vite_log" 2>&1 &
+          vite_pid=$!
+          trap 'kill "$vite_pid" 2>/dev/null || true; wait "$vite_pid" 2>/dev/null || true' EXIT
+
+          ready=false
+          for _ in $(seq 1 120); do
+            if ! kill -0 "$vite_pid" 2>/dev/null; then
+              cat "$vite_log"
+              exit 1
+            fi
+            if curl --silent --fail --max-time 1 "$PLAYWRIGHT_BASE_URL" > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 0.5
+          done
+          if [ "$ready" != true ]; then
+            cat "$vite_log"
+            echo "Vite did not become ready" >&2
+            exit 1
+          fi
+
+          npx playwright test tests/e2e --workers=1 --retries=0 --forbid-only \
+            --trace=retain-on-failure --reporter=line,html \
+            --output="$RUNNER_TEMP/investflow-ci/browser-output"
+      - name: Upload browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure
+          path: |
+            ${{ runner.temp }}/investflow-ci/playwright-report/
+            ${{ runner.temp }}/investflow-ci/browser-output/
+            ${{ runner.temp }}/investflow-ci/vite.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+  engine:
+    name: Python engine tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: engine
+    steps:
+      - uses: actions/checkout@v6
+      - name: Prepare temporary paths
+        run: echo "INVESTFLOW_REPLAY_STORAGE_ROOT=$RUNNER_TEMP/investflow-ci/storage" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install Python dependencies
+        run: python -m pip install -r engine/requirements.txt
+      - name: Test engine
+        run: |
+          python -m pytest engine/tests engine/scripts/test_download_okx_pool.py \
+            --junitxml="$RUNNER_TEMP/engine-pytest.xml"
+      - name: Upload engine failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-failure
+          path: ${{ runner.temp }}/engine-pytest.xml
+          retention-days: 7
+          if-no-files-found: ignore
