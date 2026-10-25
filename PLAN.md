@@ -1,5 +1,28 @@
 # A股图表与共用播放控件
 
+## 最小 GitHub Actions 自动测试（2026-10-25）
+
+基线：`main` / `9609b51`，开始时工作区干净。用户授权新增 `ci.yml`，本地检查配置并由子 Agent 独立审查；不改业务代码，不提交或推送。
+
+- [x] 新增一个 workflow，JavaScript/浏览器与 Engine 两个 job；复用现有测试，PR/main 推送/手动触发，临时存储、超时与失败产物隔离。
+- [x] 本地检查 YAML、Actions 语义和内联 Bash，验证测试命令与启动/清理路径；不把本地验证当作 GitHub Ubuntu 实跑。
+- [x] 子 Agent 分别只读审查规则与方案符合性，主 Agent 复核发现并记录最终结果。
+- [x] 核对业务源码、测试及原 Pages 工作流指纹不变，保持未提交、未推送。
+
+实现：仅新增 `.github/workflows/ci.yml`，JavaScript job 覆盖两包安装、lint、前后端单测、构建、Chromium 与完整 E2E；Engine job 安装 Python 依赖并运行全部 Engine 及下载脚本离线测试。使用 Ubuntu 24.04、Node 24、Python 3.11；PR/main 推送/手动触发，`contents: read`，同 ref 新 CI 取消旧运行，两个 job 分别限时 20/10 分钟，失败产物保留 7 天。E2E 单 worker、零重试、禁止 `test.only`，Vite 5297 严格端口与就绪检测，默认代理隔离到 5399。
+
+本地配置检查：用已安装 Playwright 内置 YAML parser 检查唯一键与结构；官方 actionlint 1.7.12 临时下载并校验发布 SHA-256 后通过 Actions 语义检查。本机没有 ShellCheck，actionlint 显式禁用该集成，另用 `bash -n` 检查全部 11 段内联 Bash，全部通过。没有新增项目依赖或修改锁文件。
+
+独立审查：Spec Agent 与 actionlint 发现最初 job 级 `env` 不允许使用 `runner.temp`（会使工作流在调度前失败）；已改为初始化步骤通过 `$RUNNER_TEMP` 写 `$GITHUB_ENV`。修正后 actionlint 通过，Standards 和 Spec 两个 Agent 最终复核均未发现剩余可操作缺陷。
+
+实际脚本验证：在现有本地 Node 24/Python 3.11 环境，直接提取并执行 workflow 的初始化、浏览器和 Engine 测试步骤。浏览器 117/117 通过，HTML 报告在配置路径生成；Engine 99 项通过，JUnit 记录 373 个 case（含 274 个 subtest），零失败/错误/跳过。另以替代 npx 命令注入退出码 23，确认原脚本正确返回失败、保留 Vite 日志并关闭临时端口；成功路径也确认退出后没有监听残留。这是启动/清理失败分支验证，不冒充真实失败 trace 或远端 artifact 上传验证。
+
+证据：`/tmp/investflow-ci-check.1hRGcC/` 保存 workflow 解析结果、提取脚本、本地测试日志、报告及 `verification.json`。原有 380 个跟踪文件（排除 PLAN）SHA-256 全部不变，包含业务源码、测试、锁文件和 Pages 工作流。HEAD 仍为 `9609b51`，暂存区为空，仅新增 CI 与更新本 PLAN，未提交或推送。
+
+验证边界：没有执行 GitHub 上的 checkout/setup/install/upload action，没有在 Ubuntu 全新安装依赖，未触发远端工作流。既有 npm 单测/lint/build 源码未变，本轮只检查对应命令接线，没有重复运行；首次远端 CI 仍需确认 Linux 依赖安装和产物上传。
+
+提交授权：用户确认将本次 `ci.yml` 与验证记录独立提交，先不推送，无关内容不纳入。暂存范围仅 `.github/workflows/ci.yml` 和本 PLAN；提交前核对 workflow SHA-256 与已审查/验证版本一致，其余 380 个跟踪文件不变，沿用已通过检查，不重复运行测试。
+
 ## 死代码清理（2026-10-25）
 
 基线：`main` / `f5de962`，开始时工作区干净。目标是删除当前仓库内确认没有消费者的代码，保持界面、交易计算、历史兼容和运行入口不变；不提交或推送，不操作正式数据与服务。
