@@ -716,21 +716,6 @@ class TdxMarketCache:
             connection.close()
         return bool(row and row[0])
 
-    def has_successful_sync(self) -> bool:
-        self.ensure_schema()
-        connection = self._connect()
-        try:
-            row = connection.execute(
-                """
-                SELECT 1
-                FROM tdx_cache_sync_state
-                WHERE dataset = 'replay-market'
-                """
-            ).fetchone()
-        finally:
-            connection.close()
-        return row is not None
-
     def statistics(self) -> dict[str, Any]:
         self.ensure_schema()
         connection = self._connect()

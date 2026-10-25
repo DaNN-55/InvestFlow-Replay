@@ -94,13 +94,14 @@ test('chart cancellation targets a single actual protective leg, including an al
 
 
 test('remaining quantity draft requires exact lot steps and preserves captured fills and revision',async()=>{
-  const {createQuantityDraft,quantityDraftCommand}=await import('../../src/utils/cryptoPriceDraft.js');
+  const {createQuantityDraft,createOrderDraft,orderDraftCommand}=await import('../../src/utils/cryptoPriceDraft.js');
   const s=session();s.contract.lotSz='0.01';s.contract.minSz='0.01';s.orders=[{id:2,type:'limit',limitPrice:'49000',contracts:'3',filledContracts:'2',remainingContracts:'1'}];
   const before=structuredClone(s);
   for(const value of ['0','-1','bad','1','0.001','1e2']) assert.equal(createQuantityDraft(s,{orderId:2},value),null);
   const draft=createQuantityDraft(s,{orderId:2},'02.500');assert.deepEqual(s,before);assert.equal(draft.remainingContracts,'2.5');assert.equal(draft.order.filledContracts,'2');
-  assert.deepEqual(quantityDraftCommand(s,draft),{expectedRevision:4,command:{type:'amend-quantity',orderId:2,remainingContracts:'2.5'}});
-  const changed=structuredClone(s);changed.orders[0].filledContracts='2.5';changed.orders[0].remainingContracts='0.5';assert.equal(quantityDraftCommand(changed,draft),null);
+  const orderDraft=createOrderDraft(s,{orderId:2},'49000','02.500');
+  assert.deepEqual(orderDraftCommand(s,orderDraft),{expectedRevision:4,command:{type:'amend-order',orderId:2,limitPrice:'49000',remainingContracts:'2.5'}});
+  const changed=structuredClone(s);changed.orders[0].filledContracts='2.5';changed.orders[0].remainingContracts='0.5';assert.equal(orderDraftCommand(changed,orderDraft),null);
 });
 
 
