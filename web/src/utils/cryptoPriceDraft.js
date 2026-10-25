@@ -97,11 +97,6 @@ export function createQuantityDraft(session,target,value,allowUnchanged=false) {
   const remainingContracts=text.replace(/^0+(?=\d)/,'').replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
   return {...draft,remainingContracts};
 }
-export function quantityDraftCommand(session,draft) {
-  if(!priceCancellationCurrent(session,draft)) return null;
-  return {expectedRevision:draft.revision,command:{type:'amend-quantity',orderId:draft.orderId,remainingContracts:draft.remainingContracts}};
-}
-
 export function createOrderDraft(session,target,price,quantity,allowUnchanged=false) {
   const base=createPriceCancellation(session,target),size=createQuantityDraft(session,target,quantity,true);
   if(!base?.order||!size) return null;

@@ -654,18 +654,6 @@ class MinuteReplayStore:
             result[f"{prefix}BarCount"] = int(bar_count)
         return result
 
-    def full_history_codes(self, instrument_type: str) -> set[str]:
-        if not self.path.exists():
-            return set()
-        with duckdb.connect(str(self.path)) as connection:
-            if not connection.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'minute_history_sync'").fetchone()[0]:
-                return set()
-            return {row[0] for row in connection.execute(
-                "SELECT instrument_code FROM minute_history_sync WHERE instrument_type = ?",
-                [instrument_type],
-            ).fetchall()}
-
-
 class TdxMinuteReplayProvider:
     def __init__(self, cache_path: Path):
         self.store = MinuteReplayStore(cache_path)

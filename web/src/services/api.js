@@ -93,7 +93,6 @@ export const api = {
     return request(`/api/quant/decision/stocks/search?${query}`);
   },
   getDecisionExecutionSettings: () => request("/api/quant/decision/execution-settings"),
-  saveDecisionExecutionSettings: (payload = {}) => request("/api/quant/decision/execution-settings", json("PUT", payload)),
   issueTradeLicense: (id) => request(`${tradeRecordPath(id)}/license`, json("POST", {})),
   recordTradeEntry: (id, payload = {}) => request(`${tradeRecordPath(id)}/entry`, json("POST", payload)),
   recordTradeExecutionEvent: (id, payload = {}) => request(`${tradeRecordPath(id)}/execution-events`, json("POST", payload)),

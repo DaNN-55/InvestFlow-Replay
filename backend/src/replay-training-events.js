@@ -134,7 +134,7 @@ function executionBars(session) {
   return [];
 }
 
-function isCompleteDailyClose({ bars, sequence, interval, throughSequence }) {
+function isCompleteDailyClose({ bars, sequence, interval }) {
   if (interval === "1d") return true;
   if (interval !== "hybrid") return false;
   const bar = bars[sequence - 1];
@@ -314,7 +314,7 @@ export function detectTrainingConditionEvents({
   // replacement cannot overwrite an earlier active rule.
   const invalidatedPlans = new Set();
   for (let sequence = observationBars + 1; sequence <= throughSequence; sequence += 1) {
-    if (positionAt(sequence) <= 0 || !isCompleteDailyClose({ bars, sequence, interval, throughSequence })) continue;
+    if (positionAt(sequence) <= 0 || !isCompleteDailyClose({ bars, sequence, interval })) continue;
     const active = buyOrders.filter(({ firstFillSequence }) => firstFillSequence <= sequence).at(-1);
     if (!active) continue;
     const { order, firstFillSequence } = active;
