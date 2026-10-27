@@ -5,6 +5,7 @@ import CryptoHistoryDetail from '../crypto/CryptoHistoryDetail.vue';
 
 import { useReplayHistory } from "../../composables/useReplayHistory.js";
 import { api } from "../../services/api.js";
+import { createCryptoReplayController, CRYPTO_STORAGE_KEY } from "../../utils/cryptoReplayController.js";
 import ConfirmDialog from "../ConfirmDialog.vue";
 import ReplayReviewCorrectionForm from "../replay/ReplayReviewCorrectionForm.vue";
 import ReplayHistoryControls from "./ReplayHistoryControls.vue";
@@ -57,7 +58,12 @@ const playbooksError = shallowRef("");
 const pendingDeleteIdentity = computed(() => {
   const item = pendingDeleteItem.value;
   if (!item) return "这条演练记录";
+  if (item.market === "crypto-perpetual") return `${item.instrumentId} · 演练 ${item.id.slice(0, 8)}`;
   return item.reveal?.name || item.reveal?.tsCode || `演练 ${item.id.slice(0, 8)}`;
+});
+const pendingDeleteMessage = computed(() => {
+  const error = pendingDeleteItem.value ? deleteStateFor(pendingDeleteItem.value.id).error : "";
+  return `确认删除“${pendingDeleteIdentity.value}”的演练记录？删除后不会再出现在演练历史中，且无法从页面恢复。${error ? ` 删除失败：${error}` : ""}`;
 });
 const effectiveBlindReview = computed(() =>
   getLatestReplayReviewSnapshot({
@@ -188,6 +194,12 @@ async function deleteReplay() {
   deleteStates[item.id] = { loading: true, error: "" };
   try {
     await api.deleteReplaySession(item.id);
+    if (item.market === "crypto-perpetual") {
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(CRYPTO_STORAGE_KEY) ?? "null");
+        if (saved?.sessionId === item.id && !saved.pending) window.localStorage.removeItem(CRYPTO_STORAGE_KEY);
+      } catch { /* Keep interrupted or unrelated recovery data intact. */ }
+    }
     if (
       window.localStorage.getItem("investflow.replay.active-session-id") ===
       item.id
@@ -212,6 +224,17 @@ async function retrainReplay(item) {
   }
   retrainStates[item.id] = { loading: true, error: "" };
   try {
+    if (item.market === "crypto-perpetual") {
+      const controller = createCryptoReplayController({ api, storage: window.localStorage });
+      if (controller.state.pending) throw new Error("有合约动作的结果待确认，请先打开合约演练核对，再创建复练。");
+      if (!await controller.select(item.id) || !controller.state.session) throw new Error(controller.state.error || "读取原演练失败");
+      if (!await controller.act("retrain") && (controller.state.pending || controller.targetSessionId === item.id)) {
+        throw new Error(controller.state.pending ? "复练结果待确认，请打开演练后重试原动作。" : controller.state.error || "创建复练失败");
+      }
+      await router.push({ path: "/decision/crypto-replay", query: { session: controller.targetSessionId } });
+      retrainStates[item.id] = { loading: false, error: "" };
+      return;
+    }
     const result = await api.retrainReplaySession(item.id);
     const newSessionId = String(result.session?.id ?? "");
     if (!newSessionId) {
@@ -288,7 +311,16 @@ async function addCandidate(item) {
         @select="selectItem"
         @page="goToPage"
       />
-      <CryptoHistoryDetail v-if="selectedDetailItem?.market === 'crypto-perpetual'" :key="selectedDetailItem.id" :item="selectedDetailItem" @open="openReplay" />
+      <CryptoHistoryDetail
+        v-if="selectedDetailItem?.market === 'crypto-perpetual'"
+        :key="selectedDetailItem.id"
+        :item="selectedDetailItem"
+        :retrain-state="retrainStateFor(selectedDetailItem.id)"
+        :delete-state="deleteStateFor(selectedDetailItem.id)"
+        @open="openReplay"
+        @retrain="retrainReplay"
+        @delete="requestDeleteReplay"
+      />
       <ReplayHistoryDetail
         v-else-if="selectedDetailItem"
         :item="selectedDetailItem"
@@ -330,7 +362,7 @@ async function addCandidate(item) {
     <ConfirmDialog
       :open="Boolean(pendingDeleteItem)"
       title="删除演练记录"
-      :message="`确认删除“${pendingDeleteIdentity}”的演练记录？删除后不会再出现在演练历史中，且无法从页面恢复。`"
+      :message="pendingDeleteMessage"
       confirm-text="确认删除"
       :busy="pendingDeleteItem ? Boolean(deleteStateFor(pendingDeleteItem.id).loading) : false"
       @cancel="pendingDeleteItem = null"

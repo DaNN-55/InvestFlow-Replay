@@ -146,7 +146,7 @@ onBeforeUnmount(() => {
         class="ui-action-menu__popover"
         :class="{ 'ui-action-menu__popover--positioned': positioned }"
         :data-placement="placement"
-        :style="popoverStyle"
+        :style="{ minWidth: `${minWidth}px`, ...popoverStyle }"
         role="menu"
         @click="handlePopoverClick"
       >
