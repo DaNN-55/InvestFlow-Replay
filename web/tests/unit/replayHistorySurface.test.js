@@ -103,7 +103,7 @@ describe("replay history tracking surface", () => {
       recordsSource,
       /investflow\.replay\.active-session-id/u,
     );
-    assert.match(recordsSource, /router\.push\("\/decision\/market-replay"\)/u);
+    assert.match(recordsSource, /router\.push\(\{ path: "\/decision\/market-replay", query: \{ session: item\.id \} \}\)/u);
     assert.match(filtersSource, /状态筛选/u);
     assert.match(filtersSource, /关键词/u);
     assert.match(filtersSource, />\s*查询\s*</u);

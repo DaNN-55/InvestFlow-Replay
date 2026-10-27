@@ -7,9 +7,10 @@ import {
   onDeactivated,
   onMounted,
   shallowRef,
+  watch,
 } from "vue";
 
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import ReplayAccountSummary from "../components/replay/ReplayAccountSummary.vue";
 import ReplayAttemptContext from "../components/replay/ReplayAttemptContext.vue";
@@ -47,6 +48,14 @@ const playbackSteps = computed(() => {
   return [{value:s.interval==='1m'?'minute':'day',label}];
 });
 const router = useRouter();
+const route = useRoute();
+function resumeRequestedSession() {
+  const id = route.query.session;
+  if (route.name === "quant-market-replay" && typeof id === "string" && id !== session.value?.id) {
+    commands.resume(id);
+  }
+}
+watch(() => route.query.session, resumeRequestedSession);
 const resumable = shallowRef(null);
 const historyError = shallowRef("");
 let historyRequestSequence = 0;
@@ -226,6 +235,7 @@ function handleStartNewSession() {
   orderPanelOpen.value = false;
   orderDraftResetToken.value += 1;
   commands.startNew();
+  router.replace({ query: { ...route.query, session: undefined } });
   loadUnfinishedPractice();
 }
 
@@ -247,6 +257,9 @@ async function cancelRetrain() {
   const restored = await commands.cancelRetrain();
   if (restored) {
     cancelRetrainOpen.value = false;
+    if (typeof route.query.session === "string") {
+      await router.replace({ query: { ...route.query, session: restored.id } });
+    }
   }
 }
 
@@ -270,7 +283,7 @@ onMounted(attachShortcut);
 onActivated(attachShortcut);
 onActivated(loadReplayPlaybooks);
 onActivated(loadReplayBenchmarks);
-onActivated(commands.sync);
+onActivated(resumeRequestedSession);
 onActivated(loadUnfinishedPractice);
 onDeactivated(() => {
   detachShortcut();

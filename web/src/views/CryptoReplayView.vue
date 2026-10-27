@@ -23,7 +23,7 @@ import '../components/crypto/crypto-terminal.css';
 const route=useRoute(),router=useRouter();
 const openData=inject('openCryptoData',()=>{});
 const state=shallowRef({}),preferences=ref(loadCryptoPreferences(localStorage));
-const controller=createCryptoReplayController({api,storage:localStorage,changed:value=>{state.value=value;}});
+const controller=createCryptoReplayController({api,storage:localStorage,restoreSession:false,changed:value=>{state.value=value;}});
 controller.state.timeframes=cryptoVisiblePeriods(preferences.value);controller.state.timeframe=controller.state.timeframes[0];state.value={...controller.state};
 const s=computed(()=>state.value.session);
 const lastGoodChartPreferences=shallowRef(null);

@@ -66,7 +66,7 @@ test("事后问题标签通过页面追加，分析可跳转具体样本，原�
   const id = fixture.sessionIds.retrain3;
   const original = (await (await request.get(`${fixture.url}/api/quant/replay/sessions/${id}`)).json()).session;
   await page.addInitScript(value => localStorage.setItem("investflow.replay.active-session-id", value), id);
-  await page.goto(`${baseUrl}/decision/market-replay`);
+  await page.goto(`${baseUrl}/decision/market-replay?session=${id}`);
   await page.getByRole("button", { name: "查看复盘", exact: true }).click();
   const review = page.getByRole("dialog", { name: "两阶段复盘 · 决策记录与评分" });
   await review.getByRole("button", { name: "追加事后复盘修正", exact: true }).click();

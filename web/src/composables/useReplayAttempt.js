@@ -5,7 +5,7 @@ import { useReplayReviewDrafts } from "./useReplayReviewDrafts.js";
 import { useReplaySession } from "./useReplaySession.js";
 
 export function useReplayAttempt(options = {}) {
-  const sessionController = options.sessionController ?? useReplaySession();
+  const sessionController = options.sessionController ?? useReplaySession({ restoreOnMount: false });
   const reviewDraftController = options.reviewDraftController ??
     useReplayReviewDrafts({ session: sessionController.session });
   const currentBlindDraft = computed(
