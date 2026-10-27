@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>@@TITLE@@</title>
+  <style>@@STYLE@@</style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="wordmark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M6 8h8v8H6zM18 18h8v8h-8zM14 12h8v6M10 16v6h8"/></svg></div>
+    <div class="titleblock"><div class="eyebrow">PROJECT ATLAS <span id="demo-label" hidden>· 虚构示例</span></div><h1 id="map-title"></h1></div>
+    <button id="snapshot" class="snapshot" aria-expanded="false" aria-controls="snapshot-panel"></button>
+  </header>
+  <section id="snapshot-panel" class="snapshot-panel" hidden aria-label="地图版本与检查范围"></section>
+  <main class="workspace">
+    <aside class="navigator" aria-label="视图与运行场景">
+      <details class="project-intro"><summary>项目简介</summary><p id="summary" class="project-summary"></p></details>
+      <div class="section-label">探索项目</div>
+      <div class="view-tabs" role="group" aria-label="地图视图">
+        <button id="view-modules" aria-pressed="true">模块关系</button><button id="view-objects" aria-pressed="false">业务对象</button>
+      </div>
+      <details id="scenario-picker" class="nav-section" open><summary><span id="scenario-choice">选择运行场景</span><span id="scenario-count"></span></summary>
+      <div id="scenario-list" class="scenario-list"></div></details>
+      <section id="scenario-steps" hidden>
+      <div id="scenario-context" class="scenario-context"></div>
+      <details id="main-steps" class="nav-section" open><summary>主要步骤</summary><ol id="step-list" class="step-list" aria-label="场景步骤"></ol></details>
+      <details id="branch-steps" class="nav-section"><summary>异常与重试 <span id="branch-count"></span></summary><ol id="branch-list" class="step-list" aria-label="异常与重试步骤"></ol></details>
+      </section>
+      <div class="navigator-bottom"><button id="overview">返回全局概览 <span aria-hidden="true">↗</span></button><button id="questions-button">待核实 <span id="question-count"></span></button></div>
+    </aside>
+    <section class="map-area" aria-label="交互地图">
+      <div class="map-toolbar"><div><span class="live-dot"></span><span id="view-caption">模块关系</span><span id="visible-count" class="muted"></span></div><label class="filter-label">结论 <select id="status-filter"><option value="all">全部</option><option value="fact">已确认</option><option value="inference">有据推断</option><option value="unknown">尚未确认</option></select></label></div>
+      <div class="canvas-wrap"><svg id="canvas" tabindex="0" aria-label="架构画布，可拖动平移，滚轮缩放；节点支持键盘选择"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker><marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z"/></marker></defs><g id="viewport"><g id="edges"></g><g id="nodes"></g></g></svg><p id="empty-graph" class="empty-graph" hidden>当前视图没有符合条件的节点。</p><div class="canvas-controls" aria-label="画布控制"><button id="zoom-out" aria-label="缩小">−</button><output id="zoom-value" aria-live="polite">100%</output><button id="zoom-in" aria-label="放大">＋</button><span></span><button id="reset-view">重置视图</button></div></div>
+      <div class="map-legend"><span><i class="line-sync"></i>同步调用</span><span><i class="line-async"></i>异步处理</span><span><i class="line-data"></i>数据关系</span><span class="drag-hint">拖动画布 · 滚轮缩放</span></div>
+      <section id="playback" class="playback" aria-label="场景演示" hidden><div class="step-copy"><div id="step-counter" class="eyebrow"></div><h2 id="step-title"></h2><p id="step-description" aria-live="polite"></p><div id="branch-actions" class="branch-actions"></div><button id="step-evidence" class="text-button">查看这一步的依据 ↗</button></div><div class="step-controls" role="group" aria-label="步骤导航"><button id="previous"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 5-5 5 5 5"/></svg><span>上一步</span></button><button id="next"><span>下一步</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 5 5 5-5 5"/></svg></button></div></section>
+    </section>
+    <aside id="inspector" class="inspector" aria-label="详情与证据" tabindex="-1"></aside>
+  </main>
+  <noscript>需要启用 JavaScript 才能探索此地图。</noscript>
+  <script type="application/json" id="map-data">@@DATA@@</script>
+  <script>@@SCRIPT@@</script>
+</body>
+</html>

@@ -8,14 +8,14 @@
     "commit": "d03a77ce66819896b284269693dfc345ea61348a",
     "dirty": true,
     "demo": false,
-    "scope": "只读检查当前入口、前端控制器、Node API 与领域模块、Python 行情供给、SQLite/DuckDB/JSON 边界及合约资产准备。未读取个人账本、未启动业务服务；工作区已有项目内 skill 与模板文件。",
+    "scope": "基础架构按 2026-10-24 的源码快照说明前端、Node API、Python 行情引擎和各类数据存储。本轮更新了首页入口的说明，并调整地图展示与文案；其余业务变化未全面复查。没有读取个人账本或访问正式业务服务。",
     "limitations": [
       "图中“已确认”指已核对代码或配置，不表示该行为已在正式服务运行验证；未确认运行事项见“待核实”。",
       "同步连线表示主流程等待调用返回，异步连线表示不等待的预取或进程内后台任务；不等同于 JavaScript 是否使用 async。",
       "ADR-0001 记录初批 bar-orders-v1；当前 createReplaySession 还会冻结板块版 bar-orders-v2，旧会话继续保留原模型。",
       "合约执行器中的 engine 是 Node 纯计算对象，不是 Python 行情引擎；普通合约训练不实时访问 OKX。",
       "两类演练存于 SQLite，手工交易追踪存于 JSON；共用页面入口不意味着自动转换或共用统计。",
-      "源码未做修改；本次验证目标为 skill 的真实项目分析成果与地图交互，不是整套业务或外部行情服务验收。"
+      "基础架构保留 2026-10-24 的源码快照；首页入口已按 2026-10-26 的本轮改动核对。未全面复核此后业务变化；旧证据行号仍需结合符号核对。"
     ]
   },
   "sources": [
@@ -33,7 +33,7 @@
       "path": "web/src/router/index.js",
       "locator": "router.routes",
       "line": 6,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "vite",
@@ -49,7 +49,7 @@
       "path": "web/src/services/api.js",
       "locator": "request / api",
       "line": 9,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "a-ui",
@@ -57,7 +57,7 @@
       "path": "web/src/composables/useReplaySession.js",
       "locator": "useReplaySession / createSession / submitOrder",
       "line": 36,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "a-ui-restore",
@@ -65,7 +65,7 @@
       "path": "web/src/composables/useReplaySession.js",
       "locator": "refreshSession / localStorage / 409 刷新",
       "line": 82,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "backend",
@@ -73,7 +73,7 @@
       "path": "backend/src/standalone-server.js",
       "locator": "createApp / createOkxHistoryPoolSource",
       "line": 15,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "composition",
@@ -81,7 +81,7 @@
       "path": "backend/src/app.js",
       "locator": "createApp：Database → Store → Interaction / CryptoService",
       "line": 857,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "http-create",
@@ -89,7 +89,7 @@
       "path": "backend/src/app.js",
       "locator": "POST /api/quant/replay/sessions",
       "line": 1529,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "http-actions",
@@ -97,7 +97,7 @@
       "path": "backend/src/app.js",
       "locator": "actions / advance / reveal / reviews 路由",
       "line": 1568,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "benchmark-prefetch",
@@ -113,7 +113,7 @@
       "path": "backend/src/replay-interaction.js",
       "locator": "createReplayInteraction：按 market 分派",
       "line": 1211,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "visible",
@@ -129,7 +129,7 @@
       "path": "backend/src/replay-lifecycle.js",
       "locator": "createReplayLifecycle.createSession",
       "line": 31,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "a-prefetch",
@@ -145,7 +145,7 @@
       "path": "backend/src/replay-lifecycle.js",
       "locator": "advanceSession(mode=day)：循环与事务",
       "line": 138,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "store",
@@ -153,7 +153,7 @@
       "path": "backend/src/replay-lifecycle-store.js",
       "locator": "createReplayLifecycleStore",
       "line": 1,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "engine-client",
@@ -161,7 +161,7 @@
       "path": "backend/src/engine-client.js",
       "locator": "createEngineClient / requestJson",
       "line": 59,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "engine-api",
@@ -169,7 +169,7 @@
       "path": "engine/replay_engine/app.py",
       "locator": "FastAPI / benchmarks / scenarios / lifespan",
       "line": 44,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "engine-scenario",
@@ -177,7 +177,7 @@
       "path": "engine/replay_engine/service.py",
       "locator": "ReplayMarketSupply.create_scenario",
       "line": 270,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "engine-maintenance",
@@ -201,7 +201,7 @@
       "path": "engine/replay_engine/service.py",
       "locator": "prefetch_replay_stocks / Lock / 未见标的",
       "line": 195,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "tdx-cache",
@@ -217,7 +217,7 @@
       "path": "engine/replay_engine/tdx_market_cache.py",
       "locator": "TdxMarketDataProvider._resolved_client_factory",
       "line": 1154,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "daily-cache",
@@ -225,7 +225,7 @@
       "path": "engine/replay_engine/tdx_market_cache.py",
       "locator": "TdxMarketCache / DuckDB schema",
       "line": 284,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "daily-scenario",
@@ -233,7 +233,7 @@
       "path": "engine/replay_engine/data_store.py",
       "locator": "DuckDbBarStore.create_replay_scenario",
       "line": 922,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "minute-scenario",
@@ -241,7 +241,7 @@
       "path": "engine/replay_engine/minute_replay.py",
       "locator": "TdxMinuteReplayProvider / 五分钟缓存与 hybrid 场景",
       "line": 669,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "engine-paths",
@@ -249,7 +249,7 @@
       "path": "engine/replay_engine/config.py",
       "locator": "STORAGE_ROOT / MARKET_DB_PATH / MINUTE_REPLAY_DB_PATH",
       "line": 11,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "app-paths",
@@ -265,7 +265,7 @@
       "path": "backend/src/db.js",
       "locator": "createDatabase / replay_sessions / orders / reviews",
       "line": 1093,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-create",
@@ -273,7 +273,7 @@
       "path": "backend/src/db.js",
       "locator": "createReplaySession：冻结场景、规则与首次计数",
       "line": 2502,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-retrain",
@@ -281,7 +281,7 @@
       "path": "backend/src/db.js",
       "locator": "retrainReplaySession：复制冻结场景到新会话",
       "line": 2579,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-order",
@@ -289,7 +289,7 @@
       "path": "backend/src/db.js",
       "locator": "submitReplayOrder：actionId / revision / pending",
       "line": 3721,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-advance",
@@ -297,7 +297,7 @@
       "path": "backend/src/db.js",
       "locator": "advanceReplaySession：撮合、账户、成交与事件同事务",
       "line": 4637,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-day-tx",
@@ -305,7 +305,7 @@
       "path": "backend/src/db.js",
       "locator": "runInReplayTransaction：整日推进失败回滚",
       "line": 4618,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "order-exec",
@@ -313,7 +313,7 @@
       "path": "backend/src/replay-order-execution.js",
       "locator": "executeReplayOrders：纯函数、OHLC、共享容量与部分成交",
       "line": 30,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "board-rules",
@@ -329,7 +329,7 @@
       "path": "backend/src/db.js",
       "locator": "saveReplayBlindReview：completed 后保存一次",
       "line": 4034,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-reveal",
@@ -337,7 +337,7 @@
       "path": "backend/src/db.js",
       "locator": "revealReplaySession：完成且已盲评才能揭晓",
       "line": 4535,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-post",
@@ -345,7 +345,7 @@
       "path": "backend/src/db.js",
       "locator": "saveReplayPostReview：揭晓后一次保存",
       "line": 4146,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-corrections",
@@ -353,7 +353,7 @@
       "path": "backend/src/db.js",
       "locator": "appendReplayReviewCorrection：保留原评，追加修正",
       "line": 4270,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-playbooks",
@@ -361,7 +361,7 @@
       "path": "backend/src/db.js",
       "locator": "createReplayPlaybookVersion：战法版本",
       "line": 3375,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "comparison",
@@ -369,7 +369,7 @@
       "path": "backend/src/replay-comparison.js",
       "locator": "buildReplayComparison",
       "line": 195,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "analytics",
@@ -377,7 +377,7 @@
       "path": "backend/src/replay-training-analytics.js",
       "locator": "buildReplayTrainingAnalytics",
       "line": 269,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "crypto-service",
@@ -385,7 +385,7 @@
       "path": "backend/src/replay-crypto-session.js",
       "locator": "createCryptoReplayService / create / runtime / present",
       "line": 93,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "crypto-create",
@@ -393,7 +393,7 @@
       "path": "backend/src/replay-crypto-session.js",
       "locator": "create：选资产、SHA256冻结文档、初始状态",
       "line": 224,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "crypto-command",
@@ -401,7 +401,7 @@
       "path": "backend/src/replay-crypto-session.js",
       "locator": "execute：规范命令后 mutateCryptoSession",
       "line": 157,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "crypto-preview",
@@ -409,7 +409,7 @@
       "path": "backend/src/replay-crypto-session.js",
       "locator": "preview：只计算，不写账本",
       "line": 186,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "crypto-pool",
@@ -457,7 +457,7 @@
       "path": "backend/src/replay-crypto-calculations.js",
       "locator": "createCryptoCalculator / TEACHING_LIQUIDATION_VERSION",
       "line": 42,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "crypto-tx",
@@ -473,7 +473,7 @@
       "path": "backend/src/replay-crypto-persistence.js",
       "locator": "initializeCryptoReplaySchema：快照、轨迹、资金分录",
       "line": 10,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "crypto-controller",
@@ -481,7 +481,7 @@
       "path": "web/src/utils/cryptoReplayController.js",
       "locator": "createCryptoReplayController / send / retry",
       "line": 4,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "crypto-reader",
@@ -497,7 +497,7 @@
       "path": "web/src/utils/cryptoModificationConfirmation.js",
       "locator": "createCryptoModificationConfirmation",
       "line": 15,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "crypto-chart",
@@ -505,7 +505,7 @@
       "path": "web/src/utils/cryptoChartProjection.js",
       "locator": "projectCryptoCharts",
       "line": 8,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "history-ui",
@@ -513,7 +513,7 @@
       "path": "web/src/composables/useReplayHistory.js",
       "locator": "useReplayHistory：market=all / listReplaySessions",
       "line": 11,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "archive-ui",
@@ -521,7 +521,7 @@
       "path": "web/src/composables/useTradeRecordArchive.js",
       "locator": "useTradeRecordArchive：JSON档案读取与纪律统计",
       "line": 158,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "records-view",
@@ -529,7 +529,7 @@
       "path": "web/src/views/TradeRecordsView.vue",
       "locator": "primaryTab：records / replay / playbooks",
       "line": 36,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "trade-file-read",
@@ -537,7 +537,7 @@
       "path": "backend/src/app.js",
       "locator": "readTradeRecords：逐文件解析并分开返回损坏项",
       "line": 879,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "trade-file-write",
@@ -545,7 +545,7 @@
       "path": "backend/src/app.js",
       "locator": "saveTradeRecordFile：校验→临时文件→rename",
       "line": 916,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "trade-license",
@@ -553,7 +553,7 @@
       "path": "backend/src/app.js",
       "locator": "issueTradeLicense：冻结许可与费用设置",
       "line": 965,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "trade-event",
@@ -561,7 +561,7 @@
       "path": "backend/src/app.js",
       "locator": "recordTradeExecutionEvent：执行事件与账本重算",
       "line": 1083,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "trade-math",
@@ -569,7 +569,7 @@
       "path": "backend/src/trade-license.js",
       "locator": "calculateTradeLicense：风险预算与仓位上限",
       "line": 21,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "trade-ledger",
@@ -577,7 +577,7 @@
       "path": "backend/src/trade-ledger.js",
       "locator": "calculateTradeLedger：从执行事件推导账户",
       "line": 29,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "adr-first-orders",
@@ -593,7 +593,7 @@
       "path": "backend/src/replay-lifecycle.js",
       "locator": "linkBlindReviewToPlaybook：保存版本引用与快照",
       "line": 228,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "db-finish",
@@ -601,7 +601,7 @@
       "path": "backend/src/db.js",
       "locator": "finishReplaySession：提前结束与未执行委托处理",
       "line": 3914,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
     },
     {
       "id": "archive-load",
@@ -609,7 +609,31 @@
       "path": "web/src/composables/useTradeRecordArchive.js",
       "locator": "refresh / save / readErrors",
       "line": 158,
-      "note": "本次已读取此实现；这是静态源码证据，不代表正式环境已运行验证。"
+      "note": "已核对源码；未验证正式服务中的运行结果。"
+    },
+    {
+      "id": "a-entry-view",
+      "kind": "static",
+      "path": "web/src/views/MarketReplayView.vue",
+      "locator": "function resumeRequestedSession",
+      "line": 52,
+      "note": "2026-10-26 核对：首页不自动恢复；主动进入会话的行为已用隔离浏览器场景验证。"
+    },
+    {
+      "id": "a-entry-attempt",
+      "kind": "static",
+      "path": "web/src/composables/useReplayAttempt.js",
+      "locator": "const sessionController =",
+      "line": 8,
+      "note": "2026-10-26 核对：首页不自动恢复；主动进入会话的行为已用隔离浏览器场景验证。"
+    },
+    {
+      "id": "c-entry-view",
+      "kind": "static",
+      "path": "web/src/views/CryptoReplayView.vue",
+      "locator": "const controller=createCryptoReplayController",
+      "line": 26,
+      "note": "2026-10-26 核对：首页不自动恢复；主动进入会话的行为已用隔离浏览器场景验证。"
     }
   ],
   "nodes": [
@@ -628,13 +652,16 @@
         "api-client",
         "a-ui",
         "crypto-controller",
-        "records-view"
+        "records-view",
+        "a-entry-view",
+        "a-entry-attempt",
+        "c-entry-view"
       ],
       "note": "",
       "details": [
         "三条路由分别进入 A 股、合约和交易追踪；浏览器通过 /api 请求 Node。",
         "开发时 Vite 代理 /api；默认 Web 5180、Node 3110、Engine 8775 均是脚本配置值，未确认当前是否在运行。",
-        "浏览器保存会话 ID；合约还保存 pending 请求，行情与正式账本由后端管理。",
+        "浏览器保存会话 ID；两市场首次进入且未指定会话时显示首页，点击继续练习或历史记录后才恢复。合约还保留待确认请求（pending），需主动重试；行情与正式账本由后端管理。",
         "landing 是独立静态介绍入口，不承担演练业务。"
       ],
       "objects": [
@@ -647,7 +674,7 @@
       "id": "api",
       "label": "Node 本机 API",
       "kind": "module",
-      "summary": "统一路由与两类训练的分派",
+      "summary": "接收请求，分派两类训练",
       "position": {
         "x": 300,
         "y": 230
@@ -830,7 +857,7 @@
       "id": "ashare",
       "label": "A 股演练生命周期",
       "kind": "module",
-      "summary": "创建、推进、结束与可见化",
+      "summary": "创建练习、推进行情与结束练习",
       "position": {
         "x": 300,
         "y": 460
@@ -846,9 +873,9 @@
       "note": "",
       "parentId": "api",
       "details": [
-        "createReplayLifecycle 通过 Store 访问 SQLite，通过 EngineClient 申请行情场景。",
-        "每个新场景有 250 根观察行情；未来行情与身份在揭晓前被过滤。",
-        "按日推进包在外层事务，失败时回滚该次整日推进。"
+        "创建、推进和结束练习由 createReplayLifecycle 处理；它通过 Store 读写 SQLite，通过 EngineClient 获取历史行情场景。",
+        "每个新场景先提供 250 根观察行情；揭晓前只返回当前可见的行情，并隐藏标的身份。",
+        "按日推进在同一个数据库事务中完成；中途失败会撤销本次整日推进。"
       ],
       "objects": [
         "A 股会话",
@@ -860,7 +887,7 @@
       "id": "a-orders",
       "label": "A 股委托撮合",
       "kind": "module",
-      "summary": "下一 bar 触价、容量与持仓",
+      "summary": "按下一根行情检查成交与持仓",
       "position": {
         "x": 0,
         "y": 700
@@ -875,7 +902,7 @@
       "note": "",
       "parentId": "ashare",
       "details": [
-        "executeReplayOrders 为纯计算，db.js 负责读状态、调用计算并同事务写回。",
+        "executeReplayOrders 只计算成交结果；db.js 读取状态、调用计算，再在同一事务中保存结果。",
         "支持持续委托、限价、止损、部分成交、撤单与日末到期；受 T+1 与整根 bar 容量限制。",
         "当前新会话按条件冻结 bar-orders-v2 / v1；已有 legacy-next-open 保持原解释。",
         "OHLC 触价与整根成交量是教学近似，不表示真实盘口排队。"
@@ -890,7 +917,7 @@
       "id": "review",
       "label": "复盘与训练对照",
       "kind": "module",
-      "summary": "冻结原评，保留修正与复练",
+      "summary": "保留原始评价、修正与复练结果",
       "position": {
         "x": 300,
         "y": 700
@@ -908,7 +935,7 @@
       "note": "",
       "parentId": "ashare",
       "details": [
-        "A 股先 completed，再保存盲评，然后揭晓；事后复盘在揭晓后保存。",
+        "A 股练习完成（completed）后，先保存不看结果的盲评，再揭晓；揭晓后才能保存事后复盘。",
         "原始盲评与事后复盘不被修正覆盖；修正记录另存。",
         "复练复制冻结场景并新建会话，首次结果与计分归属保留。",
         "战法版本可以被盲评引用；开局固定 free，不要求先选战法。",
@@ -924,7 +951,7 @@
       "id": "crypto",
       "label": "合约训练服务",
       "kind": "module",
-      "summary": "本地资产驱动的合约练习",
+      "summary": "用本地历史行情开展合约练习",
       "position": {
         "x": 600,
         "y": 700
@@ -942,7 +969,7 @@
       "details": [
         "与 Express 同进程，创建时加载本地冻结历史与规则，生成摘要后保存 SQLite 文档。",
         "已有会话从 SQLite 中的冻结文档恢复，检查执行版本、摘要和状态一致性。",
-        "新建用 actionId 派生 ID；写动作校验 actionId 与 expectedRevision。",
+        "新建练习用 actionId 生成会话 ID；写入动作时检查 actionId 是否已处理，以及 expectedRevision 是否仍是当前版本。",
         "无实时下单、交易所私有账户连接或独立后台撮合 Worker。"
       ],
       "objects": [
@@ -1027,7 +1054,7 @@
       "details": [
         "tdx 模式 lifespan 启动 replay-sample-maintenance daemon thread；代码每 60 秒触发检查。",
         "通达信初始化另有后台同步线程；失败保留旧缓存，并按条件重试。",
-        "预取由页面基准请求或创建后的 fire-and-forget 请求触发；使用 Lock 避免重入。",
+        "页面查询基准状态或创建练习后，会发出无需等待返回的预取请求；使用 Lock 避免同时重复执行。",
         "不存在从代码中确认的持久队列服务；进程重启后的线程活动需运行证据。"
       ]
     },
@@ -1723,7 +1750,7 @@
         {
           "id": "a-bench",
           "title": "读取基准与准备状态",
-          "description": "Web 经 Node 请求 Python 的 benchmarks。引擎返回可选指数与初始化状态；后端在可用时另外发起预取，主响应不等待预取完成。",
+          "description": "浏览器经 Node 向 Python 的 benchmarks 接口查询可选指数与初始化状态。后端可在返回结果时另外发起预取，无需等预取完成。",
           "nodeIds": [
             "web",
             "api",
@@ -1751,7 +1778,7 @@
         {
           "id": "a-request",
           "title": "提交演练配置",
-          "description": "Web 提交长度、基准、资金和成本参数。Node 按 market 选择 A 股路径并校验参数，当前开局训练模式为 free。",
+          "description": "浏览器提交演练长度、基准、资金和成本参数。Node 按 market 选择 A 股处理逻辑并校验参数；当前新练习使用自由训练模式（free）。",
           "nodeIds": [
             "web",
             "api",
@@ -1824,7 +1851,7 @@
         {
           "id": "a-visible",
           "title": "只返回当前可见会话",
-          "description": "presentReplaySession 截取观察窗口与已推进前缀，隐藏未揭晓的身份与未来行情。Web 保存会话 ID，刷新时重新向后端读取。",
+          "description": "presentReplaySession 只返回观察窗口和已经推进的行情，隐藏尚未揭晓的标的身份与未来行情。浏览器保留会话 ID，但无 session 参数时显示首页；主动继续练习或从记录进入后，才向后端读取该会话。",
           "nodeIds": [
             "api",
             "ashare",
@@ -1837,14 +1864,16 @@
           "sourceIds": [
             "visible",
             "a-ui",
-            "a-ui-restore"
+            "a-ui-restore",
+            "a-entry-view",
+            "a-entry-attempt"
           ],
           "note": ""
         },
         {
           "id": "a-reserve",
           "title": "异步补充未见样本",
-          "description": "创建成功后用 fire-and-forget 请求补足未见标的储备；错误被捕获，不阻塞已创建会话。tdx 模式的进程内维护线程还会按条件继续维护缓存。",
+          "description": "创建成功后，后端发出无需等待返回的预取请求，补充尚未见过的行情样本。即使预取报错，也不影响已创建的练习。tdx 模式的进程内维护线程还会按条件维护缓存。",
           "nodeIds": [
             "api",
             "ashare",
@@ -1953,7 +1982,7 @@
         {
           "id": "o-pending",
           "title": "事务中登记待执行委托",
-          "description": "SQLite 先查 actionId 是否已处理，再检查 revision 和会话状态。新委托登记为 pending，从下一可执行 bar 参与；此时还没有成交。",
+          "description": "SQLite 先检查 actionId 是否已处理，再检查版本（revision）和会话状态。新委托保存为等待执行（pending），从下一根可执行 K 线开始参与撮合；提交成功时还没有成交。",
           "nodeIds": [
             "api",
             "ashare",
@@ -1978,7 +2007,7 @@
         {
           "id": "o-advance",
           "title": "选择逐 bar 或按日推进",
-          "description": "逐 bar 在一个事务中推进；mode=day 在外层事务循环至当日最后可用行情，中间状态不返回，任一步失败则整次回滚。",
+          "description": "每推进一根 K 线，都在一个事务中完成。按日推进（mode=day）会在外层事务内连续处理到当日最后一根可用行情，不返回中间状态；任何一步失败，本次整日推进都会撤销。",
           "nodeIds": [
             "web",
             "api",
@@ -2035,7 +2064,7 @@
         {
           "id": "o-commit",
           "title": "账户、余量和成交一并落盘",
-          "description": "同一事务写回账户、委托 execution_json、多笔 replay_fills 与动作事件，再提升 revision。部分成交只减少本次已成交量，余量按规则继续等待或到期。",
+          "description": "在同一事务中保存账户、委托 execution_json、多笔成交 replay_fills 和动作事件，再提升版本号（revision）。部分成交只扣除已成交数量，剩余委托按规则继续等待或到期。",
           "nodeIds": [
             "api",
             "ashare",
@@ -2364,7 +2393,7 @@
         {
           "id": "c-create",
           "title": "持久保存创建意图再请求",
-          "description": "合约控制器生成 actionId，把完整 pending 请求保存到 localStorage，再提交创建。服务端用该动作标识派生会话 ID，避免同一创建请求重复生成会话。",
+          "description": "合约控制器先生成动作标识（actionId），把完整的待确认请求（pending）保存到 localStorage，再提交创建。服务端用这个标识生成会话 ID，避免同一次创建请求生成多局练习。",
           "nodeIds": [
             "web",
             "api",
@@ -2412,7 +2441,7 @@
         {
           "id": "c-read",
           "title": "读取当前版本的完整画面",
-          "description": "控制器读会话并并行加载各周期可见行情、资金分录和轨迹。reader 校验 revision、分钟前缀和各自游标；完整核心批次成功后才替换画面，同 revision 可以复用已验证前缀。",
+          "description": "控制器读取会话，并同时加载各周期的可见行情、资金分录和执行轨迹。reader 核对版本号（revision）、已推进分钟数和各类数据游标；核心数据全部读取成功后才替换画面。同一版本已校验过的行情前缀可以复用。",
           "nodeIds": [
             "web",
             "api",
@@ -2517,7 +2546,7 @@
         {
           "id": "c-refresh",
           "title": "确认写入后再读最新服务端版本",
-          "description": "控制器清除已确认 pending，并重新读取最新会话和完整批次；幂等响应可能是旧提交，所以仍需读最新状态。已有会话从 SQLite 冻结文档恢复，不要求重新使用外部历史池；核心读取失败则保留旧画面并锁写。",
+          "description": "动作确认后，控制器清除 pending，再重新读取最新会话和完整数据。重复请求的返回值可能来自上次提交，所以仍需读取最新状态。已有练习从 SQLite 的冻结文档恢复，无需重新使用外部历史池；核心数据读取失败时保留旧画面，暂停写入。",
           "nodeIds": [
             "web",
             "api",
@@ -2592,7 +2621,7 @@
         {
           "id": "c-retry",
           "title": "原样重试尚未确认的请求",
-          "description": "网络或未知结果时保留 pending；刷新后 retry 重发原 actionId、原 revision 与原请求体。服务端先检查已处理动作，避免重复记账；明确 4xx 拒绝后清理 pending 并按需同步。",
+          "description": "网络出错或结果未知时，保留待确认请求（pending）。刷新后先显示首页；点击「重试原动作」才发送原 actionId、原 revision 和原请求体。服务端先检查已处理动作，避免重复记账；明确返回 4xx 拒绝后清理 pending，并按需同步。",
           "nodeIds": [
             "web",
             "api",
@@ -2607,7 +2636,8 @@
           "status": "fact",
           "sourceIds": [
             "crypto-controller",
-            "crypto-tx"
+            "crypto-tx",
+            "c-entry-view"
           ],
           "note": "",
           "nextStepId": "c-refresh"
@@ -2623,7 +2653,7 @@
         {
           "id": "t-tabs",
           "title": "同一个入口，读取不同来源",
-          "description": "页面有交易追踪、演练记录和战法页签。演练记录通过 market=all 查询 SQLite 的两类会话；手工档案调用独立 trade-records API 读取 JSON，不自动把演练结果写成手工追踪单。",
+          "description": "页面分为交易追踪、演练记录和战法三个页签。演练记录通过 market=all 查询 SQLite 中的两类会话；手工交易通过独立的 trade-records API 读取 JSON。演练结果不会自动生成手工追踪单。",
           "nodeIds": [
             "web",
             "api",
@@ -2721,7 +2751,7 @@
         {
           "id": "t-view",
           "title": "重新读取列表、详情与纪律统计",
-          "description": "档案 composable 使用同一份记录完成列表选择、详情与纪律统计。演练历史仍由 useReplayHistory 读取 SQLite；两者的统计口径和恢复入口各自保留。",
+          "description": "手工交易的列表、详情和纪律统计使用同一份档案。演练历史仍由 useReplayHistory 读取 SQLite；两类记录各自保留统计口径和恢复入口。",
           "nodeIds": [
             "web",
             "api",
@@ -2825,5 +2855,10 @@
       "neededEvidence": "独立对照研究和样例验证；本次地图不宣称模拟结果等同实盘。"
     }
   ],
-  "changes": []
+  "changes": [
+    "2026-10-26：缩小页头、侧栏和工具栏；场景与主要步骤默认展开，异常分支和源码依据按需展开；底部步骤区完整展示内容，较长时自动向上增高。",
+    "展开或收起模块保留缩放和位置；窗口尺寸变化也不自动重置，仍可主动点击「重置视图」。",
+    "右侧说明改用更直接的标题与文字，来源、技术标识和原有事实限制保留。",
+    "首页不自动恢复的说明已按本轮实现更新；主动恢复与待确认请求重试已在临时后端验证，其余架构事实沿用原快照。"
+  ]
 }
