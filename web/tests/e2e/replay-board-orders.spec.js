@@ -13,7 +13,7 @@ for (const [code,label,validQuantity,invalidQuantity] of [['600000.SH','主板',
         await route.fulfill({response:await route.fetch({url:`${fixture.url}${original.pathname}${original.search}`})});
       });
       await page.addInitScript(id=>localStorage.setItem('investflow.replay.active-session-id',id),session.id);
-      await page.goto(`${process.env.PLAYWRIGHT_BASE_URL??'http://127.0.0.1:5180'}/decision/market-replay`);
+      await page.goto(`${process.env.PLAYWRIGHT_BASE_URL??'http://127.0.0.1:5180'}/decision/market-replay?session=${session.id}`);
       await expect(page.getByText(`${label} · ${label==='科创板'?'200股起，可逐股递增':'买入100股整数倍'} · T+1`)).toBeVisible();
       await page.getByRole('button',{name:'买入',exact:true}).click();
       const form=page.getByRole('dialog',{name:'买入决策记录'});

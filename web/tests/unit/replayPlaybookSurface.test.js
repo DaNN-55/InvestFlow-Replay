@@ -139,6 +139,6 @@ describe("replay playbook frontend surface", () => {
     assert.match(historyDetailSource, /不能自动加入候选/u);
     assert.match(historyDetailSource, /等待人工处理/u);
     assert.match(panelSource, /investflow\.replay\.active-session-id/u);
-    assert.match(panelSource, /router\.push\("\/decision\/market-replay"\)/u);
+    assert.match(panelSource, /router\.push\(\{ path: "\/decision\/market-replay", query: \{ session: sessionId \} \}\)/u);
   });
 });

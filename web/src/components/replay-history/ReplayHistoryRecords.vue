@@ -165,7 +165,7 @@ function openReplay(item) {
     "investflow.replay.active-session-id",
     item.id,
   );
-  router.push("/decision/market-replay");
+  router.push({ path: "/decision/market-replay", query: { session: item.id } });
 }
 
 function candidateStateFor(sessionId) {
@@ -244,7 +244,7 @@ async function retrainReplay(item) {
       "investflow.replay.active-session-id",
       newSessionId,
     );
-    await router.push("/decision/market-replay");
+    await router.push({ path: "/decision/market-replay", query: { session: newSessionId } });
   } catch (retrainError) {
     retrainStates[item.id] = {
       loading: false,
