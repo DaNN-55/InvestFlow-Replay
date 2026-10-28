@@ -71,7 +71,7 @@ function openSource(candidate) {
     "investflow.replay.active-session-id",
     sessionId,
   );
-  router.push("/decision/market-replay");
+  router.push({ path: "/decision/market-replay", query: { session: sessionId } });
 }
 
 function openRename(item) {

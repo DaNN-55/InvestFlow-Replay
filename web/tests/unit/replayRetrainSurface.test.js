@@ -101,7 +101,7 @@ describe("replay retrain frontend surface", () => {
       sessionComposableSource,
       /refreshSession\(\{ sessionId \}\)/u,
     );
-    assert.match(viewSource, /onActivated\(commands\.sync\)/u);
+    assert.match(viewSource, /onActivated\(resumeRequestedSession\)/u);
   });
 
   it("can delete an accidental explicit retrain and restore its first result", () => {

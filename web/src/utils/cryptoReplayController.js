@@ -1,10 +1,13 @@
 import { errorText } from './cryptoReplayPresentation.js';
 import { createCryptoSessionReader } from './cryptoSessionReader.js';
 export const CRYPTO_STORAGE_KEY = 'investflow-crypto-attempt-v1';
-export function createCryptoReplayController({ api, storage, uuid = () => crypto.randomUUID(), changed = () => {} }) {
-  let saved = {};
-  try { saved = JSON.parse(storage.getItem(CRYPTO_STORAGE_KEY) ?? '{}'); } catch { /* Storage may have an old or interrupted record. */ }
-  let targetSessionId = saved.sessionId ?? null;
+function readSavedAttempt(storage) {
+  try { return JSON.parse(storage.getItem(CRYPTO_STORAGE_KEY) ?? '{}') ?? {}; }
+  catch { return {}; } // Storage may have an old or interrupted record.
+}
+export function createCryptoReplayController({ api, storage, uuid = () => crypto.randomUUID(), changed = () => {}, restoreSession = true }) {
+  const saved = readSavedAttempt(storage);
+  let targetSessionId = restoreSession ? saved.sessionId ?? null : null;
   const state = { session: null, busy: false, readStale: Boolean(targetSessionId), error: '', notice: '', pending: saved.pending ?? null, timeframe: 5, timeframes: [5], markets: {}, market: null, traces: [], ledger: [], history: [], analysis: null, analysisError: '', pool: null, poolError: '' };
   const reader = createCryptoSessionReader({ getSession: id => api.getReplaySession(id), readMarket: (id, params) => api.cryptoMarket(id, params), readAudit: (id, kind, params) => api.cryptoAudit(id, kind, params) });
   const publish = () => changed({ ...state });
@@ -89,6 +92,8 @@ export function createCryptoReplayController({ api, storage, uuid = () => crypto
     return send({ kind, id: state.session?.id, body: { actionId: uuid(), ...(kind === 'create' ? {} : { expectedRevision: state.session.revision }), ...body } });
   }
   return { state, sync, act, retry: () => state.pending ? send(state.pending) : sync(),
+    get targetSessionId() { return targetSessionId; },
+    syncPendingFromStorage() { if (!state.busy) { state.pending = readSavedAttempt(storage).pending ?? null; publish(); } },
     async period(value) { if (state.busy) return; state.timeframe = Number(value); state.timeframes = [state.timeframe]; return sync(); },
     async periods(values) { if (state.busy) return false; state.timeframes = [...new Set(values.map(Number))]; state.timeframe = state.timeframes[0] ?? 5; return sync(); },
     async select(id) { if (state.busy) return; return sync(id); },
