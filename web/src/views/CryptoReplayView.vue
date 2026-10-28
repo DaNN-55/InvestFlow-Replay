@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Settings2 } from 'lucide-vue-next';
 import { api } from '../services/api.js';
 import UiButton from '../components/ui/UiButton.vue';
+import UiAlert from '../components/ui/UiAlert.vue';
 import UiDrawer from '../components/ui/UiDrawer.vue';
 import UiModal from '../components/ui/UiModal.vue';
 import UiInput from '../components/ui/UiInput.vue';
@@ -26,6 +27,18 @@ const state=shallowRef({}),preferences=ref(loadCryptoPreferences(localStorage));
 const controller=createCryptoReplayController({api,storage:localStorage,restoreSession:false,changed:value=>{state.value=value;}});
 controller.state.timeframes=cryptoVisiblePeriods(preferences.value);controller.state.timeframe=controller.state.timeframes[0];state.value={...controller.state};
 const s=computed(()=>state.value.session);
+const active=ref(false),orderInputError=ref(''),visibleAlert=shallowRef(null);
+const persistentAlert=computed(()=>{
+  if(state.value.pending) return {title:'上次操作结果尚未确认',message:state.value.error,context:priceNotice.value,detail:'暂时不能提交新操作。请重试原操作，系统会核对同一次请求，避免重复下单。',action:'retry'};
+  if(state.value.readStale) return {title:'需要重新同步',message:state.value.error,context:priceNotice.value,detail:'账户和行情尚未完成核对，暂时不能下单或推进。重新同步只读取数据，不会重复提交订单。',action:'sync'};
+  if(state.value.error) return {title:'操作未完成',message:state.value.error,action:'sync'};
+  if(s.value?.status==='active'&&!s.value.ending&&orderInputError.value) return {title:'请调整下单信息',message:orderInputError.value};
+  if(priceNotice.value) return {title:'请核对当前委托或保护',message:priceNotice.value,canDismiss:true};
+  if(s.value?.ending&&s.value.status!=='completed') return {title:s.value.status==='end-blocked'?'结束受阻':'正在结束练习',message:s.value.status==='end-blocked'?'剩余成交容量不足，当前仍有持仓，暂时不能揭晓或复练。':'请继续推进，等待剩余仓位退出；当前不再接受开仓。'};
+  if(state.value.poolError) return {title:'新场景暂不可用',message:state.value.poolError};
+  return null;
+});
+watch(()=>s.value?.id,()=>{orderInputError.value='';});
 const lastGoodChartPreferences=shallowRef(null);
 watch(()=>[state.value.busy,state.value.readStale,state.value.markets,preferences.value],()=>{
   if(!s.value) {lastGoodChartPreferences.value=null;return;}
@@ -50,6 +63,7 @@ const confirmation=createCryptoModificationConfirmation({
 });
 confirmationView.value=confirmation.view;
 const priceSaving=computed(()=>confirmationView.value.saving),priceNotice=computed(()=>confirmationView.value.notice);
+watch([persistentAlert,()=>state.value.busy],([alert,busy])=>{if(!busy) visibleAlert.value=alert;},{immediate:true});
 const cancellation=computed(()=>confirmationView.value.cancellation),orderEditor=computed(()=>confirmationView.value.editor);
 const orderEditPrice=computed({get:()=>confirmationView.value.input.price,set:price=>confirmation.updateOrder({price})});
 const orderEditQuantity=computed({get:()=>confirmationView.value.input.remainingContracts,set:remainingContracts=>confirmation.updateOrder({remainingContracts})});
@@ -88,12 +102,13 @@ async function loadRequestedSession(id) {
 async function resync() {
   if(!state.value.readStale) return typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync();
   const ok=await controller.sync();
+  if(ok) confirmation.dismissNotice();
   if(ok&&s.value&&typeof route.query.session==='string'&&route.query.session!==s.value.id) await router.replace({query:{...route.query,session:s.value.id}});
   return ok;
 }
 watch(()=>state.value.busy,value=>{if(!value) {syncRequestedSession();ensurePeriods();}});
 watch(()=>route.query.session,()=>{lastRequestedSession=null;syncRequestedSession();});
-onActivated(()=>{controller.syncPendingFromStorage();return typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync();});
+onActivated(()=>{active.value=true;controller.syncPendingFromStorage();return typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync();});
 async function retryPending() {
   const kind=state.value.pending?.kind;
   if(kind==='retrain') retraining.value=true;
@@ -121,7 +136,7 @@ async function tick(generation) {
 watch(playing,()=>{playbackGeneration++;clearTimeout(playbackTimer);if(playing.value) schedulePlayback();});
 watch(()=>preferences.value.playbackSpeed,()=>{if(playing.value) schedulePlayback();});
 function stop() {playing.value=false;playbackGeneration++;clearTimeout(playbackTimer);}
-onDeactivated(()=>{stop();confirmation.reset();});onBeforeUnmount(()=>{stop();confirmation.dispose();});
+onDeactivated(()=>{active.value=false;stop();confirmation.reset();});onBeforeUnmount(()=>{stop();confirmation.dispose();});
 async function finish() {stop();if(await controller.act('finish')) finishOpen.value=false;}
 async function retrain() {
   stop();retraining.value=true;
@@ -132,19 +147,21 @@ async function retrain() {
 <template>
   <div class="crypto-workspace crypto-controls" :class="{'crypto-workspace--setup':!s}" :aria-busy="state.busy">
     <header v-if="s" class="crypto-header"><div><p class="crypto-eyebrow">USDT 永续 / 历史盲测</p><h1>{{ s?s.instrumentId:'合约练习' }} <span v-if="s">逐仓 · 单向</span></h1><div v-if="s" class="crypto-quotes"><span>最新价 <b data-testid="crypto-last">{{ amount(s.currentPrices.last,4) }}</b></span><span>标记价格 <b>{{ amount(s.currentPrices.mark,4) }}</b></span></div></div><div class="crypto-header-actions"><button type="button" class="crypto-icon" aria-label="交易与显示设置" title="交易与显示设置" @click="settingsOpen=true"><Settings2 :size="17" /></button></div></header>
-    <div v-if="state.error" class="crypto-alert" role="alert"><span>{{ state.error }}</span><UiButton v-if="!state.pending" variant="secondary" :disabled="state.busy" @click="resync">重新同步</UiButton></div>
-    <p v-if="state.readStale&&!state.busy" class="crypto-alert" role="status" data-testid="crypto-read-stale">{{ s?'显示的是上次完整同步的结果；重新同步前暂停新的操作。':'会话数据尚未同步，请重新同步后继续。' }}</p>
-    <div v-if="state.pending&&!state.busy" class="crypto-alert" role="status"><span>上次动作的结果待核对；核对前不能提交新动作。可以从演练记录查看历史。</span><UiButton variant="secondary" @click="retryPending">重试原动作</UiButton></div>
+    <Teleport to="body">
+      <UiAlert v-if="active&&visibleAlert" id="crypto-active-alert" floating variant="warning" role="alert" :title="visibleAlert.title" :dismissible="visibleAlert.canDismiss" data-testid="crypto-persistent-alert" @dismiss="confirmation.dismissNotice">
+        <p v-if="visibleAlert.message" class="crypto-notification-text">{{ visibleAlert.message }}</p>
+        <p v-if="visibleAlert.context" class="crypto-notification-text">{{ visibleAlert.context }}</p>
+        <p v-if="visibleAlert.detail" class="crypto-notification-text" :data-testid="state.readStale?'crypto-read-stale':undefined">{{ visibleAlert.detail }}</p>
+        <UiButton v-if="visibleAlert.action" variant="secondary" class="crypto-notification-action" :disabled="state.busy" @click="visibleAlert.action==='retry'?retryPending():resync()">{{ state.busy?'正在核对…':visibleAlert.action==='retry'?'重试原动作':'重新同步' }}</UiButton>
+      </UiAlert>
+    </Teleport>
     <p v-if="state.busy" class="crypto-save-status" role="status">正在同步与保存…</p><p v-else-if="state.notice" class="crypto-save-status" role="status">{{ state.notice }}</p>
-    <p v-if="state.poolError" class="crypto-muted" role="status">{{ state.poolError }}</p>
-    <p v-if="s&&priceNotice" class="crypto-muted" role="status">{{ priceNotice }}</p>
     <CryptoSetupPanel v-if="!s" :busy="state.busy" :pool="state.pool" :history="state.history" :blocked="Boolean(state.pending)||Boolean(state.poolError)||state.readStale" @create="controller.act('create',$event)" @resume="controller.select($event)" @records="records" />
     <template v-else>
       <div class="crypto-account" data-testid="crypto-account"><div v-for="[label,value,id] in [['账户权益 · USDT',s.summary.accountEquity,'crypto-equity'],['仓外可用',s.account.availableBalance,'crypto-available'],['委托冻结',s.reservedBalance,'crypto-reserved'],['本次净盈亏',s.summary.netPnl,'crypto-net-summary']]" :key="label"><span>{{ label }}</span><strong :data-testid="id" :title="String(value)">{{ moneyAmount(value) }}</strong></div></div>
       <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed}">
         <div class="crypto-terminal-main">
           <CryptoChartWorkspace v-model="chartPreferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="confirmationView.blockChartActions" :price-draft="orderChartDraft" @price-drag="confirmation.handlePriceDrag" @confirm-price="confirmation.confirm" @cancel-price="confirmation.cancel" @request-cancellation="confirmation.openCancellation" />
-          <p v-if="s.ending&&s.status!=='completed'" class="crypto-alert" role="status">{{ s.status==='end-blocked'?'结束受阻：预留分钟容量不足，仍有仓位；不能揭晓或复练。':'正在结束：继续推进以退出剩余仓位，不再新开仓。' }}</p>
           <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="confirmationView.blockNewActions" @command="command" @cancel-order="confirmation.openCancellation" @edit-order="confirmation.openOrder" @records="records" />
           <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||state.readStale" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
           <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
@@ -161,7 +178,7 @@ async function retrain() {
           >
             <template #actions><UiButton variant="secondary" class="crypto-finish" :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton><UiButton variant="secondary" :disabled="locked" @click="fresh">新开一局</UiButton></template>
           </ReplayPlaybackControls>
-          <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="confirmationView.blockNewActions" @command="command" />
+          <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :busy="state.busy" :blocked="confirmationView.blockNewActions" @command="command" @validation-error="orderInputError=$event" />
         </div>
       </div>
     </template>

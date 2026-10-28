@@ -21,6 +21,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  floating: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 defineEmits(["dismiss"]);
@@ -37,10 +41,16 @@ const icon = computed(() => {
   }
   return Info;
 });
+const variantClass = computed(() => ({
+  info: 'ql-ui-alert--info',
+  success: 'ql-ui-alert--success',
+  warning: 'ql-ui-alert--warning',
+  danger: 'ql-ui-alert--danger',
+})[props.variant] ?? 'ql-ui-alert--info');
 </script>
 
 <template>
-  <div class="ql-ui-alert" :class="`ql-ui-alert--${variant}`">
+  <div class="ql-ui-alert" :class="[variantClass, { 'ql-ui-alert--floating': floating }]">
     <component :is="icon" :size="18" class="ql-mt-0.5 ql-shrink-0" />
     <div class="ql-min-w-0 ql-flex-1">
       <div v-if="title" class="ql-text-sm ql-font-semibold">
@@ -53,6 +63,7 @@ const icon = computed(() => {
     <button
       v-if="dismissible"
       type="button"
+      aria-label="关闭提醒"
       class="ql-ui-button ql-ui-button--ghost ql-ui-button--sm ql-ui-button--icon"
       @click="$emit('dismiss')"
     >
@@ -60,3 +71,19 @@ const icon = computed(() => {
     </button>
   </div>
 </template>
+
+<style scoped>
+.ql-ui-alert--floating {
+  position: fixed;
+  z-index: 80;
+  top: 64px;
+  right: 16px;
+  width: min(440px, calc(100vw - 32px));
+  box-sizing: border-box;
+  background: var(--ql-panel);
+  color: var(--ql-color-text-strong);
+  box-shadow: var(--ql-shadow-lg);
+  overflow-wrap: anywhere;
+}
+.ql-ui-alert--floating.ql-ui-alert--warning { border-color: var(--ql-color-warning); }
+</style>

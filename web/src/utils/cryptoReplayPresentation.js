@@ -39,10 +39,11 @@ export function plannedPricePnl(session) {
   return (Number(plan.price) - Number(p.entryPrice)) * base * (p.side === 'long' ? 1 : -1);
 }
 export const eventName = (type) => ({ 'order-amended': '委托价格已调整', 'order-updated':'委托已调整', 'order-quantity-amended':'委托数量已调整', 'order-submitted': '委托已提交', 'order-filled': '普通成交', 'order-cancelled': '委托已撤销', 'order-rejected': '委托被拒绝', 'protection-triggered': '保护已触发', 'protection-filled': '保护成交', 'protection-armed': '保护已设置', 'protection-cancelled': '保护已取消', 'protection-leg-cancelled': '保护单腿已取消', 'protection-resized': '保护数量已联动', 'order-clipped': '减仓量已联动', 'limit-waiting': '限价等待', 'margin-added': '手动追加保证金', 'funding-settled': '资金费结算', 'funding-skipped': '空仓未收付资金费', 'risk-triggered': '风险阈值触发', 'risk-rechecked': '撤单后风险复核', 'teaching-liquidation': '教学强平接管', 'intraminute-ambiguity': '分钟内次序不明', 'end-filled': '结束平仓成交', 'training-ended': '练习已结束', 'end-blocked': '结束受阻，仍有仓位' })[type] ?? type;
-export function errorText(error) {
+export function errorText(error, contract) {
   const msg = error?.message ?? '请求失败';
   if (/cash|afford|balance/i.test(msg)) return '可用资金不足，请减少张数或撤销待成交委托后再试。';
-  if (/step|tick|multiple|lot/i.test(msg)) return '价格或张数不符合合约步长，请按下方规格调整。';
+  if (/tick/i.test(msg)) return `价格精度不符合合约要求${contract?.tickSz ? `，价格须按 ${contract.tickSz} USDT 递增` : '，请检查限价、止盈价和止损价'}。`;
+  if (/lot|minSz|(?:quantity|contracts).*multiple/i.test(msg)) return `合约数量不符合要求${contract?.lotSz ? `，须按 ${contract.lotSz} 张递增，至少 ${contract.minSz} 张` : '，请检查最小数量与递增单位'}。USDT 金额会先换算成合约张数。`;
   if (/opposite|one.way/i.test(msg)) return '当前为单向持仓；反向开仓前请先平掉现有仓位。';
   return msg;
 }

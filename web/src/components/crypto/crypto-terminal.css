@@ -1,4 +1,7 @@
 /* Terminal layout shared by the live workspace and its portalled drawers. */
+.crypto-notification-text { margin: 4px 0 0; }
+.crypto-notification-action { margin-top: 10px; }
+.crypto-controls .ql-ui-control[aria-invalid="true"] { border-color: var(--ql-color-danger); }
 .crypto-protection-confirm { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:10px 12px;background:var(--ql-paper-soft);border-bottom:1px solid var(--ql-line-strong); }
 .crypto-protection-confirm strong { display:block;font-size:12px;font-weight:500;font-variant-numeric:tabular-nums; }.crypto-protection-confirm small { display:block;font-size:10px;color:var(--ql-color-text-muted);margin-top:4px; }.crypto-protection-confirm p { margin:5px 0 0;font-size:11px;color:var(--ql-color-danger); }
 .crypto-protection-confirm-actions { display:flex;gap:6px; }.crypto-protection-confirm-actions .ql-ui-button { min-height:32px;height:32px;font-size:11px;padding:0 10px; }

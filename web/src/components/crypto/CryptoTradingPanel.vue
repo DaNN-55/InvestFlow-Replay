@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, shallowRef, watch, onBeforeUnmount } from 'vue';
+import { computed, reactive, ref, shallowRef, watch, onBeforeUnmount } from 'vue';
 import UiButton from '../ui/UiButton.vue';
 import UiInput from '../ui/UiInput.vue';
 import UiSelect from '../ui/UiSelect.vue';
@@ -8,9 +8,17 @@ import UiTooltip from '../ui/UiTooltip.vue';
 import { amount, moneyAmount as money } from '../../utils/cryptoReplayPresentation.js';
 import { createCryptoPreviewLoader } from '../../utils/cryptoOrderPreview.js';
 import { cryptoQuantityToContracts } from '../../utils/cryptoQuantity.js';
+import { cryptoPriceInputError } from '../../utils/cryptoPriceDraft.js';
 const props = defineProps({ session: { type: Object, required: true }, busy: Boolean, blocked: Boolean, previewOrder: { type: Function, required: true } });
-const emit = defineEmits(['command', 'advance', 'finish']);
+const emit = defineEmits(['command', 'advance', 'finish', 'validation-error']);
 const form = reactive({ intent: 'long', type: 'market', contracts: '', unit:'contracts', sizingMode: 'contracts', sizingAmount: '', limitPrice: '', stopLoss: '', takeProfit: '', reference: 'last', note: '' });
+const validationShown = ref(false);
+const priceErrors = computed(() => Object.fromEntries([
+  ...(form.type === 'limit' ? [['limitPrice', '委托限价']] : []),
+  ...(form.intent !== 'reduce' ? [['stopLoss', '止损价'], ['takeProfit', '止盈价']] : []),
+].filter(([key]) => form[key] !== '').map(([key, label]) => [key, cryptoPriceInputError(form[key], props.session.contract.tickSz, label)]).filter(([, error]) => error)));
+const priceError = computed(() => Object.values(priceErrors.value).join(' '));
+function validatePrices() { validationShown.value = true; }
 const position = computed(() => props.session.account.position);
 const advancedSummary = computed(() => [form.sizingMode === 'margin' ? '保证金估仓' : form.sizingMode === 'risk' ? '风险估仓' : '', ...(form.intent === 'reduce' ? [] : [form.stopLoss ? '止损' : '', form.takeProfit ? '止盈' : '']), form.note ? '理由' : ''].filter(Boolean).join(' · '));
 const protectionWarning = computed(() => {
@@ -35,6 +43,7 @@ const previewRequest = computed(() => ({ sessionId: props.session.id, expectedRe
   ...(form.type === 'limit' ? { limitPrice: form.limitPrice } : {}),
   ...(estimateExit.value ? { exitPrice: estimateExit.value.price, exitReference: estimateExit.value.reference } : {}) }));
 const readyPreview = computed(() => previewState.value.key === JSON.stringify(previewRequest.value) ? previewState.value.preview : null);
+watch(() => (validationShown.value ? priceError.value : '') || previewState.value.error, value => emit('validation-error', value));
 watch(() => form.intent, value => { if (value === 'reduce') form.sizingMode = 'contracts'; });
 watch(() => form.sizingMode, () => { form.sizingAmount = ''; });
 watch(() => form.unit,()=>{form.contracts='';});
@@ -48,7 +57,13 @@ watch(previewRequest, (input, _old, onCleanup) => {
 function protection() {
   return { ...(form.stopLoss ? { stopLoss: { price: form.stopLoss, reference: form.reference } } : {}), ...(form.takeProfit ? { takeProfit: { price: form.takeProfit, reference: form.reference } } : {}) };
 }
-function submit() {
+function submit(event) {
+  validatePrices();
+  if (priceError.value) {
+    const field = Object.keys(priceErrors.value)[0];
+    event.currentTarget.querySelector(`[data-price-field="${field}"]`)?.focus();
+    return;
+  }
   if (!readyPreview.value || inactive.value) return;
   const reduce = form.intent === 'reduce';
   emit('command', { type: `${form.type}-${reduce ? 'close' : 'open'}`, ...(reduce ? {} : { side: form.intent }), contracts: readyPreview.value.contracts,
@@ -67,9 +82,9 @@ onBeforeUnmount(()=>previewLoader.cancel());
           <button v-if="position" type="button" :aria-pressed="form.intent==='reduce'" :disabled="inactive" @click="form.intent='reduce'">平仓</button>
         </div>
         <div class="order-type-row"><div class="crypto-section-tabs" aria-label="委托类型"><button type="button" :aria-pressed="form.type==='market'" :disabled="inactive" @click="form.type='market'">市价</button><button type="button" :aria-pressed="form.type==='limit'" :disabled="inactive" @click="form.type='limit'">限价</button></div><UiTooltip clickable label="委托类型说明" content="市价：从下一分钟起按可用容量成交，可能滑点或部分成交。限价：只在符合指定价格时成交，余量继续等待。平仓只减仓，不反向开仓。" /></div>
-        <label v-if="form.type === 'limit'" class="order-field">限价 · USDT<UiInput v-model="form.limitPrice" aria-label="委托限价" inputmode="decimal" required :disabled="inactive" /></label>
+        <label v-if="form.type === 'limit'" class="order-field">限价 · USDT<UiInput v-model="form.limitPrice" aria-label="委托限价" data-price-field="limitPrice" :invalid="validationShown&&Boolean(priceErrors.limitPrice)" :aria-invalid="validationShown&&Boolean(priceErrors.limitPrice)" :aria-describedby="validationShown&&priceErrors.limitPrice?'crypto-active-alert':undefined" inputmode="decimal" required :disabled="inactive" @blur="validatePrices" /></label>
         <div class="order-field">
-<div class="order-field-title"><label :for="`order-quantity-${session.id}`">{{ form.intent==='reduce'?`平仓数量 · 持有 ${position?.contracts??0} 张`:'委托数量' }}</label><UiTooltip clickable label="数量与单位说明" content="张：合约数量。BTC/ETH：对应币数。USDT：名义金额，不是保证金；按当前最新价或委托限价换算张数，并按步长向下取整。预算估仓可在高级设置中选择。" /></div>
+<div class="order-field-title"><label :for="`order-quantity-${session.id}`">{{ form.intent==='reduce'?`平仓数量 · 持有 ${position?.contracts??0} 张`:form.unit==='quote'?'委托金额 · USDT':'委托数量' }}</label><UiTooltip clickable label="数量与单位说明" content="张：合约数量。BTC/ETH：对应币数。USDT：名义金额，不是保证金；按当前最新价或委托限价换算张数，并按步长向下取整。预算估仓可在高级设置中选择。" /></div>
           <div v-if="form.sizingMode === 'contracts'" class="crypto-quantity-row"><UiInput :id="`order-quantity-${session.id}`" v-model="form.contracts" aria-label="委托张数" inputmode="decimal" required placeholder="填写数量" :disabled="inactive" /><UiSelect v-model="form.unit" aria-label="数量单位" :disabled="inactive"><option value="contracts">张</option><option value="base">{{ session.instrumentId.startsWith('BTC')?'BTC':'ETH' }}</option><option value="quote">USDT</option></UiSelect></div>
           <div v-else class="order-estimated-quantity" role="status">{{ readyPreview?`${readyPreview.contracts} 张`:'等待预算估算' }}<small>{{ form.sizingMode==='margin'?'按保证金':'按风险预算' }}</small></div>
         </div>
@@ -80,7 +95,7 @@ onBeforeUnmount(()=>previewLoader.cancel());
             <label v-if="form.sizingMode !== 'contracts'" class="order-field">{{ form.sizingMode==='margin'?'保证金预算 · USDT':'风险预算 · USDT' }}<UiInput v-model="form.sizingAmount" :aria-label="form.sizingMode==='margin'?'保证金预算':'风险预算'" inputmode="decimal" required :disabled="inactive" /></label>
             <template v-if="form.intent!=='reduce'">
               <div class="order-field-title"><span>自动止盈止损</span><UiTooltip clickable label="止盈止损说明" content="可只填一项。随开仓委托提交，成交后生效；触发后按市价减仓，可能滑点或部分成交。一腿触发取消另一腿。已生效保护显示在相同触发价格类型的图上，待成交保护以虚线标注。" /></div>
-              <div class="two-fields"><label class="order-field">止损价<UiInput v-model="form.stopLoss" aria-label="自动止损价" inputmode="decimal" placeholder="可选" :disabled="inactive" /></label><label class="order-field">止盈价<UiInput v-model="form.takeProfit" aria-label="自动止盈价" inputmode="decimal" placeholder="可选" :disabled="inactive" /></label></div>
+              <div class="two-fields"><label class="order-field">止损价<UiInput v-model="form.stopLoss" aria-label="自动止损价" data-price-field="stopLoss" :invalid="validationShown&&Boolean(priceErrors.stopLoss)" :aria-invalid="validationShown&&Boolean(priceErrors.stopLoss)" :aria-describedby="validationShown&&priceErrors.stopLoss?'crypto-active-alert':undefined" inputmode="decimal" placeholder="可选" :disabled="inactive" @blur="validatePrices" /></label><label class="order-field">止盈价<UiInput v-model="form.takeProfit" aria-label="自动止盈价" data-price-field="takeProfit" :invalid="validationShown&&Boolean(priceErrors.takeProfit)" :aria-invalid="validationShown&&Boolean(priceErrors.takeProfit)" :aria-describedby="validationShown&&priceErrors.takeProfit?'crypto-active-alert':undefined" inputmode="decimal" placeholder="可选" :disabled="inactive" @blur="validatePrices" /></label></div>
               <label class="order-field">触发参考<UiSelect v-model="form.reference" aria-label="保护触发参考" :disabled="inactive"><option value="last">最新价</option><option value="mark">标记价格</option></UiSelect></label>
             </template>
             <label class="order-field">操作理由 · 可选<UiTextarea v-model="form.note" aria-label="操作理由" maxlength="2000" :disabled="inactive" placeholder="记录这次判断" /></label>

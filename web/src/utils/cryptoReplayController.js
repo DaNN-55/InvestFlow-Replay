@@ -64,7 +64,7 @@ export function createCryptoReplayController({ api, storage, uuid = () => crypto
       } else await overview();
       return true;
     } catch (error) {
-      state.error = errorText(error); return false;
+      state.error = errorText(error, state.session?.contract); return false;
     } finally { state.busy = false; publish(); }
   }
   const calls = { create: (p) => api.createReplaySession(p.body), command: (p) => api.cryptoAction(p.id,p.body), advance: (p) => api.advanceReplaySession(p.id,p.body), finish: (p) => api.finishReplaySession(p.id,p.body), blind: (p) => api.saveReplayBlindReview(p.id,p.body), reveal: (p) => api.revealReplaySession(p.id,p.body), post: (p) => api.saveReplayPostReview(p.id,p.body), retrain: (p) => api.cryptoRetrain(p.id,p.body) };
@@ -84,7 +84,7 @@ export function createCryptoReplayController({ api, storage, uuid = () => crypto
       const rejectedCreate = p.kind === 'create' && error.details?.actionOutcome === 'not-committed';
       if ((error.status >= 400 && error.status < 500) || rejectedCreate) { state.pending = null; persist(); }
       if (acknowledged || (p.kind !== 'create' && !state.pending)) state.readStale = true;
-      state.error = errorText(error); return false;
+      state.error = errorText(error, state.session?.contract); return false;
     } finally { state.busy = false; publish(); }
   }
   function act(kind, body = {}) {

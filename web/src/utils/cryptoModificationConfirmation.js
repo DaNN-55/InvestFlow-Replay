@@ -191,6 +191,7 @@ export function createCryptoModificationConfirmation({
     } else publish();
   }
   function reset() { if (!disposed) { clear(); saving = null; publish(); } }
+  function dismissNotice() { notice = ''; publish(); }
   function dispose() { reset(); disposed = true; }
-  return { get view() { return view(); }, openOrder, updateOrder, handlePriceDrag, openCancellation, retryPreview, applyMaximum, confirm, cancel, reconcile, reset, dispose };
+  return { get view() { return view(); }, openOrder, updateOrder, handlePriceDrag, openCancellation, retryPreview, applyMaximum, confirm, cancel, reconcile, reset, dismissNotice, dispose };
 }

@@ -14,6 +14,17 @@ export function snapProtectionPrice(value, tick) {
   return scale?`${padded.slice(0,-scale)}.${padded.slice(-scale)}`.replace(/\.?0+$/,''):padded;
 }
 
+export function cryptoPriceInputError(value, tick, label) {
+  const text = String(value);
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text) || text.replace('.', '').length > 32 || !(Number(text) > 0)) return `${label}须为大于 0 的数字。`;
+  const [whole, fraction = ''] = text.split('.'), [stepWhole, stepFraction = ''] = String(tick).split('.');
+  const quantity = BigInt(whole + fraction), step = BigInt(stepWhole + stepFraction);
+  const aligned = (quantity * 10n ** BigInt(stepFraction.length)) % (step * 10n ** BigInt(fraction.length)) === 0n;
+  const suggested = snapProtectionPrice(Number(text), tick);
+  if (!aligned) return `${label} ${text} 不符合价格精度，须按 ${tick} USDT 递增${suggested ? `，例如 ${suggested}` : ''}。`;
+  return '';
+}
+
 export function createProtectionDraft(session,leg,value) {
   if(!['stopLoss','takeProfit'].includes(leg)||session?.status!=='active'||session.ending||!session.account?.position||session.protection?.triggeredLeg||!session.protection?.[leg]) return null;
   const price=snapProtectionPrice(value,session.contract.tickSz);
