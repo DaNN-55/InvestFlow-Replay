@@ -31,13 +31,14 @@ describe("replay KLineChart configuration", () => {
     assert.equal(styles.crosshair.horizontal.text.color, "#ffffff");
   });
 
-  it("shows compact crypto OHLC on hover without duplicated volume or empty percentage change", () => {
+  it("shows bold compact crypto OHLC and percentage change without duplicated volume", () => {
     const styles = createReplayChartStyles({background:"white",grid:"gray",text:"black",compact:true});
     assert.equal(styles.candle.tooltip.showRule,"follow_cross");
     assert.equal(styles.candle.tooltip.showType,"rect");
     assert.deepEqual(styles.candle.tooltip.rect,{color:"white",borderColor:"gray"});
     assert.equal(styles.candle.tooltip.text.color,"black");
-    assert.deepEqual(styles.candle.tooltip.custom({current:{}}).map(item=>item.title),["time","open","high","low","close"]);
+    assert.equal(styles.candle.tooltip.text.weight, 'bold');
+    assert.deepEqual(styles.candle.tooltip.custom({current:{pctChange:1.25}}).map(item=>typeof item.title==='string'?item.title:item.title.text),["time","open","high","low","close","涨跌幅: "]);
   });
 
   it("appends main-chart indicator values to the candle data row", () => {
@@ -59,7 +60,7 @@ describe("replay KLineChart configuration", () => {
 
     assert.equal(legends.length, 8);
     assert.deepEqual(legends[5], {
-      title: { text: "涨幅: ", color: "#64748b" },
+      title: { text: "涨跌幅: ", color: "#64748b" },
       value: { text: "--", color: "#64748b" },
     });
     assert.deepEqual(legends.at(-1), {
@@ -82,6 +83,8 @@ describe("replay KLineChart configuration", () => {
 
     assert.deepEqual(rise[5].value, { text: "+2.35%", color: "#ef4444" });
     assert.deepEqual(fall[5].value, { text: "-1.20%", color: "#10b981" });
+    assert.equal(styles.candle.tooltip.text.weight, 'bold');
+    assert.deepEqual(styles.candle.tooltip.custom({ current: { pctChange: 0 } })[5].value, { text: '0.00%', color: '#64748b' });
   });
 
   it("keeps red-rise and green-fall candle colors independent from the theme", () => {

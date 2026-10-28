@@ -24,7 +24,7 @@ function createPctChangeLegend(current, { rise, fall, text }) {
     ? text
     : pctChange > 0 ? rise : fall;
   return {
-    title: { text: "涨幅: ", color: text },
+    title: { text: "涨跌幅: ", color: text },
     value: {
       text: available
         ? `${pctChange > 0 ? "+" : ""}${pctChange.toFixed(2)}%`
@@ -62,10 +62,12 @@ export function createReplayChartStyles({
         noChangeWickColor: text,
       },
       tooltip: {
-        ...(compact ? { showRule:"follow_cross", showType:"rect", rect:{color:background,borderColor:grid}, text:{color:text,size:11} } : {}),
+        text: { weight: "bold", ...(compact ? { color:text, size:11 } : {}) },
+        ...(compact ? { showRule:"follow_cross", showType:"rect", rect:{color:background,borderColor:grid} } : {}),
         custom: (data) => [
           ...BASE_CANDLE_TOOLTIP_LEGENDS,
-          ...(compact ? [] : [createPctChangeLegend(data.current, { rise, fall, text }), { title:"volume", value:"{volume}" }]),
+          createPctChangeLegend(data.current, { rise, fall, text }),
+          ...(compact ? [] : [{ title:"volume", value:"{volume}" }]),
           ...(mainIndicatorLegends(data.current?.replayIndex) ?? []),
         ],
       },

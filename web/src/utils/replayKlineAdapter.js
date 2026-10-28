@@ -62,6 +62,8 @@ export function adaptReplayBars(bars = []) {
       bar?.datetime ?? bar?.displayLabel ?? `第${index + 1}根`,
     );
     labelByTimestamp.set(timestamp, replayLabel);
+    const previousClose = index > 0 ? Number(bars[index - 1]?.close) : null;
+    const derivedPctChange = previousClose > 0 ? (close - previousClose) / previousClose * 100 : null;
     return {
       timestamp,
       open,
@@ -70,7 +72,7 @@ export function adaptReplayBars(bars = []) {
       close,
       volume: optionalFiniteNumber(bar?.volume, 0, "成交量", index),
       amount: optionalFiniteNumber(bar?.amount, 0, "成交额", index),
-      pctChange: optionalFiniteNumber(bar?.pctChange, null, "涨幅", index),
+      pctChange: optionalFiniteNumber(bar?.pctChange, derivedPctChange, "涨跌幅", index),
       replayIndex: index,
       replayKey: createReplayKey(bar, index, period),
       replayLabel,
