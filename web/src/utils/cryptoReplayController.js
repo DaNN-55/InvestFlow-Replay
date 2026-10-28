@@ -8,7 +8,7 @@ function readSavedAttempt(storage) {
 export function createCryptoReplayController({ api, storage, uuid = () => crypto.randomUUID(), changed = () => {}, restoreSession = true }) {
   const saved = readSavedAttempt(storage);
   let targetSessionId = restoreSession ? saved.sessionId ?? null : null;
-  const state = { session: null, busy: false, readStale: Boolean(targetSessionId), error: '', notice: '', pending: saved.pending ?? null, timeframe: 5, timeframes: [5], markets: {}, market: null, traces: [], ledger: [], history: [], analysis: null, analysisError: '', pool: null, poolError: '' };
+  const state = { session: null, busy: false, readStale: Boolean(targetSessionId), error: '', notice: '', orderReceipt: null, pending: saved.pending ?? null, timeframe: 5, timeframes: [5], markets: {}, market: null, traces: [], ledger: [], history: [], analysis: null, analysisError: '', pool: null, poolError: '' };
   const reader = createCryptoSessionReader({ getSession: id => api.getReplaySession(id), readMarket: (id, params) => api.cryptoMarket(id, params), readAudit: (id, kind, params) => api.cryptoAudit(id, kind, params) });
   const publish = () => changed({ ...state });
   const persist = () => storage.setItem(CRYPTO_STORAGE_KEY, JSON.stringify({ sessionId: targetSessionId, pending: state.pending }));
@@ -71,27 +71,44 @@ export function createCryptoReplayController({ api, storage, uuid = () => crypto
   async function send(p) {
     if (state.busy) return false;
     state.busy = true; state.error = ''; state.notice = ''; publish();
-    let acknowledged = false;
+    let acknowledged = false, current = p;
     try {
-      state.pending = p; persist(); publish(); // Keep the exact durable intent before sending.
-      const result = await calls[p.kind](p);
-      targetSessionId = result.session.id;
-      state.pending = null; acknowledged = true; selectTarget(targetSessionId); publish();
-      // An idempotent response is an old commit; always read the current server version.
-      const latest = await api.getReplaySession(targetSessionId);
-      await data(latest.session); state.notice = result.idempotent ? '已核对原动作，只记录一次。' : '已保存。'; return true;
+      while (true) {
+        state.pending = current; persist(); publish(); // Keep the exact durable intent before sending.
+        const result = await calls[current.kind](current);
+        targetSessionId = result.session.id; acknowledged = true;
+        if (current.advanceActionId) {
+          state.orderReceipt = current.body.actionId;
+          current = { kind: 'advance', id: targetSessionId, orderActionId: current.body.actionId,
+            body: { actionId: current.advanceActionId, expectedRevision: result.session.revision, minutes: 1 } };
+          // Persist the continuation before unlocking or announcing the accepted order.
+          state.pending = current; selectTarget(targetSessionId); publish();
+          continue;
+        }
+        if (current.orderActionId) state.orderReceipt = current.orderActionId;
+        state.pending = null; selectTarget(targetSessionId); publish();
+        // An idempotent response is an old commit; always read the current server version.
+        const latest = await api.getReplaySession(targetSessionId);
+        await data(latest.session);
+        state.notice = current.orderActionId ? '委托已提交，已推进 1 分钟。' : result.idempotent ? '已核对原动作，只记录一次。' : '已保存。';
+        return true;
+      }
     } catch (error) {
-      const rejectedCreate = p.kind === 'create' && error.details?.actionOutcome === 'not-committed';
+      const rejectedCreate = current.kind === 'create' && error.details?.actionOutcome === 'not-committed';
       if ((error.status >= 400 && error.status < 500) || rejectedCreate) { state.pending = null; persist(); }
-      if (acknowledged || (p.kind !== 'create' && !state.pending)) state.readStale = true;
-      state.error = errorText(error, state.session?.contract); return false;
+      if (acknowledged || (current.kind !== 'create' && !state.pending)) state.readStale = true;
+      state.error = `${current.orderActionId ? '委托已提交，下一分钟的结果尚未核对。' : ''}${errorText(error, state.session?.contract)}`; return false;
     } finally { state.busy = false; publish(); }
   }
-  function act(kind, body = {}) {
+  function act(kind, body = {}, advanceAfterOrder = false) {
     if (state.pending || state.busy || state.readStale || (kind !== 'create' && !state.session)) return Promise.resolve(false);
-    return send({ kind, id: state.session?.id, body: { actionId: uuid(), ...(kind === 'create' ? {} : { expectedRevision: state.session.revision }), ...body } });
+    return send({ kind, id: state.session?.id, body: { actionId: uuid(), ...(kind === 'create' ? {} : { expectedRevision: state.session.revision }), ...body }, ...(advanceAfterOrder ? { advanceActionId: uuid() } : {}) });
   }
   return { state, sync, act, retry: () => state.pending ? send(state.pending) : sync(),
+    placeOrder(command, note = '') {
+      if (!['market-open', 'market-close', 'limit-open', 'limit-close'].includes(command?.type)) return Promise.resolve(false);
+      return act('command', { command, ...(note ? { note } : {}) }, true);
+    },
     get targetSessionId() { return targetSessionId; },
     syncPendingFromStorage() { if (!state.busy) { state.pending = readSavedAttempt(storage).pending ?? null; publish(); } },
     async period(value) { if (state.busy) return; state.timeframe = Number(value); state.timeframes = [state.timeframe]; return sync(); },

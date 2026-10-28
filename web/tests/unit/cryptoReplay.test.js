@@ -121,7 +121,8 @@ test('F4 controlled lines follow price references, remaining quantity and cancel
   s.orders = [{ id: 1, type: 'limit', intent: 'increase', side: 'long', remainingContracts: '6', limitPrice: '48000' }];
   s.protection = { contracts: '4', stopLoss: { price: '47000', reference: 'mark' } };
   const last = cryptoChartLines(s, 'last'), mark = cryptoChartLines(s, 'mark');
-  assert.equal(last.length, 2); assert.ok(last.every(l => l.dashed)); assert.equal(last[1].contracts, '6');
+  assert.equal(last.length, 3); assert.ok(last.slice(0, 2).every(l => l.dashed)); assert.equal(last[1].contracts, '6');
+  assert.equal(last[2].reference, 'mark'); assert.equal(last[2].dashed, false);
   assert.equal(mark.length, 1); assert.equal(mark[0].dashed, false); assert.match(mark[0].label, /自动止损.*4张.*mark/);
   s.protection.contracts = '2'; assert.match(cryptoChartLines(s, 'mark')[0].label, /2张/);
   s.orders = []; s.protection = null; assert.equal(cryptoChartLines(s, 'mark').length, 0); assert.equal(cryptoChartLines(s, 'last').length, 1);
@@ -152,7 +153,8 @@ test('chart distinguishes filled long/short positions, active protection and pen
   assert.ok(last.some(l=>l.label.includes('待成交后止损')&&l.dashed&&l.contracts==='2'));
   assert.ok(last.some(l=>l.id.endsWith(':stopLoss')&&!l.dashed&&l.contracts==='3'));
   assert.ok(mark.some(l=>l.id.endsWith(':takeProfit')));
-  assert.ok(!last.some(l=>l.id.endsWith(':takeProfit')));
+  assert.ok(last.some(l=>l.id.endsWith(':takeProfit')&&l.reference==='mark'));
+  assert.ok(mark.some(l=>l.id.endsWith(':stopLoss')&&l.reference==='last'));
   s.orders[0].protectionApplied=true;
   assert.ok(!cryptoChartLines(s,'last').some(l=>l.label.includes('待成交后止损')));
   s.account.position.side='short';s.risk.unrealizedPnl='-2';

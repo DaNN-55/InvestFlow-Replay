@@ -78,7 +78,7 @@ test('USDT order validates both protective prices before writing and keeps the r
   expect(calls[0].command.contracts).toBe('10');
   expect(calls[0].command.protection).toEqual({ stopLoss: { price: '65373.6', reference: 'last' }, takeProfit: { price: '64003.8', reference: 'last' } });
   const final = await (await request.get(`${fixture.url}${path}/${session.id}`)).json();
-  expect(final.session.revision).toBe(1);
+  expect(final.session.revision).toBe(2); expect(final.session.elapsedMinutes).toBe(1);
 });
 
 test('a rejected server action has one persistent explanation and resync only reads data', async ({ page, request }) => {
@@ -172,5 +172,6 @@ test('a lost committed response keeps the original request and reminder until th
   await expect(alert).toHaveCount(0);
   expect(calls).toHaveLength(2);
   expect(calls[1]).toEqual(calls[0]);
-  expect((await (await request.get(`${fixture.url}${path}/${session.id}`)).json()).session.revision).toBe(1);
+  const final = (await (await request.get(`${fixture.url}${path}/${session.id}`)).json()).session;
+  expect(final.revision).toBe(2); expect(final.elapsedMinutes).toBe(1);
 });
