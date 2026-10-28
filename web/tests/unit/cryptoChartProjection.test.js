@@ -52,13 +52,16 @@ test('one missing volume suppresses that pane volume and missing markets keep em
 
 test('price references retain position, manual plan, order and attached protection semantics', () => {
   const input = fixture(), result = projectCryptoCharts(input);
-  assert.deepEqual(result.models[0].lines.map(item => item.id), ['projection:position', 'projection:manual', 'projection:order-7', 'projection:order-7-stopLoss', 'projection:stopLoss']);
-  assert.deepEqual(result.models[1].lines.map(item => item.id), ['projection:position', 'projection:takeProfit']);
+  assert.deepEqual(result.models[0].lines.map(item => item.id), ['projection:position', 'projection:manual', 'projection:order-7', 'projection:order-7-stopLoss', 'projection:stopLoss', 'projection:takeProfit']);
+  assert.deepEqual(result.models[1].lines.map(item => item.id), ['projection:position', 'projection:order-7-stopLoss', 'projection:stopLoss', 'projection:takeProfit']);
+  assert.equal(line(result, 1, 'stopLoss').reference, 'last');
+  assert.match(line(result, 1, 'stopLoss').compactLabel, /最新价触发/);
+  assert.equal(line(result, 0, 'takeProfit').reference, 'mark');
   assert.equal(line(result, 0, 'position').moneyTitle, '12.50 USDT');
   assert.equal(line(result, 0, 'order-7').cancelLabel, '限价委托 #7，48000');
   assert.equal(line(result, 0, 'stopLoss').cancelLabel, '自动止损，49000');
   assert.equal(line(result, 1, 'takeProfit').cancelLabel, '自动止盈，52000');
-  assert.deepEqual(actionable(result.models[0]).map(item => item.id), ['projection:order-7', 'projection:stopLoss']);
+  assert.deepEqual(actionable(result.models[0]).map(item => item.id), ['projection:order-7', 'projection:stopLoss', 'projection:takeProfit']);
   assert.ok(actionable(result.models[0]).every(item => item.draggable && item.cancellable));
   assert.equal(line(result, 0, 'order-7-stopLoss').estimate, undefined);
   input.session.orders[0].protectionApplied = true;
@@ -83,8 +86,8 @@ for (const draggingIndex of [0, 1, 3]) {
     const input = fixture(); input.display.kinds.fill('last'); input.display.periods.fill(5);
     input.interaction.draggingIndex = draggingIndex;
     const result = projectCryptoCharts(input);
-    assert.deepEqual(result.models.map(model => actionable(model).length), [0, 1, 2, 3].map(index => index === draggingIndex ? 2 : 0));
-    assert.ok(result.models.every(model => model.lines.length === 5));
+    assert.deepEqual(result.models.map(model => actionable(model).length), [0, 1, 2, 3].map(index => index === draggingIndex ? 3 : 0));
+    assert.ok(result.models.every(model => model.lines.length === 6));
   });
 }
 
@@ -106,10 +109,10 @@ test('absent position prevents protection editing but does not lock pending limi
   assert.equal(actionable(result.models[1]).length, 0); assert.equal(result.rewardRisk, null);
 });
 
-test('protective draft overlays only matching price kinds and preserves the original line and sibling', () => {
+test('protective draft overlays every price kind and preserves the original line, reference and sibling', () => {
   const input = fixture(); input.interaction.priceDraft = { leg: 'stopLoss', price: '49500' };
   const result = projectCryptoCharts(input), ghost = line(result, 0, 'stopLoss:draft');
-  assert.deepEqual(result.models.map(model => model.lines.filter(item => item.preview).length), [1, 0, 1, 0]);
+  assert.deepEqual(result.models.map(model => model.lines.filter(item => item.preview).length), [1, 1, 1, 1]);
   assert.equal(line(result, 0, 'stopLoss').price, '49000'); assert.equal(line(result, 1, 'takeProfit').price, '52000');
   assert.equal(ghost.price, '49500'); assert.equal(ghost.contracts, '2'); assert.equal(ghost.label, '待确认止损');
   assert.equal(ghost.estimate.pnl, -10); assert.equal(ghost.estimateText, '预计 -10.00 USDT · -10.00%');

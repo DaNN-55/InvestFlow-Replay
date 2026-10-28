@@ -19,7 +19,7 @@ export const formatProtectionEstimate=estimate=>estimate?`预计 ${estimate.pnl>
 export function repriceProtectionLine(line,price) {
   if(!line.estimateContext) return {...line,price};
   const estimate=cryptoProtectionEstimate(line.estimateContext,price);
-  return {...line,price,estimate,moneyTitle:estimate?`${estimate.pnl} USDT`:line.moneyTitle,estimateText:formatProtectionEstimate(estimate),compactLabel:estimate?`${line.estimateLeg==='stopLoss'?'止损':'止盈'} ${formatProtectionEstimate(estimate).replace('预计 ','')}`:line.compactLabel};
+  return {...line,price,estimate,moneyTitle:estimate?`${estimate.pnl} USDT`:line.moneyTitle,estimateText:formatProtectionEstimate(estimate),compactLabel:estimate?`${line.estimateLeg==='stopLoss'?'止损':'止盈'} ${formatProtectionEstimate(estimate).replace('预计 ','')} · ${line.reference==='mark'?'标记价':'最新价'}触发`:line.compactLabel};
 }
 
 export function cryptoProtectionRewardRisk(session,preview=null) {

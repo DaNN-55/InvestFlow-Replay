@@ -44,6 +44,8 @@ function range(index,value) {
   for(const [i,chart] of charts) if(i!==index) chart?.syncRange(value,prefs.value.dateRange);
 }
 function clearCrosshair() {for(const c of charts.values()) c?.syncCrosshair(null);}
+function latest() {charts.forEach(chart=>chart.latest());}
+defineExpose({latest});
 function outside(event) {if(!root.value?.contains(event.target)) menu.value=false;}
 onMounted(()=>document.addEventListener('pointerdown',outside));
 onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside));
@@ -54,8 +56,8 @@ onBeforeUnmount(()=>document.removeEventListener('pointerdown',outside));
       <div class="crypto-period-shortcuts"><button v-for="p in [5,15,60,240]" :key="p" type="button" :aria-pressed="prefs.periods[selected]===p" :disabled="busy" @click="period(p)">{{ CRYPTO_PERIODS.find(([n])=>n===p)[1] }}</button></div>
       <UiSelect :model-value="prefs.periods[selected]" aria-label="选中图周期" :disabled="busy" @update:model-value="period"><option v-for="[v,label] in CRYPTO_PERIODS" :key="v" :value="v">{{ label }}</option></UiSelect>
       <UiSelect :model-value="prefs.kinds[selected]" aria-label="选中图价格类型" @update:model-value="kind"><option value="last">最新价</option><option value="mark">标记价格</option></UiSelect>
-      <UiTooltip clickable wide label="止盈止损估算说明" content="预计金额是假设剩余持仓全部按标签价格退出的价格盈亏，不含手续费、滑点和资金费；收益率＝预计盈亏÷剩余开仓保证金基准（剩余入场成本÷本局杠杆）。追加保证金不改变分母。标记价触发不等于成交价，实际成交和强平结果可能不同。" />
-      <button class="crypto-icon" type="button" title="回到当前" aria-label="回到当前" @click="charts.forEach(chart=>chart.latest())"><LocateFixed :size="17" /></button>
+      <UiTooltip clickable wide label="止盈止损估算说明" content="预计金额是假设剩余持仓全部按标签价格退出的价格盈亏，不含手续费、滑点和资金费；收益率＝预计盈亏÷剩余开仓保证金基准（剩余入场成本÷本局杠杆）。追加保证金不改变分母。保护线在最新价与标记价图上均显示，线标注明实际触发参考。标记价触发不等于成交价，实际成交和强平结果可能不同。" />
+      <button class="crypto-icon" type="button" title="回到当前" aria-label="回到当前" @click="latest"><LocateFixed :size="17" /></button>
       <button class="crypto-icon" type="button" title="图表布局与联动" aria-label="图表布局与联动" :aria-expanded="menu" @click="menu=!menu"><Grid2X2 :size="17" /></button>
       <button class="crypto-icon" type="button" title="放大选中图 / 恢复布局" aria-label="放大选中图或恢复布局" @click="maximized=maximized==null?selected:null"><Maximize2 :size="17" /></button>
       <button class="crypto-icon" type="button" :title="prefs.collapsed?'展开下单面板':'收起下单面板'" :aria-label="prefs.collapsed?'展开下单面板':'收起下单面板'" @click="patch({collapsed:!prefs.collapsed})"><PanelRightOpen v-if="prefs.collapsed" :size="17" /><PanelRightClose v-else :size="17" /></button>

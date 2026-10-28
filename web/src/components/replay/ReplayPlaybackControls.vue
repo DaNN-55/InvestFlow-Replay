@@ -8,6 +8,7 @@ defineProps({
   playing:Boolean,playDisabled:Boolean,stepsDisabled:Boolean,speedDisabled:Boolean,
   speed:{type:[String,Number],required:true},speeds:{type:Array,required:true},steps:{type:Array,required:true},
   progress:{type:Number,default:0},message:{type:String,default:''},
+  shortcuts:{type:Object,default:()=>({})},
   playLabel:{type:String,default:'自动播放'},pauseLabel:{type:String,default:'暂停'},speedLabel:{type:String,default:'自动播放速度'},help:{type:String,default:'空格或 → 推进；播放时发生交易或风险事件会暂停。'},
 });
 const emit=defineEmits(['toggle','step','speed']);
@@ -21,7 +22,7 @@ const emit=defineEmits(['toggle','step','speed']);
       <UiTooltip clickable :content="help" label="回放操作说明" />
     </div>
     <div class="replay-playback__progress"><progress :value="progress" max="100" aria-label="练习进度" /><small>{{ Math.round(progress*100)/100 }}%</small></div>
-    <div class="replay-playback__steps" :style="{'--step-count':steps.length}"><UiButton v-for="step in steps" :key="step.value" size="sm" variant="secondary" :disabled="stepsDisabled" @click="emit('step',step.value)">{{ step.label }}</UiButton></div>
+    <div class="replay-playback__steps" :style="{'--step-count':steps.length}"><UiButton v-for="step in steps" :key="step.value" size="sm" variant="secondary" :disabled="stepsDisabled" :aria-label="step.label" :aria-keyshortcuts="shortcuts[step.value]" :title="shortcuts[step.value]?`快捷键 ${shortcuts[step.value]}`:undefined" @click="emit('step',step.value)">{{ step.label }}</UiButton></div>
     <p v-if="message" class="replay-playback__message" role="status">{{ message }}</p>
     <div v-if="$slots.actions" class="replay-playback__actions"><slot name="actions" /></div>
   </section>

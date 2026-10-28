@@ -60,7 +60,7 @@ export function cryptoRiskDetails(session) {
 export function cryptoChartLines(session, kind) {
   if (!session) return [];
   const lines = [], add = (id, price, label, reference, style, contracts = null) => {
-    if (price == null || price === '' || !Number.isFinite(Number(price)) || (kind && reference !== 'entry' && reference !== kind)) return;
+    if (price == null || price === '' || !Number.isFinite(Number(price)) || (kind && reference !== 'entry' && reference !== kind && !style.protectionLeg && !style.attachedProtectionLeg)) return;
     const basis=reference==='entry'?'':` · ${reference}`;
     lines.push({ id: `${session.id}:${id}`, price, label: `${label}${contracts ? ` · ${contracts}张` : ''}${basis}`, reference, contracts, ...style });
   };
@@ -76,7 +76,7 @@ export function cryptoChartLines(session, kind) {
     if (order.type === 'limit') add(`order-${order.id}`, order.limitPrice, `待成交 · ${order.intent === 'reduce' ? '减仓' : order.side === 'long' ? '开多' : '开空'}`, 'last', { color: '#2563eb', dashed: true, compactLabel:`限价${order.intent==='reduce'?'减仓':order.side==='long'?'多':'空'} · ${order.remainingContracts}张`, orderId:order.id }, order.remainingContracts);
     if(!order.protectionApplied) for(const [leg,label] of [['stopLoss','止损'],['takeProfit','止盈']]) {
       const protection=order.attachedProtection?.[leg];
-      if(protection) add(`order-${order.id}-${leg}`,protection.price,`待成交后${label}`,protection.reference,{color:leg==='stopLoss'?'#d55d70':'#159875',dashed:true},order.remainingContracts);
+      if(protection) add(`order-${order.id}-${leg}`,protection.price,`待成交后${label} · ${protection.reference==='last'?'最新价':'标记价'}触发`,protection.reference,{color:leg==='stopLoss'?'#d55d70':'#159875',dashed:true,attachedProtectionLeg:leg},order.remainingContracts);
     }
   }
   for (const [leg, label] of [['stopLoss', '自动止损'], ['takeProfit', '自动止盈']]) {

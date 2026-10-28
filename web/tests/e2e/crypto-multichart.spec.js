@@ -207,9 +207,10 @@ test('playback speed stays sequential, stops on fills and preserves visible pref
   expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session.elapsedMinutes).toBe(paused.elapsedMinutes);
   expect(advances.every(a=>a.body.minutes===1&&a.status===200)).toBe(true);
   expect(new Set(advances.map(a=>a.body.expectedRevision)).size).toBe(advances.length);
-  await page.getByRole('textbox',{name:'委托张数',exact:true}).fill('1');
-  await expect(page.getByRole('button',{name:'买入 / 做多',exact:true}).last()).toBeEnabled();
-  await page.getByRole('button',{name:'买入 / 做多',exact:true}).last().click();
+  // Seed a pending order directly: UI submission now already advances its fill minute.
+  const current=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  const submitted=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:current.revision,command:{type:'market-open',side:'long',contracts:'1'}}});
+  expect(submitted.status()).toBe(200);await page.reload();
   await expect(page.getByRole('button',{name:'自动回放',exact:true})).toBeEnabled();
   const before=advances.length;
   await page.getByRole('button',{name:'自动回放',exact:true}).click();
@@ -285,7 +286,7 @@ test('compact order form keeps advanced inputs and makes explanations available 
   await summary.click();
   await page.setViewportSize({width:390,height:844});
   await order.getByRole('button',{name:'下单与合约规格说明'}).click();
-  await expect(page.locator('.ui-tooltip__content')).toContainText('下一分钟');
+  await expect(page.locator('.ui-tooltip__content')).toContainText('自动推进1分钟');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
   await page.keyboard.press('Escape');
   await page.locator('.crypto-playback').screenshot({path:test.info().outputPath('crypto-playback-mobile.png')});
@@ -309,9 +310,6 @@ for(const side of ['long','short']) test(`${side} position and protective lines 
   await expect(order.getByRole('button',{name:action,exact:true}).last()).toBeEnabled();
   await order.getByRole('button',{name:action,exact:true}).last().click();
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
-  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([2,2]);
-  for(const chart of await nativeCharts(page)) expect(chart.lines.every(l=>l.exists&&l.dashed&&l.label.includes('待成交后'))).toBe(true);
-  await advance(page,1);
   await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([3,3]);
   for(const chart of await nativeCharts(page)) {
     expect(chart.lines.every(l=>l.exists&&!l.dashed&&l.contracts==='1')).toBe(true);
@@ -319,7 +317,8 @@ for(const side of ['long','short']) test(`${side} position and protective lines 
     expect(chart.lines[0].label).toContain('mark浮盈');
     expect(chart.colors).toEqual({rise:'#df7180',fall:'#38ae86',volumeRise:'#df7180',volumeFall:'#38ae86'});
   }
-  await expect(order.getByRole('button',{name:action,exact:true}).last()).toBeEnabled();
+  await expect(order.getByRole('button',{name:action,exact:true}).last()).toBeDisabled();
+  await expect(order.getByRole('textbox',{name:'委托张数',exact:true})).toHaveValue('');
   await page.screenshot({path:test.info().outputPath('position-before-theme.png')});
   const previousBackground=(await nativeCharts(page))[0].lines[0].background;
   await page.getByRole('button',{name:'切换主题',exact:true}).click();
@@ -333,23 +332,21 @@ for(const side of ['long','short']) test(`${side} position and protective lines 
   await expect(order.getByRole('button',{name:'提交平仓委托',exact:true})).toBeEnabled();
   await order.getByRole('button',{name:'提交平仓委托',exact:true}).click();
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
-  await advance(page,1);
   await expect.poll(async()=> (await nativeCharts(page)).every(c=>c.lines.every(l=>l.contracts==='0.6'))).toBe(true);
   await page.locator('[data-chart-index="1"]>header button').click();
   await page.getByRole('combobox',{name:'选中图价格类型'}).selectOption('mark');
-  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([3,1]);
+  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([3,3]);
   const current=(await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   const cancelled=await request.post(`${fixture.url}${path}/${id}/actions`,{data:{actionId:crypto.randomUUID(),expectedRevision:current.revision,command:{type:'cancel-protection',leg:'stopLoss'}}});
   expect(cancelled.status()).toBe(200);
   await page.reload();
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
-  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([2,1]);
+  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([2,2]);
   await order.getByRole('button',{name:'平仓',exact:true}).click();
   await order.getByRole('textbox',{name:'委托张数',exact:true}).fill('0.6');
   await expect(order.getByRole('button',{name:'提交平仓委托',exact:true})).toBeEnabled();
   await order.getByRole('button',{name:'提交平仓委托',exact:true}).click();
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
-  await advance(page,1);
   await expect.poll(async()=> (await nativeCharts(page)).every(c=>c.lines.length===0)).toBe(true);
   await expect(order.getByRole('button',{name:'平仓',exact:true})).toHaveCount(0);
   await expect(order.getByRole('button',{name:'买入 / 做多',exact:true}).first()).toHaveAttribute('aria-pressed','true');
@@ -364,7 +361,7 @@ async function protectedPractice(page,request,side='long',contracts='1') {
   expect(advanced.status()).toBe(200);
   await page.reload();
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
-  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([2,2]);
+  await expect.poll(async()=> (await nativeCharts(page)).map(c=>c.lines.length)).toEqual([3,3]);
   return {...practice,session:(await advanced.json()).session};
 }
 
@@ -1486,13 +1483,13 @@ test('an original pending action remains retryable after reload even when its re
   expect(committed.revision).toBe(session.revision+1);
 });
 
-test('four-pane projection isolates the drag source and mirrors only matching draft lines through cancel and confirm',async({page,request})=>{
+test('four-pane projection isolates the drag source and mirrors protective drafts on every price kind through cancel and confirm',async({page,request})=>{
   const {id,session,commands}=await protectedPractice(page,request);
   await page.getByRole('button',{name:'图表布局与联动',exact:true}).click();
   await page.getByRole('button',{name:'四图',exact:true}).click();
   await page.getByRole('button',{name:'收起布局设置',exact:true}).click();
   await expect(page.locator('.crypto-chart-tile')).toHaveCount(4);
-  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.length)).toEqual([2,2,2,2]);
+  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.length)).toEqual([3,3,3,3]);
   const stopId=`${id}:stopLoss`,draftId=`${stopId}:draft`,confirm=page.getByRole('region',{name:'确认止盈止损调整'});
   const getSession=async()=> (await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
   // Clear KLineCharts' 5px drag threshold in the compact 15min pane.
@@ -1507,10 +1504,10 @@ test('four-pane projection isolates the drag source and mirrors only matching dr
   expect((await nativeCharts(page))[0].lines.find(item=>item.id===stopId).price).toBe(Number(session.protection.stopLoss.price));
   expect(commands).toHaveLength(0);expect(await getSession()).toEqual(session);
   await page.mouse.up();await expect(confirm).toBeVisible();
-  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.filter(item=>item.id===draftId).length)).toEqual([1,0,1,1]);
+  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.filter(item=>item.id===draftId).length)).toEqual([1,1,1,1]);
   const pending=await nativeCharts(page),price=pending[2].lines.find(item=>item.id===draftId).price;
   expect(pending.every(chart=>chart.lines.every(item=>!item.draggable))).toBe(true);
-  for(const index of [0,2,3]) {
+  for(const index of [0,1,2,3]) {
     expect(pending[index].lines.find(item=>item.id===stopId).price).toBe(Number(session.protection.stopLoss.price));
     const draft=pending[index].lines.find(item=>item.id===draftId);
     expect(draft.price).toBe(price);expect(draft.preview&&draft.dashed).toBe(true);assertProtectionEstimate(draft,session);
@@ -1524,7 +1521,7 @@ test('four-pane projection isolates the drag source and mirrors only matching dr
 
   await page.setViewportSize({width:390,height:953});
   await dragProtection(page,0,stopId,49920);await expect(confirm).toBeVisible();
-  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.filter(item=>item.id===draftId).length)).toEqual([1,0,1,1]);
+  await expect.poll(async()=> (await nativeCharts(page)).map(chart=>chart.lines.filter(item=>item.id===draftId).length)).toEqual([1,1,1,1]);
   const mobileDraft=(await nativeCharts(page))[0].lines.find(item=>item.id===draftId);
   await assertRewardRisk(page,session,{leg:'stopLoss',price:mobileDraft.price});
   await expect(page.getByTestId('crypto-protection-draft-estimate')).toHaveText(mobileDraft.estimateText);
