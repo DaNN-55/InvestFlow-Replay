@@ -624,5 +624,46 @@
         }
       ]
     }
-  ]
+  ],
+  "entryUpdate": {
+    "baseCommit": "fc0c103",
+    "capturedAt": "2026-10-26T14:56:27+08:00",
+    "dirty": true,
+    "scope": "仅本轮首页入口说明；原始 files 快照不变",
+    "files": [
+      {
+        "path": "web/src/views/MarketReplayView.vue",
+        "sha256": "39bac9c333ee6c347d33f49f791e5a9e21d9229f143492da2d6efeae6f7d313a",
+        "anchors": [
+          {
+            "id": "a-entry-view",
+            "line": 52,
+            "locator": "function resumeRequestedSession"
+          }
+        ]
+      },
+      {
+        "path": "web/src/composables/useReplayAttempt.js",
+        "sha256": "d47674438f3108f56a8fafee72261313bc67dfa83093e5afe84e8ce936822777",
+        "anchors": [
+          {
+            "id": "a-entry-attempt",
+            "line": 8,
+            "locator": "const sessionController ="
+          }
+        ]
+      },
+      {
+        "path": "web/src/views/CryptoReplayView.vue",
+        "sha256": "a25582b3e34a68b9fe06e3ff98d2eb9264a22ee3c31f6c4e00329c0744fc3e22",
+        "anchors": [
+          {
+            "id": "c-entry-view",
+            "line": 26,
+            "locator": "const controller=createCryptoReplayController"
+          }
+        ]
+      }
+    ]
+  }
 }

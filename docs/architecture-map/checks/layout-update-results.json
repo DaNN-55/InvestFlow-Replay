@@ -1,0 +1,346 @@
+{
+  "date": "2026-10-26",
+  "baseCommit": "fc0c103",
+  "scope": "项目内展示预览与两市场首页入口；不修改全局 Skill、不提交或推送",
+  "beforeLayout": {
+    ".canvas-wrap": {
+      "height": 738,
+      "width": 1264
+    },
+    ".inspector": {
+      "height": 849,
+      "width": 330
+    },
+    ".map-toolbar": {
+      "height": 68,
+      "width": 1264
+    },
+    ".masthead": {
+      "height": 104,
+      "width": 1864
+    },
+    ".navigator": {
+      "height": 849,
+      "width": 270
+    }
+  },
+  "layouts": [
+    {
+      "checks": 231,
+      "footerHeights": [
+        156
+      ],
+      "inspector": {
+        "height": 886,
+        "width": 270,
+        "x": 1594,
+        "y": 67
+      },
+      "masthead": {
+        "height": 67,
+        "width": 1864,
+        "x": 0,
+        "y": 0
+      },
+      "navigator": {
+        "height": 886,
+        "width": 210,
+        "x": 0,
+        "y": 67
+      },
+      "overviewCanvas": {
+        "height": 812,
+        "width": 1384,
+        "x": 210,
+        "y": 111
+      },
+      "scenarios": 5,
+      "steps": 41,
+      "toolbar": {
+        "height": 44,
+        "width": 1384,
+        "x": 210,
+        "y": 67
+      },
+      "viewport": {
+        "height": 953,
+        "width": 1864
+      },
+      "visitedBranches": 15
+    },
+    {
+      "checks": 231,
+      "footerHeights": [
+        156
+      ],
+      "inspector": {
+        "height": 733,
+        "width": 240,
+        "x": 860,
+        "y": 67
+      },
+      "masthead": {
+        "height": 67,
+        "width": 1100,
+        "x": 0,
+        "y": 0
+      },
+      "navigator": {
+        "height": 733,
+        "width": 180,
+        "x": 0,
+        "y": 67
+      },
+      "overviewCanvas": {
+        "height": 659,
+        "width": 680,
+        "x": 180,
+        "y": 111
+      },
+      "scenarios": 5,
+      "steps": 41,
+      "toolbar": {
+        "height": 44,
+        "width": 680,
+        "x": 180,
+        "y": 67
+      },
+      "viewport": {
+        "height": 800,
+        "width": 1100
+      },
+      "visitedBranches": 15
+    },
+    {
+      "checks": 231,
+      "footerHeights": [
+        190
+      ],
+      "inspector": {
+        "height": 446.375,
+        "width": 390,
+        "x": 0,
+        "y": 1027.375
+      },
+      "masthead": {
+        "height": 104,
+        "width": 390,
+        "x": 0,
+        "y": 0
+      },
+      "navigator": {
+        "height": 449.375,
+        "width": 390,
+        "x": 0,
+        "y": 104
+      },
+      "overviewCanvas": {
+        "height": 400,
+        "width": 390,
+        "x": 0,
+        "y": 597.375
+      },
+      "scenarios": 5,
+      "steps": 41,
+      "toolbar": {
+        "height": 44,
+        "width": 390,
+        "x": 0,
+        "y": 553.375
+      },
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "visitedBranches": 15
+    }
+  ],
+  "frontend": {
+    "unit": {
+      "pass": 329,
+      "fail": 0
+    },
+    "lint": "passed",
+    "build": "passed",
+    "fullBrowserBeforeFinalCancelRouteFix": {
+      "startTime": "2026-10-26T06:51:01.773Z",
+      "duration": 140805.232,
+      "expected": 120,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "targetedBrowserAfterFinalFix": {
+      "startTime": "2026-10-26T07:00:07.598Z",
+      "duration": 11893.641000000001,
+      "expected": 6,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "limits": [
+    "基础架构保留 2026-10-24 快照，首页入口已按本轮改动更新；未全面复核其他业务变化。",
+    "正式账本、外部行情和真实设备未验证。",
+    "完整 120 项浏览器回归后仅补改取消复练的地址同步；最终运行 6 项相关浏览器回归、329 项单测、lint 与构建。"
+  ],
+  "footerContentUpdate": {
+    "requirement": "取消步骤说明区内部滚动；完整展示内容，较多时向上增高",
+    "layouts": [
+      {
+        "checks": 316,
+        "footerHeights": [
+          157.390625,
+          156,
+          171.578125
+        ],
+        "inspector": {
+          "height": 886,
+          "width": 270,
+          "x": 1594,
+          "y": 67
+        },
+        "masthead": {
+          "height": 67,
+          "width": 1864,
+          "x": 0,
+          "y": 0
+        },
+        "navigator": {
+          "height": 886,
+          "width": 210,
+          "x": 0,
+          "y": 67
+        },
+        "overviewCanvas": {
+          "height": 812,
+          "width": 1384,
+          "x": 210,
+          "y": 111
+        },
+        "scenarios": 5,
+        "steps": 41,
+        "toolbar": {
+          "height": 44,
+          "width": 1384,
+          "x": 210,
+          "y": 67
+        },
+        "viewport": {
+          "height": 953,
+          "width": 1864
+        },
+        "visitedBranches": 15
+      },
+      {
+        "checks": 316,
+        "footerHeights": [
+          221.78125,
+          184.78125,
+          164.390625,
+          215.578125,
+          252.578125,
+          218.984375,
+          276.375,
+          239.375,
+          201.390625,
+          195.1875,
+          259.765625
+        ],
+        "inspector": {
+          "height": 733,
+          "width": 240,
+          "x": 860,
+          "y": 67
+        },
+        "masthead": {
+          "height": 67,
+          "width": 1100,
+          "x": 0,
+          "y": 0
+        },
+        "navigator": {
+          "height": 733,
+          "width": 180,
+          "x": 0,
+          "y": 67
+        },
+        "overviewCanvas": {
+          "height": 659,
+          "width": 680,
+          "x": 180,
+          "y": 111
+        },
+        "scenarios": 5,
+        "steps": 41,
+        "toolbar": {
+          "height": 44,
+          "width": 680,
+          "x": 180,
+          "y": 67
+        },
+        "viewport": {
+          "height": 800,
+          "width": 1100
+        },
+        "visitedBranches": 15
+      },
+      {
+        "checks": 316,
+        "footerHeights": [
+          230.78125,
+          211.171875,
+          251.171875,
+          190.78125,
+          231.5625,
+          268.765625,
+          305.765625,
+          272.171875,
+          329.5625,
+          292.5625,
+          248.375,
+          271.5625,
+          312.953125
+        ],
+        "inspector": {
+          "height": 446.375,
+          "width": 390,
+          "x": 0,
+          "y": 1027.375
+        },
+        "masthead": {
+          "height": 104,
+          "width": 390,
+          "x": 0,
+          "y": 0
+        },
+        "navigator": {
+          "height": 449.375,
+          "width": 390,
+          "x": 0,
+          "y": 104
+        },
+        "overviewCanvas": {
+          "height": 400,
+          "width": 390,
+          "x": 0,
+          "y": 597.375
+        },
+        "scenarios": 5,
+        "steps": 41,
+        "toolbar": {
+          "height": 44,
+          "width": 390,
+          "x": 0,
+          "y": 553.375
+        },
+        "viewport": {
+          "height": 844,
+          "width": 390
+        },
+        "visitedBranches": 15
+      }
+    ],
+    "scope": "仅架构图布局与记录；业务代码和全局 Skill 未改动"
+  }
+}

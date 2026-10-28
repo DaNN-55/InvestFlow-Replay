@@ -23,7 +23,7 @@ import '../components/crypto/crypto-terminal.css';
 const route=useRoute(),router=useRouter();
 const openData=inject('openCryptoData',()=>{});
 const state=shallowRef({}),preferences=ref(loadCryptoPreferences(localStorage));
-const controller=createCryptoReplayController({api,storage:localStorage,changed:value=>{state.value=value;}});
+const controller=createCryptoReplayController({api,storage:localStorage,restoreSession:false,changed:value=>{state.value=value;}});
 controller.state.timeframes=cryptoVisiblePeriods(preferences.value);controller.state.timeframe=controller.state.timeframes[0];state.value={...controller.state};
 const s=computed(()=>state.value.session);
 const lastGoodChartPreferences=shallowRef(null);
@@ -93,7 +93,14 @@ async function resync() {
 }
 watch(()=>state.value.busy,value=>{if(!value) {syncRequestedSession();ensurePeriods();}});
 watch(()=>route.query.session,()=>{lastRequestedSession=null;syncRequestedSession();});
-onActivated(()=>typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync());
+onActivated(()=>{controller.syncPendingFromStorage();return typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync();});
+async function retryPending() {
+  const kind=state.value.pending?.kind;
+  if(kind==='retrain') retraining.value=true;
+  try {
+    if(await controller.retry()&&kind==='retrain'&&s.value) await router.replace({query:{...route.query,session:s.value.id}});
+  } finally {if(kind==='retrain') retraining.value=false;}
+}
 async function advance(minutes=1) {if(locked.value) return false;playing.value=false;return controller.act('advance',{minutes});}
 function schedulePlayback(generation=playbackGeneration) {
   clearTimeout(playbackTimer);
@@ -127,7 +134,7 @@ async function retrain() {
     <header v-if="s" class="crypto-header"><div><p class="crypto-eyebrow">USDT 永续 / 历史盲测</p><h1>{{ s?s.instrumentId:'合约练习' }} <span v-if="s">逐仓 · 单向</span></h1><div v-if="s" class="crypto-quotes"><span>最新价 <b data-testid="crypto-last">{{ amount(s.currentPrices.last,4) }}</b></span><span>标记价格 <b>{{ amount(s.currentPrices.mark,4) }}</b></span></div></div><div class="crypto-header-actions"><button type="button" class="crypto-icon" aria-label="交易与显示设置" title="交易与显示设置" @click="settingsOpen=true"><Settings2 :size="17" /></button></div></header>
     <div v-if="state.error" class="crypto-alert" role="alert"><span>{{ state.error }}</span><UiButton v-if="!state.pending" variant="secondary" :disabled="state.busy" @click="resync">重新同步</UiButton></div>
     <p v-if="state.readStale&&!state.busy" class="crypto-alert" role="status" data-testid="crypto-read-stale">{{ s?'显示的是上次完整同步的结果；重新同步前暂停新的操作。':'会话数据尚未同步，请重新同步后继续。' }}</p>
-    <div v-if="state.pending&&!state.busy" class="crypto-alert" role="status"><span>上次动作的结果待核对；核对前不能提交新动作。可以从演练记录查看历史。</span><UiButton variant="secondary" @click="controller.retry()">重试原动作</UiButton></div>
+    <div v-if="state.pending&&!state.busy" class="crypto-alert" role="status"><span>上次动作的结果待核对；核对前不能提交新动作。可以从演练记录查看历史。</span><UiButton variant="secondary" @click="retryPending">重试原动作</UiButton></div>
     <p v-if="state.busy" class="crypto-save-status" role="status">正在同步与保存…</p><p v-else-if="state.notice" class="crypto-save-status" role="status">{{ state.notice }}</p>
     <p v-if="state.poolError" class="crypto-muted" role="status">{{ state.poolError }}</p>
     <p v-if="s&&priceNotice" class="crypto-muted" role="status">{{ priceNotice }}</p>

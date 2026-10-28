@@ -17,7 +17,7 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
     await route.fulfill({ response });
   });
   await page.addInitScript((id) => localStorage.setItem("investflow.replay.active-session-id", id), session.id);
-  await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5180"}/decision/market-replay`);
+  await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5180"}/decision/market-replay?session=${session.id}`);
   const playback=page.getByRole('region',{name:'回放控制',exact:true});
   await expect(playback).toBeVisible();
   await expect(page.locator('.replay-trading .replay-playback')).toHaveCount(0);
@@ -145,7 +145,7 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   await page.setViewportSize({width:390,height:850});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await snapshot.screenshot({path:test.info().outputPath('decision-row-mobile.png')});
-  await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5180'}/decision/market-replay`);
+  await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5180'}/decision/market-replay?session=${session.id}`);
 
   await playback.getByRole('button',{name:'新开一局',exact:true}).click();
   await expect(page.getByRole('heading',{name:'这次怎么练？',exact:true})).toBeVisible();
