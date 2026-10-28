@@ -10,6 +10,7 @@ test.beforeAll(async () => {
   cryptoFixture = await startCryptoTestServer();
 });
 test.afterAll(async () => { await ashare?.close(); await cryptoFixture?.close(); });
+test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'wait' }); });
 
 async function connect(page, fixture) {
   const requests = [];

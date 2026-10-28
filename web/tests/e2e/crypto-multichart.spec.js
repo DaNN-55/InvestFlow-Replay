@@ -1373,7 +1373,7 @@ test('rejected amendment followed by synchronization failure closes confirmation
   expect(latest.revision).toBe(session.revision+1);expect(latest.orders.find(o=>o.id===order.id).limitPrice).toBe('49800');
   await page.getByRole('button',{name:'重新同步',exact:true}).click();
   await expect(page.getByRole('button',{name:'推进 1 分钟',exact:true})).toBeEnabled();
-  await expect(page.locator('.crypto-alert[role="alert"]')).toHaveCount(0);
+  await expect(page.getByTestId('crypto-persistent-alert')).toHaveCount(0);
 });
 
 test('leaving a kept-alive confirmation discards late previews without reopening or contaminating the next edit',async({page,request})=>{
