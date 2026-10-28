@@ -69,6 +69,17 @@ describe("replay KLineChart adapter", () => {
     assert.equal(adapted.data[0].pctChange, 2.3456);
   });
 
+  it("derives missing changes from the previous close, preserves supplied values and leaves an unknown first bar empty", () => {
+    for (const period of ['day', 'minute']) {
+      const source = [100, 110, 99, 99].map((close, index) => ({ period, open: close - 2, high: close + 2, low: close - 3, close, startSequence: index }));
+      const before = structuredClone(source);
+      assert.deepEqual(adaptReplayBars(source).data.map(bar => bar.pctChange), [null, 10, -10, 0]);
+      assert.equal(adaptReplayBars([source[0], { ...source[1], pctChange: 7.5 }]).data[1].pctChange, 7.5);
+      assert.deepEqual(source, before);
+      assert.equal(adaptReplayBars([{ ...source[0], close: 0, low: 0 }, source[1]]).data[1].pctChange, null);
+    }
+  });
+
   it("rejects an invalid OHLC bar instead of silently drawing partial data", () => {
     assert.throws(
       () => adaptReplayBars([{ ...sourceBars[0], high: "invalid" }]),
