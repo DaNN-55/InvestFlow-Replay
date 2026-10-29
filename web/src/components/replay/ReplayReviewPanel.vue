@@ -169,11 +169,11 @@ const blindReady = computed(
     blindForm.reasonTags.length >= 1 &&
     blindForm.reasonTags.length <= 8 &&
     blindForm.strategyName.trim().length <= 120 &&
-    blindForm.thesis.trim().length >= 10 &&
+    blindForm.thesis.trim().length >= 5 &&
     blindForm.thesis.trim().length <= 2000 &&
-    blindForm.tradePlan.trim().length >= 10 &&
+    blindForm.tradePlan.trim().length >= 5 &&
     blindForm.tradePlan.trim().length <= 2000 &&
-    blindForm.riskPlan.trim().length >= 10 &&
+    blindForm.riskPlan.trim().length >= 5 &&
     blindForm.riskPlan.trim().length <= 1000 &&
     Number.isSafeInteger(Number(blindForm.confidence)) &&
     Number(blindForm.confidence) >= 1 &&
@@ -184,11 +184,11 @@ const hasPostDraft = computed(() => Boolean(props.reviewDrafts.post));
 const postReady = computed(
   () =>
     ["correct", "partial", "wrong"].includes(postForm.outcome) &&
-    postForm.executionReview.trim().length >= 10 &&
+    postForm.executionReview.trim().length >= 5 &&
     postForm.executionReview.trim().length <= 2000 &&
     postForm.mistakes.trim().length >= 1 &&
     postForm.mistakes.trim().length <= 2000 &&
-    postForm.lessons.trim().length >= 10 &&
+    postForm.lessons.trim().length >= 5 &&
     postForm.lessons.trim().length <= 2000 &&
     Number.isSafeInteger(Number(postForm.disciplineScore)) &&
     Number(postForm.disciplineScore) >= 1 &&
@@ -640,31 +640,31 @@ watch(
         <span>整局核心判断</span>
         <textarea
           v-model="blindForm.thesis"
-          minlength="10"
+          minlength="5"
           maxlength="2000"
           placeholder="你看到了什么，为什么做出这个判断？"
         />
-        <small>{{ blindForm.thesis.trim().length }} / 2000，至少 10 字</small>
+        <small>{{ blindForm.thesis.trim().length }} / 2000，至少 5 字</small>
       </label>
       <label class="replay-review__field">
         <span>整局交易计划</span>
         <textarea
           v-model="blindForm.tradePlan"
-          minlength="10"
+          minlength="5"
           maxlength="2000"
           placeholder="计划如何开仓、持有、减仓或空仓？"
         />
-        <small>{{ blindForm.tradePlan.trim().length }} / 2000，至少 10 字</small>
+        <small>{{ blindForm.tradePlan.trim().length }} / 2000，至少 5 字</small>
       </label>
       <section class="replay-review__field replay-review__risk-plan">
         <span>整局风险计划</span>
         <textarea
           v-model="blindForm.riskPlan"
-          minlength="10"
+          minlength="5"
           maxlength="1000"
           placeholder="什么情况说明判断错误，如何控制损失？"
         />
-        <small>{{ blindForm.riskPlan.trim().length }} / 1000，至少 10 字</small>
+        <small>{{ blindForm.riskPlan.trim().length }} / 1000，至少 5 字</small>
       </section>
       <div class="replay-review__form-actions">
         <UiButton
@@ -862,12 +862,12 @@ watch(
           <span>执行复盘</span>
           <textarea
             v-model="postForm.executionReview"
-            minlength="10"
+            minlength="5"
             maxlength="2000"
             placeholder="实际执行和原计划有哪些一致或偏离？"
           />
           <small>
-            {{ postForm.executionReview.trim().length }} / 2000，至少 10 字
+            {{ postForm.executionReview.trim().length }} / 2000，至少 5 字
           </small>
         </label>
         <label class="replay-review__field">
@@ -884,11 +884,11 @@ watch(
           <span>经验总结</span>
           <textarea
             v-model="postForm.lessons"
-            minlength="10"
+            minlength="5"
             maxlength="2000"
             placeholder="下一次遇到类似行情，你会保留或改变什么？"
           />
-          <small>{{ postForm.lessons.trim().length }} / 2000，至少 10 字</small>
+          <small>{{ postForm.lessons.trim().length }} / 2000，至少 5 字</small>
         </label>
         <label
           v-if="playbookFitApplicable"
