@@ -58,15 +58,13 @@ export function getReplayAutoplayStopReason(
   }
   const marketEventMessages = {
     suspended: "当前交易日停牌，自动播放已暂停，请确认后手动推进。",
-    limit_up: "当前交易日触及涨停状态，自动播放已暂停。",
-    limit_down: "当前交易日触及跌停状态，自动播放已暂停。",
     invalid_market_data: "当前交易日行情数据异常，自动播放已暂停。",
     rule_unavailable: "当前历史行情的交易规则信息不足，自动播放已暂停。",
   };
   const marketEventStatus = session.marketEvent?.status;
   if (
     marketEventStatus &&
-    marketEventStatus !== "normal"
+    !["normal", "limit_up", "limit_down"].includes(marketEventStatus)
   ) {
     return (
       marketEventMessages[marketEventStatus] ??

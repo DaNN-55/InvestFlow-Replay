@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../app.js";
 
-export async function startOrderTestServer(port = 0, { tsCode = "000001.SZ" } = {}) {
+export async function startOrderTestServer(port = 0, { tsCode = "000001.SZ", futureBarOverrides = [] } = {}) {
   const root = mkdtempSync(join(tmpdir(), "investflow-order-http-"));
   const candle = (i, overrides = {}) => ({ sequence: i + 1, tradeDate: `2024-before-${i}`, open: 10,
     high: 10.2, low: 9.9, close: 10, preClose: 10, pctChange: 0, limitType: "N", volume: 1000000,
@@ -14,6 +14,7 @@ export async function startOrderTestServer(port = 0, { tsCode = "000001.SZ" } = 
   Object.assign(bars[253], { open: 9.7, high: 9.9, low: 9.6, close: 9.7, volume: 500 });
   Object.assign(bars[254], { open: 9.9, low: 9.85, close: 9.95, volume: 500 });
   Object.assign(bars[255], { open: 10, low: 9.9, volume: 500 });
+  futureBarOverrides.forEach((override, index) => Object.assign(bars[250 + index], override));
   for (const bar of bars) bar.amount = bar.volume * bar.close;
   const engine = createServer((req, res) => {
     res.setHeader("content-type", "application/json");

@@ -82,12 +82,12 @@ describe("replay autoplay", () => {
     );
   });
 
-  it("pauses on every non-normal backend market event", () => {
+  it("pauses on unavailable or abnormal backend market events", () => {
     const messages = {
       suspended: /停牌/u,
-      limit_up: /涨停/u,
-      limit_down: /跌停/u,
       invalid_market_data: /行情数据异常/u,
+      rule_unavailable: /规则信息不足/u,
+      unknown_status: /行情状态异常/u,
     };
     for (const [status, expected] of Object.entries(messages)) {
       assert.match(
@@ -111,6 +111,25 @@ describe("replay autoplay", () => {
       }),
       "",
     );
+  });
+
+  it("continues time progression at limit up and limit down across execution model versions", () => {
+    for (const executionModelVersion of [undefined, 'legacy-next-open', 'bar-orders-v1', 'bar-orders-v2']) {
+      for (const status of ['limit_up', 'limit_down']) {
+        const session = { id: 'limit', status: 'active', executionModelVersion, executions: [], marketEvent: { status } };
+        assert.equal(getReplayAutoplayStopReason(session), '');
+        assert.equal(getReplayAutoplayStopReason(session, { executionStartIndex: 0 }), '');
+      }
+    }
+  });
+
+  it("does not bypass completion, risk reminders or new execution pauses at a price limit", () => {
+    for (const status of ['limit_up', 'limit_down']) {
+      const session = { id: 'limit', status: 'active', executionModelVersion: 'bar-orders-v2', bars: [{ close: 9 }], marketEvent: { status } };
+      assert.match(getReplayAutoplayStopReason({ ...session, status: 'completed' }), /已完成/u);
+      assert.match(getReplayAutoplayStopReason(session, { blindDraft: { stopLossPrice: 10 } }), /盲评止损价/u);
+      assert.match(getReplayAutoplayStopReason({ ...session, executions: [{ status: 'filled' }] }, { executionStartIndex: 0 }), /已有成交或状态变化/u);
+    }
   });
 
   it("pauses on blind-draft close risk rules without inventing executions", () => {
