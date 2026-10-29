@@ -125,6 +125,18 @@ export function useReplayKlineChart({
   let indicatorInstances = [];
   let indicatorStructureKey = "";
   let priceLineIds = [], priceLineKey = '';
+  const priceHoverTimers = new Map();
+  function cancelPriceHover(id) { clearTimeout(priceHoverTimers.get(id));priceHoverTimers.delete(id); }
+  function clearPriceHovers() {for(const timer of priceHoverTimers.values()) clearTimeout(timer);priceHoverTimers.clear();host.value?.removeAttribute('title');}
+  function leavePriceLines(event) {
+    const current=chart.value;
+    // Pinned KLineCharts v9 clears its crosshair on host leave, but retains the
+    // hovered overlay. Reset that native hit so re-entering the same line works.
+    const store=current?.getChartStore().getOverlayStore();
+    if(store?.getHoverInstanceInfo().instance?.extendData.hideDetails) {
+      store.setHoverInstanceInfo({paneId:CANDLE_PANE_ID,instance:null,figureType:0,figureKey:'',figureIndex:-1,attrsIndex:-1},event);
+    }
+  }
   let priceDrag = null;
   let overlayIds = [];
   let tradeOverlayKey = "";
@@ -306,9 +318,26 @@ export function useReplayKlineChart({
       cancelPress=null;return true;
     }
     return {
-      onMouseEnter:({overlay})=>{if(overlay.extendData.moneyTitle) host.value?.setAttribute('title',overlay.extendData.moneyTitle);return true;},
-      onMouseLeave:()=>{host.value?.removeAttribute('title');return true;},
+      onMouseEnter:({overlay})=>{
+        cancelPriceHover(overlay.id);
+        if(overlay.extendData.hideDetails&&!overlay.extendData.detailsExpanded) current.overrideOverlay({id:overlay.id,extendData:{...overlay.extendData,detailsExpanded:true}});
+        if(overlay.extendData.moneyTitle) host.value?.setAttribute('title',overlay.extendData.moneyTitle);
+        return true;
+      },
+      onMouseLeave:({overlay})=>{
+        host.value?.removeAttribute('title');
+        if(overlay.extendData.hideDetails) {
+          cancelPriceHover(overlay.id);
+          priceHoverTimers.set(overlay.id,setTimeout(()=>{
+            priceHoverTimers.delete(overlay.id);
+            const active=current.getOverlayById(overlay.id);
+            if(active?.extendData.hideDetails) current.overrideOverlay({id:overlay.id,extendData:{...active.extendData,detailsExpanded:false}});
+          },120));
+        }
+        return true;
+      },
       onPressedMoveStart:({overlay,x,y,figureKey})=>{
+        cancelPriceHover(overlay.id);
         cancelPress=null;
         if(priceDrag||!line.draggable) return true;
         if(figureKey==='price-cancel') {cancelPress={x,y,moved:false};return true;}
@@ -352,13 +381,13 @@ export function useReplayKlineChart({
     const accent=cssToken(rootStyle,'--ql-accent','#2563eb');
     const nextKey = JSON.stringify([priceLines.value,background,accent]);
     if (nextKey === priceLineKey) return;
-    host.value?.removeAttribute('title');
+    clearPriceHovers();
     for (const id of priceLineIds) current.removeOverlay(id);
     priceLineIds = []; priceLineKey = nextKey;
     for (const [tagIndex,line] of priceLines.value.entries()) {
       const id = current.createOverlay({ name: REPLAY_PRICE_LINE_OVERLAY.name, id: line.id,
         groupId: REPLAY_PRICE_LINE_GROUP, lock: !line.draggable, points: [{ value: Number(line.price) }], extendData: {...line,measureLabel:text=>utils.calcTextWidth(text,11),color:line.reference==='entry'?accent:line.color,background,tagIndex,levels:priceLines.value.map(({id,price,estimate,compactLabel})=>({id,price,estimated:Boolean(estimate)&&!compactLabel}))},
-        ...(line.draggable||line.cancellable||line.moneyTitle?priceDragHandlers(line,current):{}) }, CANDLE_PANE_ID);
+        ...(line.draggable||line.cancellable||line.moneyTitle||line.hideDetails?priceDragHandlers(line,current):{}) }, CANDLE_PANE_ID);
       if (id) priceLineIds.push(id);
     }
   }
@@ -606,6 +635,7 @@ export function useReplayKlineChart({
       passive: false,
     });
     document.addEventListener('keydown',cancelPriceDrag);
+    host.value.addEventListener('pointerleave',leavePriceLines);
     window.addEventListener('blur',cancelPriceDrag);
     window.addEventListener('pointercancel',cancelPriceDrag);
     window.addEventListener('pointerup',outsidePriceRelease);
@@ -614,7 +644,9 @@ export function useReplayKlineChart({
 
   function unmountChart() {
     endPriceDrag(true);
+    clearPriceHovers();
     document.removeEventListener('keydown',cancelPriceDrag);
+    host.value?.removeEventListener('pointerleave',leavePriceLines);
     window.removeEventListener('blur',cancelPriceDrag);
     window.removeEventListener('pointercancel',cancelPriceDrag);
     window.removeEventListener('pointerup',outsidePriceRelease);
