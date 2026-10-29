@@ -250,12 +250,12 @@ function normalizeReplayOrderDecision(value, side) {
   );
   const thesis = String(value.thesis ?? "").trim();
   const plan = String(value.plan ?? "").trim();
-  assertInteractionCondition(thesis.length >= 10 && thesis.length <= 2000, "decision.thesis 必须是 10 至 2000 个字符");
-  assertInteractionCondition(plan.length >= 10 && plan.length <= 2000, "decision.plan 必须是 10 至 2000 个字符");
+  assertInteractionCondition(thesis.length >= 5 && thesis.length <= 2000, "decision.thesis 必须是 5 至 2000 个字符");
+  assertInteractionCondition(plan.length >= 5 && plan.length <= 2000, "decision.plan 必须是 5 至 2000 个字符");
 
   if (side === "buy") {
     const riskPlan = String(value.riskPlan ?? "").trim();
-    assertInteractionCondition(riskPlan.length >= 10 && riskPlan.length <= 1000, "decision.riskPlan 必须是 10 至 1000 个字符");
+    assertInteractionCondition(riskPlan.length >= 5 && riskPlan.length <= 1000, "decision.riskPlan 必须是 5 至 1000 个字符");
     const stopLossPrice = normalizeReplayPositivePrice(value.stopLossPrice, "decision.stopLossPrice");
     const invalidationRule = normalizeReplayInvalidationRule(value.invalidationRule, { partial: false });
     assertInteractionCondition(
@@ -332,16 +332,16 @@ function normalizeReplayBlindReview(body) {
     "playbookVersionId 最多 120 个字符",
   );
   assertInteractionCondition(
-    thesis.length >= 10 && thesis.length <= 2000,
-    "thesis 必须是 10 至 2000 个字符",
+    thesis.length >= 5 && thesis.length <= 2000,
+    "thesis 必须是 5 至 2000 个字符",
   );
   assertInteractionCondition(
-    tradePlan.length >= 10 && tradePlan.length <= 2000,
-    "tradePlan 必须是 10 至 2000 个字符",
+    tradePlan.length >= 5 && tradePlan.length <= 2000,
+    "tradePlan 必须是 5 至 2000 个字符",
   );
   assertInteractionCondition(
-    riskPlan.length >= 10 && riskPlan.length <= 1000,
-    "riskPlan 必须是 10 至 1000 个字符",
+    riskPlan.length >= 5 && riskPlan.length <= 1000,
+    "riskPlan 必须是 5 至 1000 个字符",
   );
   assertInteractionCondition(
     typeof body.confidence === "number" &&
@@ -541,16 +541,16 @@ function normalizeReplayPostReview(body) {
     "outcome 只支持 correct、partial 或 wrong",
   );
   assertInteractionCondition(
-    executionReview.length >= 10 && executionReview.length <= 2000,
-    "executionReview 必须是 10 至 2000 个字符",
+    executionReview.length >= 5 && executionReview.length <= 2000,
+    "executionReview 必须是 5 至 2000 个字符",
   );
   assertInteractionCondition(
     mistakes.length >= 1 && mistakes.length <= 2000,
     "mistakes 必须是 1 至 2000 个字符",
   );
   assertInteractionCondition(
-    lessons.length >= 10 && lessons.length <= 2000,
-    "lessons 必须是 10 至 2000 个字符",
+    lessons.length >= 5 && lessons.length <= 2000,
+    "lessons 必须是 5 至 2000 个字符",
   );
   assertInteractionCondition(
     typeof body.disciplineScore === "number" &&

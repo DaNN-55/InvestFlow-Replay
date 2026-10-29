@@ -74,11 +74,11 @@ const ready = computed(() => {
       form.reasonTags.length >= 1 &&
       form.reasonTags.length <= 8 &&
       form.strategyName.trim().length <= 120 &&
-      form.thesis.trim().length >= 10 &&
+      form.thesis.trim().length >= 5 &&
       form.thesis.trim().length <= 2000 &&
-      form.tradePlan.trim().length >= 10 &&
+      form.tradePlan.trim().length >= 5 &&
       form.tradePlan.trim().length <= 2000 &&
-      form.riskPlan.trim().length >= 10 &&
+      form.riskPlan.trim().length >= 5 &&
       form.riskPlan.trim().length <= 1000 &&
       Number.isSafeInteger(Number(form.confidence)) &&
       Number(form.confidence) >= 1 &&
@@ -87,11 +87,11 @@ const ready = computed(() => {
   }
   return (
     ["correct", "partial", "wrong"].includes(form.outcome) &&
-    form.executionReview.trim().length >= 10 &&
+    form.executionReview.trim().length >= 5 &&
     form.executionReview.trim().length <= 2000 &&
     form.mistakes.trim().length >= 1 &&
     form.mistakes.trim().length <= 2000 &&
-    form.lessons.trim().length >= 10 &&
+    form.lessons.trim().length >= 5 &&
     form.lessons.trim().length <= 2000 &&
     Number.isSafeInteger(Number(form.disciplineScore)) &&
     Number(form.disciplineScore) >= 1 &&
@@ -190,7 +190,7 @@ watch(
       </label>
       <label class="replay-correction__field">
         <span>核心判断</span>
-        <textarea v-model="form.thesis" minlength="10" maxlength="2000" />
+        <textarea v-model="form.thesis" minlength="5" maxlength="2000" />
       </label>
       <fieldset class="replay-correction__tags">
         <legend>判断理由</legend>
@@ -209,11 +209,11 @@ watch(
       </label>
       <label class="replay-correction__field">
         <span>交易计划</span>
-        <textarea v-model="form.tradePlan" minlength="10" maxlength="2000" />
+        <textarea v-model="form.tradePlan" minlength="5" maxlength="2000" />
       </label>
       <section class="replay-correction__field replay-correction__risk-plan">
         <span>风险计划</span>
-        <textarea v-model="form.riskPlan" minlength="10" maxlength="1000" />
+        <textarea v-model="form.riskPlan" minlength="5" maxlength="1000" />
       </section>
     </template>
 
@@ -231,7 +231,7 @@ watch(
         <span>执行复盘</span>
         <textarea
           v-model="form.executionReview"
-          minlength="10"
+          minlength="5"
           maxlength="2000"
         />
       </label>
@@ -241,7 +241,7 @@ watch(
       </label>
       <label class="replay-correction__field">
         <span>经验总结</span>
-        <textarea v-model="form.lessons" minlength="10" maxlength="2000" />
+        <textarea v-model="form.lessons" minlength="5" maxlength="2000" />
       </label>
       <label class="replay-correction__field replay-correction__field--compact">
         <span>执行纪律</span>

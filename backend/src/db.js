@@ -816,17 +816,17 @@ function calculateReplayScoreCard(session) {
   const hasScore = (value) =>
     Number.isSafeInteger(value) && value >= 1 && value <= 5;
   const requiredFields = [
-    typeof blind?.thesis === "string" && blind.thesis.length >= 10,
-    typeof blind?.tradePlan === "string" && blind.tradePlan.length >= 10,
-    typeof blind?.riskPlan === "string" && blind.riskPlan.length >= 10,
+    typeof blind?.thesis === "string" && blind.thesis.length >= 5,
+    typeof blind?.tradePlan === "string" && blind.tradePlan.length >= 5,
+    typeof blind?.riskPlan === "string" && blind.riskPlan.length >= 5,
     Number.isSafeInteger(blind?.confidence) &&
       blind.confidence >= 1 &&
       blind.confidence <= 5,
     ["correct", "partial", "wrong"].includes(post?.outcome),
     typeof post?.executionReview === "string" &&
-      post.executionReview.length >= 10,
+      post.executionReview.length >= 5,
     typeof post?.mistakes === "string" && post.mistakes.length >= 1,
-    typeof post?.lessons === "string" && post.lessons.length >= 10,
+    typeof post?.lessons === "string" && post.lessons.length >= 5,
     hasScore(post?.disciplineScore),
     hasScore(post?.riskControlScore),
     ...(playbookApplicable ? [hasScore(post?.playbookFitScore)] : []),

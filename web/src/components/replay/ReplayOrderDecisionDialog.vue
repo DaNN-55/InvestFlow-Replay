@@ -50,13 +50,13 @@ const decisionReady = computed(() => {
     form.reasonTags.length <= 8 &&
     Number(form.confidence) >= 1 &&
     Number(form.confidence) <= 5 &&
-    form.thesis.trim().length >= 10 &&
-    form.plan.trim().length >= 10;
+    form.thesis.trim().length >= 5 &&
+    form.plan.trim().length >= 5;
   if (!commonReady) return false;
   if (isBuy.value) {
     const invalidationReady =
       form.invalidationEnabled && Number(form.invalidationThreshold) > 0;
-    return form.riskPlan.trim().length >= 10 &&
+    return form.riskPlan.trim().length >= 5 &&
       (Number(form.stopLossPrice) > 0 || invalidationReady);
   }
   return Boolean(form.exitType) && form.remainingPositionPlan.trim().length >= 2;
@@ -233,12 +233,12 @@ const orderHelp = computed(() => {
         <label>
           <span>核心判断</span>
           <UiTextarea v-model="form.thesis" maxlength="2000" :placeholder="isBuy ? '你看到了什么，为什么现在可以买入？' : '例如：收盘跌破 10.15，触发原定止损条件。'" />
-          <small>{{ form.thesis.trim().length }} / 2000，至少 10 字</small>
+          <small>{{ form.thesis.trim().length }} / 2000，至少 5 字</small>
         </label>
         <label>
           <span>{{ isBuy ? '开仓与持有计划' : '本次卖出计划' }}</span>
           <UiTextarea v-model="form.plan" maxlength="2000" :placeholder="isBuy ? '计划如何开仓、加仓、持有？' : '计划卖出多少，什么价格条件下执行？'" />
-          <small>{{ form.plan.trim().length }} / 2000，至少 10 字</small>
+          <small>{{ form.plan.trim().length }} / 2000，至少 5 字</small>
         </label>
       </section>
 
@@ -249,7 +249,7 @@ const orderHelp = computed(() => {
         <label>
           <span>风险计划</span>
           <UiTextarea v-model="form.riskPlan" maxlength="1000" placeholder="什么情况说明判断错误，如何控制损失？" />
-          <small>{{ form.riskPlan.trim().length }} / 1000，至少 10 字</small>
+          <small>{{ form.riskPlan.trim().length }} / 1000，至少 5 字</small>
         </label>
         <div class="replay-order-decision__risk-grid">
           <label><span>止损价 / 失效条件（至少一项）</span><UiInput v-model="form.stopLossPrice" aria-label="止损价" type="number" min="0" step="0.01" /></label>
