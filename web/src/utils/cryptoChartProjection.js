@@ -14,6 +14,7 @@ export function projectCryptoCharts({ session, markets = {}, display, interactio
       (draggingIndex == null || draggingIndex === index);
     const lines = cryptoChartLines(session, kind).map(line => ({
       ...line,
+      hideDetails: display.lineDetails === false,
       draggable: Boolean(editable && (line.orderId != null ||
         (line.protectionLeg && session.account.position && !session.protection?.triggeredLeg))),
       cancellable: Boolean(editable && (line.orderId != null ||

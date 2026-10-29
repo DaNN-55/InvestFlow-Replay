@@ -61,6 +61,86 @@ async function nativeCharts(page) {
   });
 }
 
+async function nativeLineDetails(page, index = 0) {
+  return page.evaluate(async index => {
+    const url = performance.getEntriesByType('resource').find(entry => /\/klinecharts\.js\?v=/.test(entry.name)).name;
+    const { init } = await import(url), tile = document.querySelector(`[data-chart-index="${index}"]`), host = tile.querySelector('[k-line-chart-id]');
+    const chart = init({ id: host.getAttribute('k-line-chart-id') }), bounding = chart.getSize('candle_pane', 'main'), box = host.getBoundingClientRect();
+    const yAxis = { convertToPixel: value => chart.convertToPixel({ value }, { paneId: 'candle_pane' }).y };
+    return { range: chart.getVisibleRange(), lines: [...tile.querySelectorAll('[data-price-line-id]')].map(node => {
+      const overlay = chart.getOverlayById(node.dataset.priceLineId), value = overlay.points[0].value;
+      const figures = overlay.createPointFigures({ overlay, coordinates: [{ x: 0, y: yAxis.convertToPixel(value) }], bounding, yAxis });
+      const edge = figures.find(figure => figure.key === 'price-edge');
+      return { id: overlay.id, value, hidden: overlay.extendData.hideDetails, expanded: Boolean(overlay.extendData.detailsExpanded), keys: figures.map(figure => figure.key),
+        hover: { x: box.x + (edge ? edge.attrs.x + 3 : bounding.width * .65), y: box.y + (edge ? edge.attrs.y : yAxis.convertToPixel(value)) } };
+    }) };
+  }, index);
+}
+
+test('transaction descriptions hide without removing levels, reveal on hover, and persist across reload', async ({ page, request }) => {
+  const { id, session, commands, advances } = await protectedPractice(page, request);
+  const before = await nativeLineDetails(page);
+  await page.getByRole('button', { name: '隐藏交易线说明', exact: true }).click();
+  const toggle = page.getByRole('button', { name: '显示交易线说明', exact: true });
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true'); await page.mouse.move(0, 0);
+  for (const index of [0, 1]) {
+    await expect.poll(async () => (await nativeLineDetails(page, index)).lines.every(line => line.hidden && !line.keys.includes('price-tag') && !line.keys.includes('price-cancel'))).toBe(true);
+  }
+  const hidden = await nativeLineDetails(page);
+  expect(hidden.lines.map(line => [line.id, line.value])).toEqual(before.lines.map(line => [line.id, line.value]));
+  expect(hidden.range).toEqual(before.range);
+  if (process.env.LINE_DETAILS_EVIDENCE_DIR) await page.screenshot({ path: `${process.env.LINE_DETAILS_EVIDENCE_DIR}/hidden.png` });
+  for (const suffix of ['stopLoss', 'position', 'takeProfit']) {
+    const line = (await nativeLineDetails(page)).lines.find(line => line.id === `${id}:${suffix}`);
+    await page.mouse.move(line.hover.x, line.hover.y);
+    await expect.poll(async () => (await nativeLineDetails(page)).lines.find(item => item.id === line.id)?.expanded).toBe(true);
+    await expect.poll(async () => (await nativeLineDetails(page)).lines.find(item => item.id === line.id).keys.includes('price-tag')).toBe(true);
+    if (suffix === 'stopLoss' && process.env.LINE_DETAILS_EVIDENCE_DIR) await page.screenshot({ path: `${process.env.LINE_DETAILS_EVIDENCE_DIR}/hover.png` });
+    await page.mouse.move(0, 0);
+    await expect.poll(async () => (await nativeLineDetails(page)).lines.every(line => !line.expanded)).toBe(true);
+  }
+  await page.reload(); await expect(toggle).toBeVisible();
+  await expect.poll(async () => (await nativeLineDetails(page)).lines.every(line => line.hidden && !line.keys.includes('price-tag'))).toBe(true);
+  for (const width of [1864, 1280, 390]) {
+    await page.setViewportSize({ width, height: 953 }); await expect(toggle).toBeVisible();
+    const layout = await page.locator('.crypto-chart-selection').evaluate(group => {
+      const toolbar = group.parentElement.getBoundingClientRect(), box = group.getBoundingClientRect();
+      const selects = [...group.querySelectorAll('select')];
+      const price = selects[1], style = getComputedStyle(price), context = document.createElement('canvas').getContext('2d');
+      context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      return { left: box.left - toolbar.left, fits: context.measureText(price.selectedOptions[0].textContent).width <= price.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+        ordered: selects[0].getBoundingClientRect().right < price.getBoundingClientRect().left && price.getBoundingClientRect().right < group.querySelector('button.ui-tooltip__trigger').getBoundingClientRect().left };
+    });
+    expect(layout.left).toBeLessThanOrEqual(10); expect(layout.fits).toBe(true); expect(layout.ordered).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    if (process.env.LINE_DETAILS_EVIDENCE_DIR) await page.screenshot({ path: `${process.env.LINE_DETAILS_EVIDENCE_DIR}/toolbar-${width}.png` });
+  }
+  await toggle.click();
+  await expect.poll(async () => (await nativeLineDetails(page)).lines.every(line => line.keys.includes('price-tag'))).toBe(true);
+  expect(commands).toHaveLength(0); expect(advances).toHaveLength(0);
+  expect((await (await request.get(`${fixture.url}${path}/${id}`)).json()).session).toEqual(session);
+});
+
+test('hover-only protective descriptions preserve drag preview, cancel and one explicit confirmation', async ({ page, request }) => {
+  const { id, session, commands } = await protectedPractice(page, request);
+  await page.getByRole('button', { name: '隐藏交易线说明', exact: true }).click(); await page.mouse.move(0, 0);
+  const stopId = `${id}:stopLoss`, confirmation = page.getByRole('region', { name: '确认止盈止损调整' });
+  for (const confirm of [false, true]) {
+    const line = (await nativeLineDetails(page)).lines.find(line => line.id === stopId);
+    await page.mouse.move(line.hover.x, line.hover.y);
+    await expect.poll(async () => (await nativeLineDetails(page)).lines.find(line => line.id === stopId).expanded).toBe(true);
+    await dragProtection(page, 0, stopId, 49920); await expect(confirmation).toBeVisible();
+    await expect.poll(async () => (await nativeLineDetails(page)).lines.find(line => line.id === `${stopId}:draft`)?.keys.includes('price-tag')).toBe(true);
+    expect(commands).toHaveLength(0);
+    await page.getByRole('button', { name: confirm ? '确认生效' : '取消调整', exact: true }).click();
+    await expect(confirmation).toHaveCount(0);
+  }
+  await expect(page.getByRole('button', { name: '推进 1 分钟', exact: true })).toBeEnabled();
+  expect(commands).toHaveLength(1);
+  const latest = (await (await request.get(`${fixture.url}${path}/${id}`)).json()).session;
+  expect(latest.revision).toBe(session.revision + 1); expect(latest.protection.takeProfit).toEqual(session.protection.takeProfit);
+});
+
 
 function assertProtectionEstimate(line,session) {
   const p=session.account.position,base=Number(p.contracts)*Number(session.contract.ctVal)*Number(session.contract.ctMult),sign=p.side==='long'?1:-1;
