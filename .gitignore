@@ -27,5 +27,8 @@ storage/crypto-pool/
 /docs/research/*
 !/docs/research/okx-rule-snapshots/
 !/docs/research/okx-sample-evidence/
+/docs/research/okx-rule-snapshots/2026-10-19-public-rules.json
+/docs/research/okx-rule-snapshots/2026-10-19-public-book-samples.json
+/docs/research/okx-rule-snapshots/2026-10-19-liquidation-teaching-cases.proposed.json
 /PLAN.md
 /CONTEXT.md
