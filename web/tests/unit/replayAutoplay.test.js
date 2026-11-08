@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { createRenderer, nextTick, shallowRef } from "vue";
+import { useReplayAutoplay } from "../../src/composables/useReplayAutoplay.js";
 
 import {
   getReplayAutoplayDelay,
@@ -29,6 +31,38 @@ const attemptSource = readFileSync(
 );
 
 describe("replay autoplay", () => {
+  for (const executionModelVersion of ["bar-orders-v1", "bar-orders-v2"]) {
+    it(`continues past an unchanged resting order in ${executionModelVersion} and pauses on its actual fill`, async t => {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
+      const session = shallowRef({ id: "pending", status: "active", executionModelVersion,
+        pendingOrders: [{ id: "limit" }], executions: [] });
+      let playback, calls = 0;
+      const renderer = createRenderer({
+        createComment: () => ({}), insert() {}, remove() {}, parentNode: () => null, nextSibling: () => null,
+      });
+      const app = renderer.createApp({ setup() {
+        playback = useReplayAutoplay({ session, isBusy: shallowRef(false), errorMessage: shallowRef(""), statusMessage: shallowRef(""),
+          advanceSession: async () => {
+            calls++;
+            session.value = { ...session.value, revision: calls,
+              ...(calls === 2 ? { pendingOrders: [], executions: [{ status: "filled" }] } : {}) };
+            return session.value;
+          } });
+        return () => null;
+      } });
+      app.mount({}); t.after(() => app.unmount());
+      playback.start();
+      t.mock.timers.tick(1100); await new Promise(resolve => setImmediate(resolve));
+      await nextTick();
+      assert.equal(playback.playing.value, true);
+      assert.match(playback.message.value, /自动播放中/u);
+      t.mock.timers.tick(1100); await new Promise(resolve => setImmediate(resolve));
+      assert.equal(calls, 2);
+      assert.equal(playback.playing.value, false);
+      assert.match(playback.message.value, /已有成交或状态变化/u);
+    });
+  }
+
   it("uses the same 1/2/4/8 multipliers as crypto without changing the step size",()=>{
     assert.deepEqual(REPLAY_AUTOPLAY_SPEEDS.map(({value,label})=>({value,label})),[1,2,4,8].map(n=>({value:String(n),label:`${n}×`})));
     for(const n of [1,2,4,8]) assert.equal(getReplayAutoplayDelay(n),1100/n);

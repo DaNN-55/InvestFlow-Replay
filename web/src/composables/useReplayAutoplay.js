@@ -162,7 +162,8 @@ export function useReplayAutoplay({
         return;
       }
       if (status !== "active" || pendingCount > 0) {
-        pause(getReplayAutoplayStopReason(session.value));
+        const reason = getReplayAutoplayStopReason(session.value, { blindDraft: blindDraft?.value ?? null });
+        if (reason) pause(reason);
       }
     },
   );

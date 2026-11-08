@@ -16,6 +16,7 @@ import CryptoPositionPanel from '../components/crypto/CryptoPositionPanel.vue';
 import CryptoChartWorkspace from '../components/crypto/CryptoChartWorkspace.vue';
 import CryptoReviewPanel from '../components/crypto/CryptoReviewPanel.vue';
 import { createCryptoReplayController } from '../utils/cryptoReplayController.js';
+import { createCryptoReplayPlayback } from '../utils/cryptoReplayPlayback.js';
 import { amount, moneyAmount, relativeTime } from '../utils/cryptoReplayPresentation.js';
 import { priceDraftReached } from '../utils/cryptoPriceDraft.js';
 import { createCryptoModificationConfirmation } from '../utils/cryptoModificationConfirmation.js';
@@ -76,12 +77,21 @@ const fundingAmount=value=>Number(value)>0&&Number(value)<0.01?'<0.01':amount(va
 const availableBalanceAmount=value=>Number(value)<0&&Number(value)>-0.01?'缺口 <0.01':fundingAmount(value);
 const locked=computed(()=>confirmationView.value.blockNewActions);
 watch(()=>[s.value?.id,s.value?.revision,state.value.controls.newActionsBlocked,routeMismatch.value],()=>confirmation.reconcile());
-const finishOpen=ref(false),settingsOpen=ref(false),playing=ref(false);
+const finishOpen=ref(false),settingsOpen=ref(false);
+const playbackView=shallowRef(null);
+const playback=createCryptoReplayPlayback({
+  readContext:()=>({session:s.value,traces:state.value.traces,speed:preferences.value.playbackSpeed,
+    active:active.value&&route.name==='crypto-market-replay',blocked:state.value.controls.newActionsBlocked||locked.value||routeMismatch.value}),
+  advanceMinute:()=>controller.act('advance',{minutes:1}),
+  changed:value=>{playbackView.value=value;},
+});
+playbackView.value=playback.view;
+const playing=computed(()=>playbackView.value.playing);
+watch(()=>[active.value,route.name,s.value?.id,s.value?.status,s.value?.ending,state.value.controls.newActionsBlocked,
+  locked.value,routeMismatch.value,preferences.value.playbackSpeed],()=>playback.reconcile(),{flush:'sync'});
 const retraining=ref(false);
-let playbackTimer;
-let playbackGeneration=0, playbackInFlight=false;
 let lastRequestedSession=null;
-function records(focusCurrent=false) { playing.value=false;router.push({path:'/decision/trade-records',query:{tab:'replay',market:'crypto-perpetual',...(focusCurrent===true&&s.value?{session:s.value.id}:{})}}); }
+function records(focusCurrent=false) { stop();router.push({path:'/decision/trade-records',query:{tab:'replay',market:'crypto-perpetual',...(focusCurrent===true&&s.value?{session:s.value.id}:{})}}); }
 async function command(value,note='') {
   if(locked.value) return false;
   stop();
@@ -92,7 +102,7 @@ async function command(value,note='') {
   }
   return controller.act('command',{command:value,...(note?{note}:{})});
 }
-async function fresh() {if(locked.value) return;playing.value=false;await controller.fresh();if(!state.value.session) await router.replace({query:{}});}
+async function fresh() {if(locked.value) return;stop();await controller.fresh();if(!state.value.session) await router.replace({query:{}});}
 function ensurePeriods() {
   const wanted=cryptoVisiblePeriods(preferences.value);
   if(!state.value.controls.readBlocked && wanted.join(',')!==state.value.timeframes.join(',')) controller.periods(wanted);
@@ -129,7 +139,7 @@ async function retryPending() {
     }
   } finally {if(kind==='retrain') retraining.value=false;}
 }
-async function advance(minutes=1) {if(locked.value) return false;playing.value=false;return controller.act('advance',{minutes});}
+async function advance(minutes=1) {if(locked.value) return false;stop();return controller.act('advance',{minutes});}
 function handleAdvanceKey(event) {
   const minutes={'1':1,'2':5,'3':15}[event.key];
   if(!minutes||event.defaultPrevented||event.repeat||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||!active.value||route.name!=='crypto-market-replay'||!s.value||s.value.status!=='active'||locked.value||state.value.controls.newActionsBlocked||routeMismatch.value) return;
@@ -137,26 +147,8 @@ function handleAdvanceKey(event) {
   if([...document.querySelectorAll('[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"]')].some(element=>element.getClientRects().length)) return;
   event.preventDefault();advance(minutes);
 }
-function schedulePlayback(generation=playbackGeneration) {
-  clearTimeout(playbackTimer);
-  if(playing.value&&!playbackInFlight) playbackTimer=setTimeout(()=>tick(generation),900/preferences.value.playbackSpeed);
-}
-async function tick(generation) {
-  if(generation!==playbackGeneration) return;
-  if(!playing.value||locked.value||s.value?.status!=='active'||s.value?.ending){playing.value=false;return;}
-  const sequence=state.value.traces.at(-1)?.sequence??0;
-  playbackInFlight=true;
-  const ok=await controller.act('advance',{minutes:1});
-  playbackInFlight=false;
-  if(generation!==playbackGeneration) return;
-  const paused=state.value.traces.some(e=>e.sequence>sequence&&['order-filled','order-rejected','funding-settled','protection-triggered','protection-filled','teaching-liquidation','risk-triggered','end-filled','training-ended','end-blocked'].includes(e.type));
-  if(!ok||paused||s.value?.status!=='active') playing.value=false;
-  if(playing.value) schedulePlayback(generation);
-}
-watch(playing,()=>{playbackGeneration++;clearTimeout(playbackTimer);if(playing.value) schedulePlayback();});
-watch(()=>preferences.value.playbackSpeed,()=>{if(playing.value) schedulePlayback();});
-function stop() {playing.value=false;playbackGeneration++;clearTimeout(playbackTimer);}
-onDeactivated(()=>{active.value=false;window.removeEventListener('keydown',handleAdvanceKey);stop();confirmation.reset();});onBeforeUnmount(()=>{window.removeEventListener('keydown',handleAdvanceKey);stop();confirmation.dispose();});
+function stop() {playback.pause();}
+onDeactivated(()=>{active.value=false;window.removeEventListener('keydown',handleAdvanceKey);stop();confirmation.reset();});onBeforeUnmount(()=>{window.removeEventListener('keydown',handleAdvanceKey);playback.dispose();confirmation.dispose();});
 async function finish() {stop();if(await controller.act('finish')) finishOpen.value=false;}
 async function retrain() {
   stop();retraining.value=true;
@@ -193,8 +185,8 @@ async function retrain() {
             :playing="playing" :speed="preferences.playbackSpeed" :speeds="CRYPTO_PLAYBACK_SPEEDS.map(value=>({value,label:`${value}×`}))"
             :steps="[1,5,15].map(value=>({value,label:`推进 ${value} 分钟`}))" :shortcuts="{1:'1',5:'2',15:'3'}" :progress="progress"
             play-label="自动回放" pause-label="暂停回放" speed-label="自动回放倍率" help="快捷键1、2、3分别推进1、5、15分钟；输入、弹窗或同步期间不触发。倍率调整播放间隔；每次仍推进1分钟，成交或风险事件后暂停。"
-            :play-disabled="!playing&&(locked||s.status!=='active'||s.ending)" :steps-disabled="locked||s.status!=='active'"
-            @toggle="playing=!playing" @speed="preferences.playbackSpeed=Number($event)" @step="advance"
+            :play-disabled="!playing&&!playbackView.canStart" :steps-disabled="locked||s.status!=='active'"
+            @toggle="playback.toggle" @speed="preferences.playbackSpeed=Number($event)" @step="advance"
           >
             <template #actions><UiButton variant="secondary" class="crypto-finish" :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton><UiButton variant="secondary" :disabled="locked" @click="fresh">新开一局</UiButton></template>
           </ReplayPlaybackControls>
