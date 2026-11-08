@@ -19,3 +19,13 @@ storage/trade-records/*.json
 storage/crypto-samples/
 storage/crypto-pool/
 !.gitkeep
+
+# Keep local notes out of Git; retain the linked guide and runtime/test fixtures.
+/docs/*
+!/docs/crypto-data.md
+!/docs/research/
+/docs/research/*
+!/docs/research/okx-rule-snapshots/
+!/docs/research/okx-sample-evidence/
+/PLAN.md
+/CONTEXT.md
