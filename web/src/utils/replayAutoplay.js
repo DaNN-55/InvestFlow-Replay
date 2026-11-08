@@ -10,7 +10,7 @@ function formatPrice(value) {
   return Number(value).toFixed(2);
 }
 
-export function getReplayDraftRiskStopReason(session, blindDraft) {
+function getReplayDraftRiskStopReason(session, blindDraft) {
   const close = Number(session?.bars?.at(-1)?.close);
   if (!Number.isFinite(close) || !blindDraft) {
     return "";

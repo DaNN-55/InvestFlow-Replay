@@ -613,8 +613,7 @@ onBeforeUnmount(() => {
 .market-replay :deep(.replay-account),
 .market-replay :deep(.replay-chart-panel),
 .market-replay :deep(.replay-trading),
-.market-replay :deep(.replay-review),
-.market-replay :deep(.replay-training-context) {
+.market-replay :deep(.replay-review) {
   border-radius: var(--ql-radius-card) !important;
   background: var(--ql-color-bg-surface-strong) !important;
 }

@@ -346,5 +346,3 @@ export function detectTrainingConditionEvents({
 
   return [...events.values()].sort((left, right) => left.sequence - right.sequence || left.kind.localeCompare(right.kind) || left.orderId.localeCompare(right.orderId));
 }
-
-export default detectTrainingConditionEvents;

@@ -1184,10 +1184,6 @@ onMounted(() => {
   gap: 0.5rem;
 }
 
-.trade-record-form__grid--two {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .trade-record-form__grid--one {
   grid-template-columns: 1fr;
 }
@@ -1233,12 +1229,6 @@ onMounted(() => {
   font-size: 0.625rem;
   font-weight: 600;
   white-space: nowrap;
-}
-
-.trade-record-form__hint {
-  color: var(--ql-color-text-muted);
-  font-size: 0.6875rem;
-  line-height: 1.4;
 }
 
 .trade-record-form :deep(textarea) {
@@ -1308,7 +1298,6 @@ onMounted(() => {
 @media (max-width: 760px) {
   .trade-record-analytics__metrics,
   .trade-record-final-summary,
-  .trade-record-form__grid--two,
   .trade-record-form__grid--three,
   .trade-record-form__grid--four {
     grid-template-columns: 1fr;

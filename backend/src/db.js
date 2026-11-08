@@ -2056,8 +2056,8 @@ export function createDatabase(dbPath = DEFAULT_DB_PATH) {
        ORDER BY orders.created_revision ASC, orders.rowid ASC`,
     ).all(sequence, sequence, sessionId);
     const observations = rows.map((row) => {
-      let decision = {};
-      let state = {};
+      let decision;
+      let state;
       try { decision = row.decision_json ? JSON.parse(row.decision_json) : {}; } catch { decision = {}; }
       try { state = row.execution_json ? JSON.parse(row.execution_json) : {}; } catch { state = {}; }
       const filledThisStep = Number(row.fill_quantity ?? 0);

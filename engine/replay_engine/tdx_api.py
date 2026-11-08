@@ -29,15 +29,12 @@ class TdxClient:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: Thread | None = None
         self._started = Event()
-        self._start_error: BaseException | None = None
         self._security_lists: dict[Market, list[Any]] = {}
 
     def __enter__(self) -> "TdxClient":
         self._thread = Thread(target=self._run_loop, name=f"tdx-{self.host}", daemon=True)
         self._thread.start()
         self._started.wait()
-        if self._start_error is not None:
-            raise self._start_error
         self._call(self._start)
         return self
 

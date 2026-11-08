@@ -399,15 +399,6 @@ watch(
   font-size: 0.6875rem;
 }
 
-.replay-correction__na {
-  padding: 0.6rem;
-  border: 1px dashed rgba(15, 23, 42, 0.15);
-  border-radius: 7px;
-  color: var(--ql-color-text-muted);
-  background: var(--ql-color-bg-surface-strong);
-  font-size: 0.75rem;
-}
-
 .replay-correction footer {
   display: flex;
   justify-content: flex-end;

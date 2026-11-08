@@ -20,7 +20,7 @@ function sameJson(left, right) {
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
-export function actualCompletionSteps(session) {
+function actualCompletionSteps(session) {
   const observationBars = Number(session.observationBars ?? 0);
   const completed = Number(session.revealedFutureBars ?? 0);
   const total = Number(session.gameLength ?? 0);

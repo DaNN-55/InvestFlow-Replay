@@ -243,15 +243,6 @@ function formatScore(value) {
   font-size: 0.75rem;
 }
 
-.replay-history-list__training {
-  overflow: hidden;
-  color: #1d4ed8;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .replay-history-list__attempt {
   width: fit-content;
   max-width: 100%;

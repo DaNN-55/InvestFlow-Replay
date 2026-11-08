@@ -901,7 +901,7 @@ function classifyReplayMarketStatus(bar) {
 }
 
 
-export function presentReplaySession(session) {
+function presentReplaySession(session) {
     const progressBarCount =
       Number(session.observationBars) + Number(session.revealedFutureBars);
     const privateBars = Array.isArray(session.snapshot?.bars)

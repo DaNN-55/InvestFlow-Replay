@@ -4,7 +4,7 @@ import { validateReplayAdvancedIndicatorConfig } from "../utils/replayIndicatorE
 
 export const REPLAY_INDICATORS_STORAGE_KEY =
   "investflow.replay.indicator-preferences.v1";
-export const MAX_REPLAY_SUBCHARTS = 3;
+const MAX_REPLAY_SUBCHARTS = 3;
 export const REPLAY_INDICATOR_LIMIT_MESSAGE =
   "最多同时显示 3 个副图，请先关闭一个已显示指标。";
 

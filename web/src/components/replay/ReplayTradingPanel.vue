@@ -329,106 +329,10 @@ function formatMoney(value) {
   width: 100%;
 }
 
-.replay-trading__form {
-  display: grid;
-  gap: 10px;
-}
-
-.replay-trading__mode-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.replay-trading__label,
 .replay-trading__section-title {
   color: var(--ql-color-text-muted);
   font-size: 11px;
   font-weight: 700;
-}
-
-.replay-trading__mode-switch {
-  display: inline-flex;
-  padding: 2px;
-  border-radius: 7px;
-  background: var(--ql-paper-soft);
-}
-
-.replay-trading__mode-switch button {
-  min-width: 42px;
-  min-height: 28px;
-  border: 0;
-  border-radius: 5px;
-  color: var(--ql-color-text-muted);
-  background: transparent;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.replay-trading__mode-switch .replay-trading__mode--active {
-  color: var(--ql-ink);
-  background: var(--ql-color-bg-surface-strong);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-}
-
-.replay-trading__field {
-  position: relative;
-}
-
-.replay-trading__field span {
-  position: absolute;
-  top: 50%;
-  right: 13px;
-  color: var(--ql-color-text-muted);
-  font-size: 12px;
-  transform: translateY(-50%);
-}
-
-.replay-trading__field :deep(input) {
-  padding-right: 42px;
-  font-family: "SF Mono", "SFMono-Regular", Menlo, monospace;
-  font-weight: 700;
-}
-
-.replay-trading__ratios {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-}
-
-.replay-trading__ratios button {
-  min-height: 32px;
-  border: 1px solid var(--ql-line-strong);
-  border-radius: 6px;
-  color: var(--ql-color-text-muted);
-  background: var(--ql-color-bg-surface-strong);
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.replay-trading__ratios .replay-trading__ratio--active {
-  border-color: var(--ql-accent);
-  color: var(--ql-accent);
-  background: var(--ql-color-primary-soft);
-}
-
-.replay-trading__hint {
-  margin: 0;
-  color: var(--ql-color-text-subtle);
-  font-size: 10px;
-  line-height: 1.55;
-}
-
-.replay-trading__submit--sell {
-  border-color: #059669;
-  background: #059669;
-}
-
-.replay-trading__submit--sell:hover,
-.replay-trading__submit--sell:focus-visible {
-  border-color: #047857;
-  background: #047857;
 }
 
 .replay-trading__pending,

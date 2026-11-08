@@ -4,7 +4,7 @@ const D = Decimal.clone({ precision: 96 });
 export const MINUTE_MS = 60_000;
 export const DAY_MS = 86_400_000;
 export const BEIJING_OFFSET_MS = 8 * 60 * MINUTE_MS;
-export const CRYPTO_VIEW_VERSION = "crypto-prefix-view-v1";
+const CRYPTO_VIEW_VERSION = "crypto-prefix-view-v1";
 export const CRYPTO_TIMEFRAMES = Object.freeze([1, 3, 5, 15, 30, 60, 120, 240, 360, 720, 1440]);
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 function timestamp(value, label) {

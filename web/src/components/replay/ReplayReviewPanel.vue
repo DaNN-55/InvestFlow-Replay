@@ -1159,7 +1159,6 @@ watch(
   letter-spacing: -0.02em;
 }
 
-.replay-review__waiting,
 .replay-review__legacy,
 .replay-review__locked-stage {
   padding: 20px;
@@ -1171,13 +1170,6 @@ watch(
   display: grid;
   gap: 10px;
   padding: 14px;
-}
-
-.replay-review__waiting p {
-  max-width: 720px;
-  margin: 6px 0 0;
-  font-size: 12px;
-  line-height: 1.7;
 }
 
 .replay-review__form,
@@ -1237,18 +1229,12 @@ watch(
   font-size: 14px;
 }
 
-.replay-review__saved,
 .replay-review__locked {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 5px 8px;
   border-radius: 999px;
-}
-
-.replay-review__saved {
-  color: #047857;
-  background: var(--ql-color-success-soft);
 }
 
 .replay-review__draft-status {
@@ -1298,36 +1284,6 @@ watch(
   background: var(--ql-color-success-soft);
   font-size: 11px;
   line-height: 1.55;
-}
-
-.replay-review__training-lock {
-  display: grid;
-  gap: 5px;
-  padding: 11px 12px;
-  border: 1px solid rgba(15, 82, 186, 0.15);
-  border-radius: 8px;
-  background: var(--ql-color-primary-soft);
-}
-
-.replay-review__training-lock span,
-.replay-review__training-lock small {
-  color: var(--ql-color-text-muted);
-  font-size: 10px;
-}
-
-.replay-review__training-lock strong {
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-
-.replay-review__not-applicable {
-  min-height: 38px;
-  padding: 10px;
-  border: 1px dashed var(--ql-line-strong);
-  border-radius: 8px;
-  color: var(--ql-color-text-muted);
-  background: var(--ql-paper-soft);
-  font-size: 11px;
 }
 
 .replay-review__field {
