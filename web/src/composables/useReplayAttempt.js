@@ -22,23 +22,8 @@ export function useReplayAttempt(options = {}) {
 
   const commandRunning = shallowRef(false);
 
-  const activity = computed(() => {
-    const activities = [
-      ["restoring", sessionController.isRestoring],
-      ["creating", sessionController.isCreating],
-      ["submitting", sessionController.isSubmitting],
-      ["advancing", sessionController.isAdvancing],
-      ["finishing", sessionController.isFinishing],
-      ["revealing", sessionController.isRevealing],
-      ["savingBlindReview", sessionController.isSavingBlindReview],
-      ["savingPostReview", sessionController.isSavingPostReview],
-      ["savingBlindCorrection", sessionController.isSavingBlindCorrection],
-      ["savingPostCorrection", sessionController.isSavingPostCorrection],
-      ["cancellingRetrain", sessionController.isCancellingRetrain],
-    ];
-    return activities.find(([, flag]) => flag.value)?.[0] ??
-      (commandRunning.value ? "working" : null);
-  });
+  const activity = computed(() => sessionController.activity.value ??
+    (commandRunning.value ? "working" : null));
 
   const state = computed(() => ({
     hasSession: sessionController.hasSession.value,
@@ -146,7 +131,7 @@ export function useReplayAttempt(options = {}) {
     ),
     toggleAutoplay: autoplayController.toggle,
     setAutoplaySpeed: autoplayController.setSpeed,
-    sync: sessionController.syncStoredSession,
+    sync: () => runWrite(() => sessionController.syncStoredSession(), { pause: false }),
     resume: (id) => runWrite(() => sessionController.resumeSession(id)),
       startNew: () => runWrite(() => sessionController.startNewSession()),
     clearMessages: sessionController.clearMessages,

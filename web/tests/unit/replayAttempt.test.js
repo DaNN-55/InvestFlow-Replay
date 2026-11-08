@@ -16,17 +16,7 @@ function createSessionController(calls) {
     isCompleted: computed(() => session.value?.status === "completed"),
     isRevealed: computed(() => Boolean(session.value?.revealed)),
     isBusy: flag,
-    isRestoring: flag,
-    isCreating: flag,
-    isSubmitting: flag,
-    isAdvancing: flag,
-    isFinishing: flag,
-    isRevealing: flag,
-    isSavingBlindReview: flag,
-    isSavingPostReview: flag,
-    isSavingBlindCorrection: flag,
-    isSavingPostCorrection: flag,
-    isCancellingRetrain: flag,
+    activity: shallowRef(null),
     errorMessage: shallowRef(""),
     statusMessage: shallowRef("ready"),
     createSession: async () => null,
@@ -334,5 +324,46 @@ describe("replay attempt workflow", () => {
       ["save-post", { lesson: "post" }],
       ["finish-final", "post", false],
     ]);
+  });
+
+  it("blocks stored-session synchronization while finalization waits for a draft", async () => {
+    const calls = [];
+    const waitingDraft = deferred();
+    const storage = createMemoryStorage({ [SESSION_STORAGE_KEY]: "session-1" });
+    const reads = [];
+    const completed = { id: "session-1", status: "completed", revision: 1, review: {} };
+    const sessionController = useReplaySession({
+      restoreOnMount: false, storage,
+      client: {
+        async getReplaySession(id) {
+          reads.push(id);
+          return { session: { ...completed, id } };
+        },
+        async saveReplayBlindReview(id) {
+          calls.push(["save", id]);
+          return { session: { ...completed, revision: 2, review: { blindSaved: true } } };
+        },
+      },
+    });
+    await sessionController.syncStoredSession();
+    const drafts = createDraftController(calls);
+    drafts.prepareFinal = async () => waitingDraft.promise;
+    const attempt = useReplayAttempt({
+      sessionController, reviewDraftController: drafts,
+      autoplayController: createAutoplayController(calls),
+    });
+
+    const saving = attempt.commands.saveBlindReview({ thesis: "draft" });
+    storage.setItem(SESSION_STORAGE_KEY, "session-2");
+    const synchronized = await attempt.commands.sync();
+    const readsWhileFinalizing = [...reads];
+    waitingDraft.resolve();
+    await saving;
+
+    assert.equal(synchronized, null);
+    assert.deepEqual(readsWhileFinalizing, ["session-1"]);
+    assert.ok(calls.some(([kind, id]) => kind === "save" && id === "session-1"));
+    assert.equal(attempt.session.value.id, "session-1");
+    assert.equal(attempt.state.value.isBusy, false);
   });
 });
