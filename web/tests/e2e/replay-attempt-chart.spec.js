@@ -243,7 +243,7 @@ test("揭晓后复盘先填写判断结果与两项评分", async ({ page }) => 
   expect(new Set(positions).size).toBe(1);
 
   const firstFieldLabel = await page
-    .locator(".replay-review__form > .replay-review__field")
+    .locator(".replay-review__draft-fields > .replay-review__field")
     .first()
     .locator("> span")
     .textContent();
@@ -253,7 +253,7 @@ test("揭晓后复盘先填写判断结果与两项评分", async ({ page }) => 
     (element) => element.getBoundingClientRect().top,
   );
   const firstFieldTop = await page
-    .locator(".replay-review__form > .replay-review__field")
+    .locator(".replay-review__draft-fields > .replay-review__field")
     .first()
     .evaluate((element) => element.getBoundingClientRect().top);
   expect(scoreRowTop).toBeLessThan(firstFieldTop);

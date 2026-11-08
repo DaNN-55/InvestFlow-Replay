@@ -64,6 +64,10 @@ const props = defineProps({
     type: Object,
     default: () => ({ blind: "unsaved", post: "unsaved" }),
   },
+  draftStages: {
+    type: Object,
+    required: true,
+  },
   modal: {
     type: Boolean,
     default: false,
@@ -81,6 +85,7 @@ const emit = defineEmits([
   "deleteCorrection",
   "draftChange",
   "deleteDraft",
+  "confirmFinal",
 ]);
 
 const blindForm = reactive({
@@ -115,6 +120,7 @@ const draftStatusLabels = {
   saving: "保存中",
   saved: "已自动保存",
   failed: "保存失败",
+  uncertain: "提交待核对",
 };
 
 const completed = computed(() => props.session.status === "completed");
@@ -232,15 +238,10 @@ const latestCorrectionSnapshot = computed(() => {
 function syncBlindForm() {
   const localBlindDraft =
     props.reviewDrafts?.blind?.data ?? props.reviewDrafts?.blind ?? null;
-  const serverBlindDraft =
-    props.session.reviewDrafts?.blind?.data ??
-    props.session.reviewDrafts?.blind ??
-    null;
   const sourceBlind =
     blindReview.value ??
     localBlindDraft ??
-    serverBlindDraft ??
-    blindDecisionPrefill.value;
+    (props.draftStages.blind.allowPrefill ? blindDecisionPrefill.value : null);
   Object.assign(blindForm, {
     playbookId: sourceBlind?.playbookId ?? "",
     strategyName: sourceBlind?.strategyName ?? "",
@@ -258,12 +259,8 @@ function syncBlindForm() {
 function syncPostForm() {
   const localPostDraft =
     props.reviewDrafts?.post?.data ?? props.reviewDrafts?.post ?? null;
-  const serverPostDraft =
-    props.session.reviewDrafts?.post?.data ??
-    props.session.reviewDrafts?.post ??
-    null;
   const postReview =
-    review.value.postReview ?? localPostDraft ?? serverPostDraft;
+    review.value.postReview ?? localPostDraft;
   Object.assign(postForm, {
     outcome: postReview?.outcome ?? "partial",
     executionReview: postReview?.executionReview ?? "",
@@ -420,10 +417,15 @@ function formatScore(value) {
 }
 
 watch(
-  () => props.session.id,
-  () => {
-    syncForms();
-    closeCorrection();
+  () => [props.session.id, props.draftStages.blind.restoreToken, props.draftStages.post.restoreToken],
+  (current, previous) => {
+    if (!previous || current[0] !== previous[0]) {
+      syncForms();
+      closeCorrection();
+    } else {
+      if (current[1] !== previous[1]) syncBlindForm();
+      if (current[2] !== previous[2]) syncPostForm();
+    }
   },
   { immediate: true },
 );
@@ -441,7 +443,7 @@ watch(
       revealed.value ||
       review.value.blindSaved ||
       props.reviewDrafts.blind ||
-      props.session.reviewDrafts?.blind ||
+      !props.draftStages.blind.allowPrefill ||
       alreadyHasBlindContent
     ) {
       return;
@@ -458,27 +460,9 @@ watch(
 );
 
 watch(
-  () => props.session.reviewDrafts?.blind?.updatedAt ?? "",
-  () => {
-    if (props.draftStatuses.blind === "saved") {
-      syncBlindForm();
-    }
-  },
-);
-
-watch(
-  () => props.session.reviewDrafts?.post?.updatedAt ?? "",
-  () => {
-    if (props.draftStatuses.post === "saved") {
-      syncPostForm();
-    }
-  },
-);
-
-watch(
   blindForm,
   () => {
-    if (revealed.value || review.value.blindSaved) {
+    if (!props.draftStages.blind.canEdit || revealed.value || review.value.blindSaved) {
       return;
     }
     const draft = buildBlindPayload();
@@ -495,7 +479,7 @@ watch(
 watch(
   postForm,
   () => {
-    if (!revealed.value || review.value.postSaved) {
+    if (!props.draftStages.post.canEdit || !revealed.value || review.value.postSaved) {
       return;
     }
     const draft = buildPostPayload();
@@ -550,12 +534,19 @@ watch(
       id="replay-review-content"
       class="replay-review__content"
     >
+      <template v-for="stage in ['blind', 'post']" :key="stage">
+        <div v-if="draftStages[stage].message" class="replay-review__final-status" role="status">
+          <p>{{ draftStages[stage].message }}</p>
+          <UiButton v-if="draftStages[stage].needsConfirmation" variant="secondary" @click="emit('confirmFinal', stage)">重新核对提交结果</UiButton>
+        </div>
+      </template>
       <div v-if="revealed" class="replay-review__comparison-entry"><span>原始成绩保留，复练单独记录。</span><UiButton variant="secondary" size="sm" @click="comparisonOpen = true">首次与复练对照</UiButton></div>
       <form
         v-if="!revealed && !review.blindSaved"
         class="replay-review__form"
         @submit.prevent="submitBlind"
       >
+        <fieldset class="replay-review__draft-fields" :disabled="!draftStages.blind.canEdit">
       <div class="replay-review__stage-heading">
         <div>
           <span>阶段一</span>
@@ -671,6 +662,7 @@ watch(
           v-if="hasBlindDraft"
           type="button"
           variant="secondary"
+          :disabled="!draftStages.blind.canDelete"
           @click="clearDraft('blind')"
         >
           清空盲评草稿
@@ -685,6 +677,7 @@ watch(
         </UiButton>
         <small v-else>演练进行中：草稿可编辑，完成后才能提交冻结。</small>
       </div>
+      </fieldset>
     </form>
 
     <div v-else-if="!revealed" class="replay-review__locked-stage">
@@ -818,6 +811,7 @@ watch(
         class="replay-review__form"
         @submit.prevent="submitPost"
       >
+        <fieldset class="replay-review__draft-fields" :disabled="!draftStages.post.canEdit">
         <div class="replay-review__stage-heading">
           <div>
             <span>阶段二</span>
@@ -918,6 +912,7 @@ watch(
             v-if="hasPostDraft"
             type="button"
             variant="secondary"
+            :disabled="!draftStages.post.canDelete"
             @click="clearDraft('post')"
           >
             清空复盘草稿
@@ -930,7 +925,8 @@ watch(
             保存原始复盘并评分
           </UiButton>
         </div>
-      </form>
+        </fieldset>
+    </form>
       <section v-else class="replay-review__frozen">
         <div class="replay-review__stage-heading">
           <div>
@@ -1091,6 +1087,10 @@ watch(
 </template>
 
 <style scoped>
+.replay-review__draft-fields { display: contents; }
+.replay-review__final-status { padding: 12px; border-bottom: 1px solid var(--ql-line); }
+.replay-review__final-status p { margin: 0 0 8px; }
+
 .replay-review__comparison-entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--ql-line); }
 .replay-review__comparison-entry span { color: var(--ql-color-text-muted); font-size: 12px; }
 

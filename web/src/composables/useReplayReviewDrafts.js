@@ -1,11 +1,12 @@
 import {
+  computed,
   onScopeDispose,
-  readonly,
   shallowRef,
   watch,
 } from "vue";
 
 import { api } from "../services/api.js";
+import { createReviewDraftFlow, transitionReviewDraft, reviewDraftView, reviewStageLocked } from "../utils/replayReviewDraftFlow.js";
 
 const STAGES = ["blind", "post"];
 
@@ -55,296 +56,170 @@ function requireDraftRevision(record) {
   return readDraftRevision(record);
 }
 
-export function useReplayReviewDrafts({
-  session,
-  apiClient = api,
-  debounceMs = 600,
-} = {}) {
-  const drafts = shallowRef({ blind: null, post: null });
-  const statuses = shallowRef({ blind: "unsaved", post: "unsaved" });
+export function useReplayReviewDrafts({ session, apiClient = api, debounceMs = 600 } = {}) {
+  const flows = shallowRef({});
   const timers = { blind: null, post: null };
-  const inFlight = { blind: null, post: null };
-  const generations = { blind: 0, post: 0 };
-  const finalizing = { blind: false, post: false };
-  const dirty = { blind: false, post: false };
-  const revisions = { blind: 0, post: 0 };
-  let activeSessionId = "";
+  const work = { blind: null, post: null };
+  const deletions = { blind: null, post: null };
+  let epoch = 0;
 
-  function replaceDraft(stage, draft) {
-    drafts.value = { ...drafts.value, [stage]: draft };
+  const drafts = computed(() => Object.fromEntries(STAGES.map(stage => [stage, flows.value[stage].draft])));
+  const stages = computed(() => Object.fromEntries(STAGES.map(stage => [stage, reviewDraftView(flows.value[stage])])));
+  const statuses = computed(() => Object.fromEntries(STAGES.map(stage => [stage, stages.value[stage].status])));
+  const current = context => context.epoch === epoch && context.sessionId === session.value?.id;
+  function dispatch(stage, event) {
+    flows.value = { ...flows.value, [stage]: transitionReviewDraft(flows.value[stage], event) };
   }
-
-  function replaceStatus(stage, status) {
-    statuses.value = { ...statuses.value, [stage]: status };
-  }
-
   function clearTimer(stage) {
-    if (timers[stage] != null) {
-      clearTimeout(timers[stage]);
-      timers[stage] = null;
-    }
-  }
-
-  function restore(nextSession) {
-    for (const stage of STAGES) {
-      clearTimer(stage);
-      generations[stage] += 1;
-      finalizing[stage] = false;
-      dirty[stage] = false;
-    }
-    activeSessionId = nextSession?.id ?? "";
-    const serverDrafts = nextSession?.reviewDrafts ?? {};
-    const blind = unwrapDraft(serverDrafts.blind);
-    const post = unwrapDraft(serverDrafts.post);
-    revisions.blind = readDraftRevision(serverDrafts.blind);
-    revisions.post = readDraftRevision(serverDrafts.post);
-    drafts.value = { blind, post };
-    statuses.value = {
-      blind: blind ? "saved" : "unsaved",
-      post: post ? "saved" : "unsaved",
-    };
-  }
-
-  function restoreStage(stage) {
-    if (
-      !activeSessionId ||
-      dirty[stage] ||
-      finalizing[stage]
-    ) {
-      return;
-    }
-    const serverDraft = session.value?.reviewDrafts?.[stage];
-    const draft = unwrapDraft(serverDraft);
-    revisions[stage] = readDraftRevision(serverDraft);
-    replaceDraft(stage, draft);
-    replaceStatus(stage, draft ? "saved" : "unsaved");
-  }
-
-  async function persist(stage, generation, sessionId, draft) {
+    if (timers[stage] !== null) clearTimeout(timers[stage]);
     timers[stage] = null;
-    if (
-      finalizing[stage] ||
-      generation !== generations[stage] ||
-      sessionId !== activeSessionId ||
-      session.value?.id !== sessionId
-    ) {
-      return;
-    }
-    const activeRequest = inFlight[stage];
-    if (activeRequest) {
-      await activeRequest.catch(() => {});
-      if (
-        !finalizing[stage] &&
-        generation === generations[stage] &&
-        sessionId === activeSessionId &&
-        session.value?.id === sessionId
-      ) {
-        await persist(stage, generation, sessionId, draft);
-      }
-      return;
-    }
-    replaceStatus(stage, "saving");
-    const expectedRevision = revisions[stage];
-    const request = Promise.resolve().then(() =>
-      apiClient.saveReplayReviewDraft(
-        sessionId,
-        stage,
-        draft,
-        expectedRevision,
-      ),
-    );
-    inFlight[stage] = request;
-    try {
-      const result = await request;
-      const nextRevision = requireDraftRevision(result?.draft);
-      if (sessionId === activeSessionId) {
-        revisions[stage] = nextRevision;
-      }
-      if (
-        finalizing[stage] ||
-        generation !== generations[stage] ||
-        sessionId !== activeSessionId
-      ) {
-        return;
-      }
-      replaceDraft(stage, unwrapDraft(result?.draft) ?? draft);
-      replaceStatus(stage, "saved");
-      dirty[stage] = false;
-    } catch {
-      if (
-        !finalizing[stage] &&
-        generation === generations[stage] &&
-        sessionId === activeSessionId
-      ) {
-        replaceStatus(stage, "failed");
-      }
-    } finally {
-      if (inFlight[stage] === request) {
-        inFlight[stage] = null;
-      }
-    }
   }
-
-  function queueDraft(stage, draft) {
-    if (
-      !STAGES.includes(stage) ||
-      !activeSessionId ||
-      finalizing[stage]
-    ) {
-      return;
-    }
-    clearTimer(stage);
-    generations[stage] += 1;
-    const generation = generations[stage];
-    const sessionId = activeSessionId;
-    replaceDraft(stage, draft);
-    replaceStatus(stage, "unsaved");
-    dirty[stage] = true;
-    timers[stage] = setTimeout(
-      () => persist(stage, generation, sessionId, draft),
-      debounceMs,
-    );
-  }
-
-  async function deleteDraft(stage) {
-    if (!STAGES.includes(stage) || !activeSessionId) {
-      return false;
-    }
-    clearTimer(stage);
-    generations[stage] += 1;
-    const generation = generations[stage];
-    const sessionId = activeSessionId;
-    const previous = drafts.value[stage];
-    replaceDraft(stage, null);
-    replaceStatus(stage, "saving");
-    dirty[stage] = true;
-    try {
-      const activeRequest = inFlight[stage];
-      if (activeRequest) {
-        await activeRequest;
-      }
-      if (
-        generation !== generations[stage] ||
-        sessionId !== activeSessionId ||
-        session.value?.id !== sessionId
-      ) {
-        return false;
-      }
-      const result = await apiClient.deleteReplayReviewDraft(
-        sessionId,
-        stage,
-        revisions[stage],
-      );
-      const nextRevision = result?.revision;
-      if (!Number.isSafeInteger(nextRevision) || nextRevision < 0) {
-        throw new Error("服务端草稿 revision 无效");
-      }
-      revisions[stage] = nextRevision;
-      if (
-        generation === generations[stage] &&
-        sessionId === activeSessionId
-      ) {
-        replaceStatus(stage, "unsaved");
-        dirty[stage] = false;
-      }
-      return true;
-    } catch {
-      if (
-        generation === generations[stage] &&
-        sessionId === activeSessionId
-      ) {
-        replaceDraft(stage, previous);
-        replaceStatus(stage, "failed");
-        dirty[stage] = false;
-      }
-      return false;
-    }
-  }
-
-  async function prepareFinal(stage) {
-    if (!STAGES.includes(stage)) {
-      return;
-    }
-    clearTimer(stage);
-    generations[stage] += 1;
-    finalizing[stage] = true;
-    if (inFlight[stage]) {
-      await inFlight[stage].catch(() => {});
-    }
-  }
-
-  function finishFinal(stage, saved) {
-    if (!STAGES.includes(stage)) {
-      return;
-    }
-    finalizing[stage] = false;
-    if (saved) {
-      replaceDraft(stage, null);
-      replaceStatus(stage, "saved");
-      dirty[stage] = false;
-      return;
-    }
-    const draft = drafts.value[stage];
-    if (draft) {
-      queueDraft(stage, draft);
-    }
-  }
-
-  function dispose() {
+  function restore(nextSession) {
+    epoch++;
     for (const stage of STAGES) {
       clearTimer(stage);
-      generations[stage] += 1;
+      work[stage] = null;
+      deletions[stage]?.resolve(false);
+      deletions[stage] = null;
     }
-    activeSessionId = "";
+    flows.value = Object.fromEntries(STAGES.map(stage => {
+      const record = nextSession?.reviewDrafts?.[stage];
+      return [stage, createReviewDraftFlow({ sessionId: nextSession?.id ?? "", epoch,
+        draft: unwrapDraft(record), revision: readDraftRevision(record), locked: reviewStageLocked(nextSession, stage) })];
+    }));
   }
-
-  watch(
-    () => session.value?.id,
-    () => restore(session.value),
-    { immediate: true },
-  );
-  watch(
-    () => [
-      session.value?.id,
-      session.value?.reviewDrafts?.blind?.updatedAt ?? "",
-      session.value?.reviewDrafts?.blind?.revision ?? 0,
-      session.value?.reviewDrafts?.post?.updatedAt ?? "",
-      session.value?.reviewDrafts?.post?.revision ?? 0,
-    ],
-    ([
-      sessionId,
-      blindUpdatedAt,
-      blindRevision,
-      postUpdatedAt,
-      postRevision,
-    ], previous) => {
-      if (!previous || sessionId !== previous[0]) {
-        return;
+  function schedule(stage) {
+    clearTimer(stage);
+    const context = flows.value[stage];
+    timers[stage] = setTimeout(() => {
+      timers[stage] = null;
+      if (!current(context)) return;
+      dispatch(stage, { type: "saveDue", version: context.version });
+      drain(stage);
+    }, debounceMs);
+  }
+  function drain(stage) {
+    const state = flows.value[stage];
+    if (work[stage] || !current(state)) return;
+    const deletion = state.deletion;
+    const saving = state.phase === "editing" && state.saveReady && state.version !== state.cleanVersion;
+    if (!deletion && !saving) return;
+    const request = { sessionId: state.sessionId, epoch: state.epoch, kind: deletion ? "delete" : "save",
+      version: deletion?.version ?? state.version, previous: deletion?.previous,
+      draft: state.draft, revision: state.revision };
+    const job = { request, promise: null };
+    work[stage] = job;
+    dispatch(stage, { type: "requestStarted", request });
+    job.promise = Promise.resolve().then(async () => {
+      let accepted = false;
+      try {
+        const result = request.kind === "delete"
+          ? await apiClient.deleteReplayReviewDraft(request.sessionId, stage, request.revision)
+          : await apiClient.saveReplayReviewDraft(request.sessionId, stage, request.draft, request.revision);
+        const revision = request.kind === "delete" ? result?.revision : requireDraftRevision(result?.draft);
+        if (!Number.isSafeInteger(revision) || revision < 0) throw new Error("服务端草稿 revision 无效");
+        if (current(request)) {
+          dispatch(stage, { type: "requestSucceeded", request, revision, draft: unwrapDraft(result?.draft) ?? request.draft });
+          accepted = true;
+        }
+      } catch (error) {
+        if (current(request)) dispatch(stage, { type: "requestFailed", request, message: error?.message ?? "草稿保存失败" });
+      } finally {
+        const waiting = deletions[stage];
+        if (request.kind === "delete" && waiting?.epoch === request.epoch && waiting.version === request.version) {
+          waiting.resolve(accepted); deletions[stage] = null;
+        }
+        if (work[stage] === job) { work[stage] = null; drain(stage); }
       }
-      if (
-        blindUpdatedAt !== previous[1] ||
-        blindRevision !== previous[2]
-      ) {
-        restoreStage("blind");
+      return accepted;
+    });
+  }
+  function queueDraft(stage, draft) {
+    if (!STAGES.includes(stage) || !stages.value[stage].canEdit) return;
+    dispatch(stage, { type: "edited", draft });
+    schedule(stage);
+  }
+  function deleteDraft(stage) {
+    if (!STAGES.includes(stage) || !stages.value[stage].canDelete) return Promise.resolve(false);
+    clearTimer(stage);
+    dispatch(stage, { type: "deleteRequested" });
+    const context = flows.value[stage];
+    const promise = new Promise(resolve => { deletions[stage] = { epoch, version: context.version, resolve }; });
+    drain(stage);
+    return promise;
+  }
+  async function checkFinal(stage, read, context) {
+    if (!current(context)) return null;
+    dispatch(stage, { type: "checking" });
+    let latest, revision;
+    try {
+      latest = await read(context.sessionId);
+      if (latest?.id === context.sessionId && !reviewStageLocked(latest, stage)) {
+        revision = readDraftRevision(latest.reviewDrafts?.[stage]);
       }
-      if (
-        postUpdatedAt !== previous[3] ||
-        postRevision !== previous[4]
-      ) {
-        restoreStage("post");
+    } catch { latest = null; /* Keep the captured draft until a read can confirm the outcome. */ }
+    if (!current(context)) return null;
+    if (!latest || latest.id !== context.sessionId) {
+      dispatch(stage, { type: "uncertain" });
+      return null;
+    }
+    if (reviewStageLocked(latest, stage)) {
+      dispatch(stage, { type: "confirmed", owned: false });
+      return latest;
+    }
+    dispatch(stage, { type: "notSaved", revision });
+    schedule(stage);
+    return null;
+  }
+  async function finalize(stage, payload, { submit, read }) {
+    if (!STAGES.includes(stage) || !stages.value[stage].canEdit) return null;
+    clearTimer(stage);
+    const snapshot = structuredClone(payload);
+    dispatch(stage, { type: "finalStarted", payload: snapshot });
+    const context = flows.value[stage];
+    while (current(context) && (work[stage] || flows.value[stage].deletion)) {
+      drain(stage);
+      if (work[stage]) await work[stage].promise;
+    }
+    if (!current(context)) return null;
+    if (reviewStageLocked(session.value, stage)) {
+      dispatch(stage, { type: "confirmed", owned: false });
+      return session.value;
+    }
+    let saved = null;
+    try { saved = await submit(snapshot); } catch { /* Reconcile even if an injected submitter rejects unexpectedly. */ }
+    if (!current(context)) return null;
+    if (saved?.id === context.sessionId && reviewStageLocked(saved, stage)) {
+      dispatch(stage, { type: "confirmed", owned: true });
+      return saved;
+    }
+    return checkFinal(stage, read, context);
+  }
+  function confirmFinal(stage, read) {
+    if (!STAGES.includes(stage) || flows.value[stage].phase !== "uncertain") return Promise.resolve(null);
+    return checkFinal(stage, read, flows.value[stage]);
+  }
+  function dispose() {
+    restore(null);
+  }
+  watch(() => session.value?.id, () => restore(session.value), { immediate: true, flush: "sync" });
+  watch(() => STAGES.map(stage => [session.value?.id, session.value?.reviewDrafts?.[stage]?.revision,
+    session.value?.reviewDrafts?.[stage]?.updatedAt, reviewStageLocked(session.value, stage)]), (values, previous) => {
+    if (values[0][0] !== previous?.[0][0]) return;
+    for (let i = 0; i < STAGES.length; i++) {
+      if (values[i].every((value, index) => value === previous?.[i][index])) continue;
+      const stage = STAGES[i], state = flows.value[stage];
+      if (["finalizing", "checking"].includes(state.phase)) continue;
+      if (reviewStageLocked(session.value, stage)) {
+        clearTimer(stage);
+        dispatch(stage, { type: "confirmed", owned: false });
+        deletions[stage]?.resolve(false); deletions[stage] = null;
+      } else {
+        const record = session.value?.reviewDrafts?.[stage];
+        dispatch(stage, { type: "restored", draft: unwrapDraft(record), revision: readDraftRevision(record) });
       }
-    },
-  );
+    }
+  }, { flush: "sync" });
   onScopeDispose(dispose);
-
-  return {
-    drafts: readonly(drafts),
-    statuses: readonly(statuses),
-    queueDraft,
-    deleteDraft,
-    prepareFinal,
-    finishFinal,
-    restore,
-    dispose,
-  };
+  return { drafts, statuses, stages, queueDraft, deleteDraft, finalize, confirmFinal, restore, dispose };
 }

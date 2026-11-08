@@ -38,14 +38,11 @@ describe("replay review drawer surface", () => {
     );
   });
 
-  it("restores locally persisted drafts when the drawer reopens", () => {
-    assert.match(
-      reviewSource,
-      /props\.reviewDrafts\?\.blind\?\.data[\s\S]*?props\.session\.reviewDrafts\?\.blind/u,
-    );
-    assert.match(
-      reviewSource,
-      /props\.reviewDrafts\?\.post\?\.data[\s\S]*?props\.session\.reviewDrafts\?\.post/u,
-    );
+  it("restores drafts through the draft interface without a second server synchronization path", () => {
+    assert.match(viewSource, /:draft-stages="review\.stages"/u);
+    assert.match(reviewSource, /props\.reviewDrafts\?\.blind/u);
+    assert.match(reviewSource, /props\.reviewDrafts\?\.post/u);
+    assert.match(reviewSource, /draftStages\.blind\.restoreToken/u);
+    assert.doesNotMatch(reviewSource, /props\.session\.reviewDrafts/u);
   });
 });

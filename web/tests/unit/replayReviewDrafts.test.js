@@ -214,9 +214,11 @@ describe("replay review draft autosave", () => {
     );
 
     state.queueDraft("blind", { thesis: "即将冻结" });
-    state.prepareFinal("blind");
+    await state.finalize("blind", { thesis: "定稿内容" }, {
+      submit: async () => ({ id: "session-1", review: { blindSaved: true } }),
+      read: async () => null,
+    });
     await wait(20);
-    state.finishFinal("blind", true);
 
     assert.deepEqual(api.saves, []);
     assert.equal(state.drafts.value.blind, null);

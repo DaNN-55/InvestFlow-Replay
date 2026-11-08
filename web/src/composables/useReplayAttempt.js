@@ -22,8 +22,11 @@ export function useReplayAttempt(options = {}) {
 
   const commandRunning = shallowRef(false);
 
-  const activity = computed(() => sessionController.activity.value ??
-    (commandRunning.value ? "working" : null));
+  const activity = computed(() => {
+    if (reviewDraftController.stages.value.blind.finalizing) return "savingBlindReview";
+    if (reviewDraftController.stages.value.post.finalizing) return "savingPostReview";
+    return sessionController.activity.value ?? (commandRunning.value ? "working" : null);
+  });
 
   const state = computed(() => ({
     hasSession: sessionController.hasSession.value,
@@ -77,19 +80,18 @@ export function useReplayAttempt(options = {}) {
   }
 
   function saveReview(stage, review) {
-    return runWrite(async () => {
-      await reviewDraftController.prepareFinal(stage);
-      const savedSession = stage === "blind"
-        ? await sessionController.saveBlindReview(review)
-        : await sessionController.savePostReview(review);
-      reviewDraftController.finishFinal(stage, Boolean(savedSession));
-      return savedSession;
-    });
+    return runWrite(() => reviewDraftController.finalize(stage, review, {
+      submit: payload => stage === "blind"
+        ? sessionController.saveBlindReview(payload)
+        : sessionController.savePostReview(payload),
+      read: sessionId => sessionController.refreshSession({ sessionId }),
+    }));
   }
 
   const review = computed(() => ({
     drafts: reviewDraftController.drafts.value,
     statuses: reviewDraftController.statuses.value,
+    stages: reviewDraftController.stages.value,
   }));
 
   const autoplay = computed(() => ({
@@ -111,12 +113,11 @@ export function useReplayAttempt(options = {}) {
     reveal: () => runWrite(() => sessionController.revealSession()),
     cancelRetrain,
     queueReviewDraft: reviewDraftController.queueDraft,
-    deleteReviewDraft: (stage) => runWrite(
-      () => reviewDraftController.deleteDraft(stage),
-      { pause: false },
-    ),
+    deleteReviewDraft: reviewDraftController.deleteDraft,
     saveBlindReview: (payload) => saveReview("blind", payload),
     savePostReview: (payload) => saveReview("post", payload),
+    confirmReview: stage => runWrite(() => reviewDraftController.confirmFinal(stage,
+      sessionId => sessionController.refreshSession({ sessionId })), { pause: false }),
     addBlindCorrection: (payload) => runWrite(
       () => sessionController.addBlindReviewCorrection(payload),
     ),

@@ -80,13 +80,12 @@ function createDraftController(calls) {
   return {
     drafts: shallowRef({ blind: { thesis: "draft" }, post: null }),
     statuses: shallowRef({ blind: "saved", post: "unsaved" }),
+    stages: shallowRef({ blind: {}, post: {} }),
     queueDraft() {},
     deleteDraft() {},
-    async prepareFinal(stage) {
-      calls.push(["prepare", stage]);
-    },
-    finishFinal(stage, saved) {
-      calls.push(["finish-final", stage, saved]);
+    async finalize(stage, payload, { submit }) {
+      calls.push(["finalize", stage, payload]);
+      return submit(payload);
     },
   };
 }
@@ -316,13 +315,11 @@ describe("replay attempt workflow", () => {
 
     assert.deepEqual(calls, [
       ["pause"],
-      ["prepare", "blind"],
+      ["finalize", "blind", { thesis: "blind" }],
       ["save-blind", { thesis: "blind" }],
-      ["finish-final", "blind", true],
       ["pause"],
-      ["prepare", "post"],
+      ["finalize", "post", { lesson: "post" }],
       ["save-post", { lesson: "post" }],
-      ["finish-final", "post", false],
     ]);
   });
 
@@ -347,7 +344,7 @@ describe("replay attempt workflow", () => {
     });
     await sessionController.syncStoredSession();
     const drafts = createDraftController(calls);
-    drafts.prepareFinal = async () => waitingDraft.promise;
+    drafts.finalize = async (_stage, payload, { submit }) => { await waitingDraft.promise; return submit(payload); };
     const attempt = useReplayAttempt({
       sessionController, reviewDraftController: drafts,
       autoplayController: createAutoplayController(calls),
