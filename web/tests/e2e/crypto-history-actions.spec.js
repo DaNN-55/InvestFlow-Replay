@@ -190,3 +190,43 @@ test('a committed retrain with a failed first read opens that child instead of c
   expect(failedRead).toBe(true);
   expect(calls.filter(c => c.method === 'POST' && c.path.endsWith('/retrain'))).toHaveLength(1);
 });
+
+test('a committed retrain with a failed storage checkpoint stays recoverable through the source', async ({ page, request }) => {
+  const session = await create(request, { revealed: true });
+  const calls = await openHistory(page, session), children = [];
+  await page.evaluate(({ key, source }) => {
+    const original = Storage.prototype.setItem;
+    window.__cryptoCheckpointFault = true;
+    Storage.prototype.setItem = function (name, value) {
+      if (name === key && window.__cryptoCheckpointFault) {
+        const record = JSON.parse(value);
+        if (record.sessionId && record.sessionId !== source && record.pending === null) throw new DOMException('Checkpoint test', 'QuotaExceededError');
+      }
+      return original.call(this, name, value);
+    };
+  }, { key: storageKey, source: session.id });
+  await page.route(`**${sessions}/${session.id}/retrain`, async route => {
+    calls.push({ method: 'POST', path: `${sessions}/${session.id}/retrain`, body: route.request().postDataJSON() });
+    const response = await route.fetch({ url: `${fixture.url}${sessions}/${session.id}/retrain` });
+    children.push((await response.json()).session.id);
+    await route.fulfill({ response });
+  });
+  await actions(page).click(); await menuItem(page, '复练此行情').click();
+  await expect(page.locator('.crypto-history-detail [role="alert"]')).toContainText('恢复信息');
+  await expect(page).toHaveURL(/\/decision\/trade-records\?/);
+  const saved = await page.evaluate(key => JSON.parse(localStorage.getItem(key)), storageKey);
+  expect(saved.sessionId).toBe(session.id);
+  expect(saved.pending.kind).toBe('retrain');
+  expect(calls.filter(c => c.method === 'POST' && c.path.endsWith('/retrain'))).toHaveLength(1);
+  await page.evaluate(() => { window.__cryptoCheckpointFault = false; });
+  await page.keyboard.press('Escape');
+  await actions(page).click(); await menuItem(page, '打开演练').click();
+  await page.getByRole('button', { name: '重试原动作', exact: true }).click();
+  await expect(page).toHaveURL(`${base}/decision/crypto-replay?session=${children[0]}`);
+  await expect(page.getByRole('button', { name: '推进 1 分钟', exact: true })).toBeEnabled();
+  expect(children).toEqual([children[0], children[0]]);
+  const retrains = calls.filter(c => c.method === 'POST' && c.path.endsWith('/retrain'));
+  expect(retrains).toHaveLength(2);
+  expect(retrains[1].body).toEqual(retrains[0].body);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)), storageKey)).toEqual({ sessionId: children[0], pending: null });
+});

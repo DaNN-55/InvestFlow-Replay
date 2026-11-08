@@ -51,6 +51,120 @@ async function cleared(panel) {
   for (const label of ['委托张数', '自动止损价', '自动止盈价', '操作理由']) await expect(panel.getByLabel(label, { exact: true })).toHaveValue('');
 }
 
+for (const method of ['getItem', 'setItem']) {
+  test(`storage recovery record failure on ${method} releases busy and can recover the selected practice`, async ({ page, request }) => {
+    const c = await practice(page, request);
+    await page.addInitScript(method => {
+      const original = Storage.prototype[method];
+      window.__cryptoRecoveryUnavailable = true;
+      Storage.prototype[method] = function (key, ...args) {
+        if (key === 'investflow-crypto-attempt-v1' && window.__cryptoRecoveryUnavailable) throw new DOMException('Recovery test', 'SecurityError');
+        return original.call(this, key, ...args);
+      };
+    }, method);
+    await page.reload();
+    await expect(page.getByTestId('crypto-persistent-alert')).toContainText(method === 'getItem' ? '无法读取恢复记录' : '恢复信息尚未保存');
+    const retry = page.getByRole('button', { name: '重试恢复', exact: true });
+    await expect(retry).toBeEnabled();
+    await page.evaluate(() => { window.__cryptoRecoveryUnavailable = false; });
+    await retry.click();
+    await expect(page.getByRole('button', { name: '推进 1 分钟', exact: true })).toBeEnabled();
+    expect(c.commands).toHaveLength(0); expect(c.advances).toHaveLength(0);
+    expect((await c.read()).elapsedMinutes).toBe(0);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('investflow-crypto-attempt-v1')))).toEqual({ sessionId: c.session.id, pending: null });
+  });
+}
+
+for (const [stage, reload] of [['intent', false], ['continuation', false], ['ack', false], ['continuation', true], ['ack', true]]) {
+  test(`${stage} storage checkpoint recovers ${reload ? 'after reload' : 'without resending acknowledged steps'}`, async ({ page, request }) => {
+    const c = await practice(page, request), { panel, button } = await ticket(page);
+    await page.evaluate(stage => {
+      const original = Storage.prototype.setItem;
+      window.__cryptoCheckpointFault = true;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === 'investflow-crypto-attempt-v1' && window.__cryptoCheckpointFault) {
+          const record = JSON.parse(value);
+          if ((stage === 'intent' && record.pending?.kind === 'command') ||
+              (stage === 'continuation' && record.pending?.kind === 'advance') ||
+              (stage === 'ack' && record.pending === null)) throw new DOMException('Checkpoint test', 'QuotaExceededError');
+        }
+        return original.call(this, key, value);
+      };
+    }, stage);
+    await button.click();
+    const alert = page.getByTestId('crypto-persistent-alert');
+    await expect(alert).toContainText(stage === 'intent' ? '操作尚未发送' : stage === 'continuation' ? '后续推进尚未发送' : '操作已提交，恢复记录尚未保存');
+    await expect(page.getByRole('button', { name: '重试恢复', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '推进 1 分钟', exact: true })).toBeDisabled();
+    expect(c.commands).toHaveLength(stage === 'intent' ? 0 : 1);
+    expect(c.advances).toHaveLength(stage === 'ack' ? 1 : 0);
+    if (stage !== 'intent') await cleared(panel);
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('investflow-crypto-attempt-v1')));
+    if (stage === 'ack' && !reload) {
+      await page.screenshot({ path: test.info().outputPath('checkpoint-blocked-desktop.png') });
+      await page.setViewportSize({ width: 390, height: 850 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: test.info().outputPath('checkpoint-blocked-mobile.png') });
+    }
+    if (reload) {
+      await page.reload();
+      await page.getByRole('button', { name: '重试原动作', exact: true }).click();
+    } else {
+      await page.evaluate(() => { window.__cryptoCheckpointFault = false; });
+      await page.getByRole('button', { name: '重试恢复', exact: true }).click();
+    }
+    await expect(page.getByRole('button', { name: '推进 1 分钟', exact: true })).toBeEnabled();
+    const current = await c.read();
+    expect(current.elapsedMinutes).toBe(1);
+    expect(current.revision).toBe(2);
+    expect(c.commands).toHaveLength(reload && stage === 'continuation' ? 2 : 1);
+    expect(c.advances).toHaveLength(reload && stage === 'ack' ? 2 : 1);
+    if (stage === 'continuation') {
+      expect(c.advances[0].actionId).toBe(saved.pending.advanceActionId);
+      if (reload) expect(c.commands[1]).toEqual(c.commands[0]);
+    }
+    if (reload && stage === 'ack') expect(c.advances[1]).toEqual(saved.pending.body);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('investflow-crypto-attempt-v1')))).toEqual({ sessionId: c.session.id, pending: null });
+    await page.reload();
+    await expect(page.getByRole('button', { name: '推进 1 分钟', exact: true })).toBeEnabled();
+    expect(await c.read()).toEqual(current);
+  });
+}
+
+test('storage failure before an unknown-action retry does not call the original operation unsent', async ({ page, request }) => {
+  let lose = true;
+  const c = await practice(page, request, async (route, req, url) => {
+    if (!lose || req.method() !== 'POST' || !url.pathname.endsWith('/actions')) return false;
+    lose = false;
+    const response = await route.fetch({ url: `${fixture.url}${url.pathname}` });
+    expect(response.status()).toBe(200);
+    await route.abort(); return true;
+  });
+  const { button } = await ticket(page);
+  await button.click();
+  await expect(page.getByRole('button', { name: '重试原动作', exact: true })).toBeVisible();
+  const original = await page.evaluate(() => JSON.parse(localStorage.getItem('investflow-crypto-attempt-v1')).pending);
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem;
+    window.__cryptoCheckpointFault = true;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'investflow-crypto-attempt-v1' && window.__cryptoCheckpointFault) throw new DOMException('Checkpoint test', 'QuotaExceededError');
+      return original.call(this, key, value);
+    };
+  });
+  await page.getByRole('button', { name: '重试原动作', exact: true }).click();
+  await expect(page.getByTestId('crypto-persistent-alert')).toContainText('原操作仍待核对');
+  expect(c.commands).toHaveLength(1); expect(c.advances).toHaveLength(0);
+  await page.evaluate(() => { window.__cryptoCheckpointFault = false; });
+  await page.getByRole('button', { name: '重试恢复', exact: true }).click();
+  await expect(page.getByRole('button', { name: '推进 1 分钟', exact: true })).toBeEnabled();
+  expect(c.commands).toHaveLength(2);
+  expect(c.commands[1]).toEqual(original.body);
+  expect(c.advances).toHaveLength(1);
+  expect(c.advances[0].actionId).toBe(original.advanceActionId);
+  expect((await c.read()).elapsedMinutes).toBe(1);
+});
+
 async function chartState(page) {
   return page.evaluate(async () => {
     const moduleUrl = performance.getEntriesByType('resource').find(entry => /\/klinecharts\.js\?v=/.test(entry.name)).name;

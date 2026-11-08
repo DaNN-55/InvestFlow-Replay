@@ -228,7 +228,7 @@ async function retrainReplay(item) {
       const controller = createCryptoReplayController({ api, storage: window.localStorage });
       if (controller.state.pending) throw new Error("有合约动作的结果待确认，请先打开合约演练核对，再创建复练。");
       if (!await controller.select(item.id) || !controller.state.session) throw new Error(controller.state.error || "读取原演练失败");
-      if (!await controller.act("retrain") && (controller.state.pending || controller.targetSessionId === item.id)) {
+      if (!await controller.act("retrain") && (controller.state.controls.recovery?.kind === "storage" || controller.state.pending || controller.targetSessionId === item.id)) {
         throw new Error(controller.state.pending ? "复练结果待确认，请打开演练后重试原动作。" : controller.state.error || "创建复练失败");
       }
       await router.push({ path: "/decision/crypto-replay", query: { session: controller.targetSessionId } });

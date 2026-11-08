@@ -30,8 +30,7 @@ const s=computed(()=>state.value.session);
 const chartWorkspace=ref(null);
 const active=ref(false),orderInputError=ref(''),visibleAlert=shallowRef(null);
 const persistentAlert=computed(()=>{
-  if(state.value.pending) return {title:'上次操作结果尚未确认',message:state.value.error,context:priceNotice.value,detail:'暂时不能提交新操作。请重试原操作，系统会核对同一次请求，避免重复下单。',action:'retry'};
-  if(state.value.readStale) return {title:'需要重新同步',message:state.value.error,context:priceNotice.value,detail:'账户和行情尚未完成核对，暂时不能下单或推进。重新同步只读取数据，不会重复提交订单。',action:'sync'};
+  if(state.value.controls.recovery) return {...state.value.controls.recovery,message:state.value.error,context:priceNotice.value};
   if(state.value.error) return {title:'操作未完成',message:state.value.error,action:'sync'};
   if(s.value?.status==='active'&&!s.value.ending&&orderInputError.value) return {title:'请调整下单信息',message:orderInputError.value};
   if(priceNotice.value) return {title:'请核对当前委托或保护',message:priceNotice.value,canDismiss:true};
@@ -55,7 +54,7 @@ const progress=computed(()=>Math.min(100,Math.max(0,Number(s.value?.elapsedMinut
 const routeMismatch=computed(()=>route.name==='crypto-market-replay'&&typeof route.query.session==='string'&&route.query.session!==s.value?.id);
 const confirmationView=shallowRef(null);
 const confirmation=createCryptoModificationConfirmation({
-  readContext:()=>({session:s.value,busy:state.value.busy||state.value.readStale,pending:state.value.pending,routeMismatch:routeMismatch.value}),
+  readContext:()=>({session:s.value,busy:state.value.controls.newActionsBlocked,pending:state.value.pending,routeMismatch:routeMismatch.value}),
   previewOrder:api.cryptoPreview,
   submitCommand:body=>controller.act('command',body),
   syncSession:()=>controller.sync(),
@@ -76,7 +75,7 @@ const cancellationTitle=computed(()=>confirmationView.value.title),cancellationM
 const fundingAmount=value=>Number(value)>0&&Number(value)<0.01?'<0.01':amount(value,2);
 const availableBalanceAmount=value=>Number(value)<0&&Number(value)>-0.01?'缺口 <0.01':fundingAmount(value);
 const locked=computed(()=>confirmationView.value.blockNewActions);
-watch(()=>[s.value?.id,s.value?.revision,state.value.busy,state.value.readStale,state.value.pending,routeMismatch.value],()=>confirmation.reconcile());
+watch(()=>[s.value?.id,s.value?.revision,state.value.controls.newActionsBlocked,routeMismatch.value],()=>confirmation.reconcile());
 const finishOpen=ref(false),settingsOpen=ref(false),playing=ref(false);
 const retraining=ref(false);
 let playbackTimer;
@@ -96,12 +95,12 @@ async function command(value,note='') {
 async function fresh() {if(locked.value) return;playing.value=false;await controller.fresh();if(!state.value.session) await router.replace({query:{}});}
 function ensurePeriods() {
   const wanted=cryptoVisiblePeriods(preferences.value);
-  if(!state.value.busy && wanted.join(',')!==state.value.timeframes.join(',')) controller.periods(wanted);
+  if(!state.value.controls.readBlocked && wanted.join(',')!==state.value.timeframes.join(',')) controller.periods(wanted);
 }
 watch(preferences,value=>{try {localStorage.setItem(CRYPTO_WORKSPACE_KEY,JSON.stringify(value));}catch{/* A full browser store must not block practice. */}ensurePeriods();},{deep:true});
 function syncRequestedSession() {
   const id=route.query.session;
-  if(!state.value.busy&&!retraining.value&&route.name==='crypto-market-replay'&&typeof id==='string'&&id!==s.value?.id&&id!==lastRequestedSession) loadRequestedSession(id);
+  if(!state.value.controls.readBlocked&&!retraining.value&&route.name==='crypto-market-replay'&&typeof id==='string'&&id!==s.value?.id&&id!==lastRequestedSession) loadRequestedSession(id);
 }
 async function loadRequestedSession(id) {
   if(state.value.busy) return;
@@ -120,8 +119,8 @@ watch(()=>state.value.busy,value=>{if(!value) {syncRequestedSession();ensurePeri
 watch(()=>route.query.session,()=>{lastRequestedSession=null;syncRequestedSession();});
 onActivated(()=>{active.value=true;window.addEventListener('keydown',handleAdvanceKey);controller.syncPendingFromStorage();return typeof route.query.session==='string'?loadRequestedSession(route.query.session):controller.sync();});
 async function retryPending() {
-  const kind=state.value.pending?.kind;
-  const orderPending=Boolean(state.value.pending?.advanceActionId||state.value.pending?.orderActionId);
+  const kind=state.value.controls.retryKind;
+  const orderPending=state.value.controls.retryOrder;
   if(kind==='retrain') retraining.value=true;
   try {
     if(await controller.retry()) {
@@ -133,7 +132,7 @@ async function retryPending() {
 async function advance(minutes=1) {if(locked.value) return false;playing.value=false;return controller.act('advance',{minutes});}
 function handleAdvanceKey(event) {
   const minutes={'1':1,'2':5,'3':15}[event.key];
-  if(!minutes||event.defaultPrevented||event.repeat||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||!active.value||route.name!=='crypto-market-replay'||!s.value||s.value.status!=='active'||locked.value||state.value.busy||state.value.readStale||state.value.pending||routeMismatch.value) return;
+  if(!minutes||event.defaultPrevented||event.repeat||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||!active.value||route.name!=='crypto-market-replay'||!s.value||s.value.status!=='active'||locked.value||state.value.controls.newActionsBlocked||routeMismatch.value) return;
   if(event.target instanceof Element&&event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"]')) return;
   if([...document.querySelectorAll('[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"]')].some(element=>element.getClientRects().length)) return;
   event.preventDefault();advance(minutes);
@@ -173,18 +172,18 @@ async function retrain() {
         <p v-if="visibleAlert.message" class="crypto-notification-text">{{ visibleAlert.message }}</p>
         <p v-if="visibleAlert.context" class="crypto-notification-text">{{ visibleAlert.context }}</p>
         <p v-if="visibleAlert.detail" class="crypto-notification-text" :data-testid="state.readStale?'crypto-read-stale':undefined">{{ visibleAlert.detail }}</p>
-        <UiButton v-if="visibleAlert.action" variant="secondary" class="crypto-notification-action" :disabled="state.busy" @click="visibleAlert.action==='retry'?retryPending():resync()">{{ state.busy?'正在核对…':visibleAlert.action==='retry'?'重试原动作':'重新同步' }}</UiButton>
+        <UiButton v-if="visibleAlert.action" variant="secondary" class="crypto-notification-action" :disabled="state.busy" @click="visibleAlert.action==='retry'?retryPending():resync()">{{ state.busy?'正在核对…':visibleAlert.kind==='storage'?'重试恢复':visibleAlert.action==='retry'?'重试原动作':'重新同步' }}</UiButton>
       </UiAlert>
     </Teleport>
     <p v-if="state.busy" class="crypto-save-status" role="status">正在同步与保存…</p><p v-else-if="state.notice" class="crypto-save-status" role="status">{{ state.notice }}</p>
-    <CryptoSetupPanel v-if="!s" :busy="state.busy" :pool="state.pool" :history="state.history" :blocked="Boolean(state.pending)||Boolean(state.poolError)||state.readStale" @create="controller.act('create',$event)" @resume="controller.select($event)" @records="records" />
+    <CryptoSetupPanel v-if="!s" :busy="state.busy" :pool="state.pool" :history="state.history" :blocked="state.controls.newActionsBlocked||Boolean(state.poolError)" @create="controller.act('create',$event)" @resume="controller.select($event)" @records="records" />
     <template v-else>
       <div class="crypto-account" data-testid="crypto-account"><div v-for="[label,value,id] in [['账户权益 · USDT',s.summary.accountEquity,'crypto-equity'],['仓外可用',s.account.availableBalance,'crypto-available'],['委托冻结',s.reservedBalance,'crypto-reserved'],['本次净盈亏',s.summary.netPnl,'crypto-net-summary']]" :key="label"><span>{{ label }}</span><strong :data-testid="id" :title="String(value)">{{ moneyAmount(value) }}</strong></div></div>
       <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed}">
         <div class="crypto-terminal-main">
           <CryptoChartWorkspace ref="chartWorkspace" v-model="chartPreferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="confirmationView.blockChartActions" :price-draft="orderChartDraft" @price-drag="confirmation.handlePriceDrag" @confirm-price="confirmation.confirm" @cancel-price="confirmation.cancel" @request-cancellation="confirmation.openCancellation" />
           <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="confirmationView.blockNewActions" @command="command" @cancel-order="confirmation.openCancellation" @edit-order="confirmation.openOrder" @records="records" />
-          <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="Boolean(state.pending)||routeMismatch||state.readStale" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
+          <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="state.controls.newActionsBlocked||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
           <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
         </div>
         <div class="crypto-terminal-side">
