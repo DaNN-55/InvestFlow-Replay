@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch 
 import { api } from "../../services/api.js";
 import { formatTrainingMetric, trainingBucketWidth, trainingCohortLabel, trainingSampleDate } from "../../utils/replayTrainingAnalytics.js";
 import UiButton from "../ui/UiButton.vue";
-import UiInput from "../ui/UiInput.vue";
+import UiDateRange from "../ui/UiDateRange.vue";
 import UiSelect from "../ui/UiSelect.vue";
 import ReplayHistoryControls from "./ReplayHistoryControls.vue";
 
@@ -54,11 +54,17 @@ onBeforeUnmount(() => { ++requestVersion; });
   <section class="training-analytics" aria-label="跨会话训练分析" :aria-busy="loading">
     <ReplayHistoryControls :active-view="kind" @view-change="emit('viewChange', $event)">
       <form class="training-analytics__filters" @submit.prevent="load">
-        <label><span>创建开始日期</span><UiInput v-model="filters.from" type="date" /></label>
-        <label><span>创建结束日期</span><UiInput v-model="filters.to" type="date" /></label>
-        <label><span>练习周期</span><UiSelect v-model="filters.interval"><option value="all">全部周期</option><option value="1d">日线</option><option value="hybrid">日内模拟</option><option value="1m">1分钟</option></UiSelect></label>
-        <label><span>练习长度</span><UiSelect v-model="filters.gameLength"><option value="all">全部长度</option><template v-if="filters.interval !== '1m'"><option value="20">20日</option><option value="60">60日</option><option value="120">120日</option></template><template v-if="filters.interval === 'all' || filters.interval === '1m'"><option value="240">240分钟</option><option value="720">720分钟</option><option value="1200">1200分钟</option></template></UiSelect></label>
-        <label><span>股票板块</span><UiSelect v-model="filters.board"><option value="all">全部板块</option><option value="main">主板</option><option value="chinext">创业板</option><option value="star">科创板</option></UiSelect></label>
+        <UiDateRange
+          v-model:from="filters.from"
+          v-model:to="filters.to"
+          class="training-analytics__date-range"
+          label="创建日期"
+          from-label="创建开始日期"
+          to-label="创建结束日期"
+        />
+        <div class="training-analytics__select"><UiSelect v-model="filters.interval" aria-label="练习周期"><option value="all">全部周期</option><option value="1d">日线</option><option value="hybrid">日内模拟</option><option value="1m">1分钟</option></UiSelect></div>
+        <div class="training-analytics__select"><UiSelect v-model="filters.gameLength" aria-label="练习长度"><option value="all">全部长度</option><template v-if="filters.interval !== '1m'"><option value="20">20日</option><option value="60">60日</option><option value="120">120日</option></template><template v-if="filters.interval === 'all' || filters.interval === '1m'"><option value="240">240分钟</option><option value="720">720分钟</option><option value="1200">1200分钟</option></template></UiSelect></div>
+        <div class="training-analytics__select"><UiSelect v-model="filters.board" aria-label="股票板块"><option value="all">全部板块</option><option value="main">主板</option><option value="chinext">创业板</option><option value="star">科创板</option></UiSelect></div>
         <UiButton type="submit" variant="secondary" :loading="loading">更新分析</UiButton>
       </form>
       <p class="training-analytics__hint">按北京时间的练习创建日期筛选；统计全部筛选结果，不受记录分页影响。离线Demo与已删除记录不纳入。</p>
@@ -115,8 +121,8 @@ onBeforeUnmount(() => { ++requestVersion; });
 .training-analytics { display: grid; gap: 16px; color: var(--ql-ink); font-size: 13px; line-height: 1.6; }
 .training-analytics p, .training-analytics dl, .training-analytics dd { margin: 0; }
 .training-analytics__filters { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
-.training-analytics__filters label { display: grid; gap: 5px; flex: 1 1 140px; min-width: 0; }
-.training-analytics__filters label > span { color: var(--ql-color-text-muted); font-size: 12px; }
+.training-analytics__select { flex: 1 1 140px; min-width: 0; }
+.training-analytics__date-range { flex: 2 1 330px; min-width: 0; }
 .training-analytics__hint, .training-analytics__scope { font-size: 12px; color: var(--ql-color-text-muted); }
 .training-analytics__summary { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
 .training-analytics__summary > div { padding: 16px; border: 1px solid var(--ql-line); border-radius: 8px; background: var(--ql-panel); }
@@ -155,5 +161,5 @@ onBeforeUnmount(() => { ++requestVersion; });
 .training-analytics__empty { padding: 16px 0; color: var(--ql-color-text-muted); }
 .training-analytics__error { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--ql-color-danger); }
 @media (max-width: 900px) { .training-analytics__events { grid-template-columns: repeat(3,minmax(0,1fr)); } .training-analytics__summary { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media (max-width: 640px) { .training-analytics__columns, .training-analytics__cohorts, .training-analytics__composition { grid-template-columns: 1fr; } .training-analytics__events { grid-template-columns: repeat(2,minmax(0,1fr)); } .training-analytics__summary > div { padding: 12px; } .training-analytics__summary dd { font-size: 20px; } .training-analytics__filters label { flex-basis: 150px; } }
+@media (max-width: 640px) { .training-analytics__columns, .training-analytics__cohorts, .training-analytics__composition { grid-template-columns: 1fr; } .training-analytics__events { grid-template-columns: repeat(2,minmax(0,1fr)); } .training-analytics__summary > div { padding: 12px; } .training-analytics__summary dd { font-size: 20px; } .training-analytics__select { flex-basis: 150px; } .training-analytics__date-range { flex-basis: 100%; } }
 </style>

@@ -25,6 +25,13 @@ test("真实分析独立分组和筛选，空样本不伪造零收益，窄屏�
   page.on("request", request => { if (new URL(request.url()).pathname === "/api/quant/replay/analytics") analyticsRequests++; });
   const analysis = await openAnalysis(page);
   const controls = analysis.locator(".ql-ui-card");
+  const filterRow = analysis.locator(".training-analytics__filters");
+  await expect(filterRow.getByRole("group", { name: "创建日期", exact: true })).toHaveCount(1);
+  await expect(filterRow.locator("[title]")).toHaveCount(0);
+  await expect(filterRow.locator("legend")).toHaveCount(0);
+  for (const name of ["练习周期", "练习长度", "股票板块"]) {
+    await expect(filterRow.getByRole("combobox", { name, exact: true })).toBeVisible();
+  }
   await expect(controls.getByRole("button", { name: "A股首次分析", exact: true })).toBeVisible();
   await expect(controls.getByLabel("创建开始日期")).toBeVisible();
   await expect(controls.getByRole("button", { name: "更新分析", exact: true })).toBeVisible();
@@ -32,10 +39,12 @@ test("真实分析独立分组和筛选，空样本不伪造零收益，窄屏�
   await expect(analysis.locator(".training-analytics__summary")).toContainText(/2\s*次练习/u);
   await expect(analysis.getByRole("region", { name: "单次收益率分布" })).toContainText("1 次");
   await expect(analysis.getByText("暂无样本", { exact: true })).toBeVisible();
+  await filterRow.screenshot({ path: test.info().outputPath("first-analysis-filters-desktop.png") });
   await page.getByRole("button", { name: "A股复练分析", exact: true }).click();
   await expect(controls.getByRole("button", { name: "A股复练分析", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(controls.getByLabel("创建开始日期")).toBeVisible();
   await expect(analysis.getByRole("region", { name: "单次收益率分布" })).toContainText("2 次");
+  await filterRow.screenshot({ path: test.info().outputPath("retrain-analysis-filters-desktop.png") });
   await analysis.getByLabel("练习长度").selectOption("20");
   await page.getByRole("button", { name: "A股首次分析", exact: true }).click();
   await expect(analysis.getByLabel("练习长度")).toHaveValue("20");
@@ -55,10 +64,68 @@ test("真实分析独立分组和筛选，空样本不伪造零收益，窄屏�
   await analysis.getByRole("button", { name: "更新分析", exact: true }).click();
   await expect(analysis.getByRole("region", { name: "单次收益率分布" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await filterRow.screenshot({ path: test.info().outputPath("retrain-analysis-filters-mobile.png") });
+  await page.getByRole("button", { name: "A股首次分析", exact: true }).click();
+  await filterRow.screenshot({ path: test.info().outputPath("first-analysis-filters-mobile.png") });
   await analysis.getByLabel("创建开始日期").fill("2026-10-20");
   await analysis.getByLabel("创建结束日期").fill("2026-10-19");
   await analysis.getByRole("button", { name: "更新分析", exact: true }).click();
   await expect(analysis.getByRole("alert")).toContainText("开始日期不能晚于结束日期");
+});
+
+test("日期范围统一输入支持双端、单边、清空及首次复练切换保留", async ({ page }) => {
+  await connect(page);
+  const queries = [];
+  page.on("request", request => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/quant/replay/analytics") queries.push(Object.fromEntries(url.searchParams));
+  });
+  const analysis = await openAnalysis(page);
+  const range = analysis.getByRole("group", { name: "创建日期", exact: true });
+  const from = range.getByLabel("创建开始日期", { exact: true });
+  const to = range.getByLabel("创建结束日期", { exact: true });
+  const apply = analysis.getByRole("button", { name: "更新分析", exact: true });
+  await expect(analysis).toHaveAttribute("aria-busy", "false");
+  await expect(range.getByRole("button", { name: "清空创建日期" })).toHaveCount(0);
+  await from.fill("2026-10-01");
+  await to.fill("2026-10-31");
+  await apply.click();
+  await expect(analysis).toHaveAttribute("aria-busy", "false");
+  expect(queries.at(-1)).toMatchObject({ from: "2026-10-01", to: "2026-10-31" });
+  await page.getByRole("button", { name: "A股复练分析", exact: true }).click();
+  await expect(from).toHaveValue("2026-10-01");
+  await expect(to).toHaveValue("2026-10-31");
+  await to.fill("");
+  await apply.click();
+  await expect(analysis).toHaveAttribute("aria-busy", "false");
+  expect(queries.at(-1).from).toBe("2026-10-01");
+  expect(queries.at(-1).to).toBeUndefined();
+  await from.fill("");
+  await to.fill("2026-10-31");
+  await apply.click();
+  await expect(analysis).toHaveAttribute("aria-busy", "false");
+  expect(queries.at(-1).from).toBeUndefined();
+  expect(queries.at(-1).to).toBe("2026-10-31");
+  const clear = range.getByRole("button", { name: "清空创建日期" });
+  await clear.focus();
+  await clear.press("Enter");
+  await expect(from).toHaveValue("");
+  await expect(to).toHaveValue("");
+  await expect(from).toBeFocused();
+  await apply.click();
+  await expect(analysis).toHaveAttribute("aria-busy", "false");
+  expect(queries.at(-1)).not.toHaveProperty("from");
+  expect(queries.at(-1)).not.toHaveProperty("to");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await from.fill("2026-10-01");
+  await to.fill("2026-10-31");
+  const widths = await range.evaluate(element => {
+    const control = element.querySelector(".ql-ui-date-range__control");
+    return { actual: control.clientWidth, content: control.scrollWidth };
+  });
+  expect(widths.content).toBeLessThanOrEqual(widths.actual);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await range.screenshot({ path: test.info().outputPath("date-range-filled-mobile.png") });
 });
 
 test("事后问题标签通过页面追加，分析可跳转具体样本，原评分保留且对照入口有内间距", async ({ page, request }) => {
