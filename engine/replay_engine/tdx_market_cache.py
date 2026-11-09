@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import monotonic
 import math
 import logging
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Lock, Thread, local
 from typing import Any
 
 import duckdb
 import pandas as pd
 from .replay_cache_policy import (
-    BOARDS, DAILY_BATCH_SIZE, board_for_code, latest_completed_date,
+    BOARDS, CLOSE_GRACE, DAILY_BATCH_SIZE, board_for_code, latest_completed_date,
     maintenance_key, market_now, reserve_targets,
 )
 
@@ -20,11 +21,11 @@ from .replay_cache_policy import (
 TDX_PAGE_SIZE = 800
 TDX_MAX_DAILY_BARS = 8000
 TDX_HOSTS = (
-    # Verified with index/stock daily bars and stock 5-minute bars, 2026-10-01.
-    # The legacy nodes below can accept connections while returning no bar data.
+    # First node verified with stock daily/5-minute/1-minute bars, 2026-11-09.
+    # Keep the remaining nodes for failover; accepting TCP alone is not health.
+    "103.251.85.94",
     "139.9.52.158",
     "103.221.142.82",
-    "103.251.85.94",
     "180.153.18.170",
     "115.238.56.198",
     "111.229.247.189",
@@ -41,6 +42,16 @@ DEFAULT_REPLAY_BENCHMARK_CODES = (
     "000906.SH",
     "399001.SZ",
 )
+
+
+def _write_batch(connection, sql: str, rows: list[tuple], *, keys=(0, 1)) -> None:
+    """Keep upsert/transaction semantics while crossing the Python/SQL boundary once."""
+    frame = pd.DataFrame(rows).drop_duplicates(subset=list(keys), keep="last")
+    connection.register("_tdx_write_batch", frame)
+    try:
+        connection.execute(sql)
+    finally:
+        connection.unregister("_tdx_write_batch")
 
 
 class TdxMarketUnavailableError(RuntimeError):
@@ -66,17 +77,36 @@ class _FailoverTdxClient:
     def __exit__(self, *_args):
         self.close()
 
+    def fork(self):
+        client = _FailoverTdxClient(self.factory, self.hosts)
+        client._preferred_host = self._preferred_host
+        client._failed_until = self._failed_until.copy()
+        return client
+
     def _call(self, method_name: str, *args, require_non_empty: bool = False, **kwargs):
         errors: list[str] = []
+        deadline = monotonic() + 30
         hosts = sorted(self.hosts, key=lambda host: host != self._preferred_host)
-        for host in hosts:
+        for position, host in enumerate(hosts):
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                errors.append("请求已超过 30 秒总预算")
+                break
             if self._failed_until.get(host, 0) > monotonic():
                 continue
             try:
-                if host not in self._connections:
-                    context = self.factory(host=host, timeout=8, auto_reconnect=True, heartbeat_interval=0)
-                    self._connections[host] = (context, context.__enter__())
-                result = getattr(self._connections[host][1], method_name)(*args, **kwargs)
+                context, client = self._connections.get(host, (None, None))
+                if context is None:
+                    context = self.factory(host=host, timeout=min(8, remaining), auto_reconnect=True, heartbeat_interval=0)
+                budget = getattr(context, "request_budget", None)
+                # Reserve time for later nodes, instead of spending the entire
+                # attempt on an early host that accepts TCP but never replies.
+                node_budget = min(8, remaining / (len(hosts) - position))
+                with budget(node_budget) if budget else nullcontext():
+                    if client is None:
+                        client = context.__enter__()
+                        self._connections[host] = (context, client)
+                    result = getattr(client, method_name)(*args, **kwargs)
                 if require_non_empty and (result is None or result.empty):
                     raise ValueError("返回空数据")
                 self._preferred_host = host
@@ -467,11 +497,18 @@ class TdxMarketCache:
         self.ensure_schema()
         if not rows:
             return
+        by_code = {}
+        for row in rows:
+            previous = by_code.get(row["ts_code"])
+            if previous is not None:
+                row = {**row,
+                    "list_date": previous.get("list_date") or row.get("list_date"),
+                    "delist_date": row.get("delist_date") or previous.get("delist_date")}
+            by_code[row["ts_code"]] = row
         connection = self._connect()
         try:
-            connection.executemany(
-                """
-                INSERT INTO stock_instruments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            _write_batch(connection, """
+                INSERT INTO stock_instruments SELECT * FROM _tdx_write_batch WHERE TRUE
                 ON CONFLICT (ts_code) DO UPDATE SET
                     symbol = EXCLUDED.symbol,
                     name = EXCLUDED.name,
@@ -482,15 +519,13 @@ class TdxMarketCache:
                     list_date = COALESCE(stock_instruments.list_date, EXCLUDED.list_date),
                     delist_date = COALESCE(EXCLUDED.delist_date, stock_instruments.delist_date),
                     updated_at = EXCLUDED.updated_at
-                """,
-                [
+                """, [
                     tuple(row.get(key) for key in (
                         "ts_code", "symbol", "name", "industry", "area", "market",
                         "list_status", "list_date", "delist_date", "updated_at",
                     ))
-                    for row in rows
-                ],
-            )
+                    for row in by_code.values()
+                ], keys=(0,))
         finally:
             connection.close()
 
@@ -512,9 +547,8 @@ class TdxMarketCache:
         try:
             connection.execute("BEGIN TRANSACTION")
             if stock_rows:
-                connection.executemany(
-                    """
-                    INSERT INTO stock_daily_bars VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                _write_batch(connection, """
+                    INSERT INTO stock_daily_bars SELECT * FROM _tdx_write_batch WHERE TRUE
                     ON CONFLICT (ts_code, trade_date) DO UPDATE SET
                         open = EXCLUDED.open,
                         high = EXCLUDED.high,
@@ -526,28 +560,23 @@ class TdxMarketCache:
                         vol = EXCLUDED.vol,
                         amount = EXCLUDED.amount,
                         updated_at = EXCLUDED.updated_at
-                    """,
-                    [
+                    """, [
                         tuple(row[key] for key in (
                             "ts_code", "trade_date", "open", "high", "low", "close",
                             "pre_close", "change", "pct_chg", "vol", "amount", "updated_at",
                         ))
                         for row in stock_rows
-                    ],
-                )
+                    ])
             if factor_rows:
-                connection.executemany(
-                    """
-                    INSERT INTO stock_adj_factors VALUES (?, ?, ?, ?)
+                _write_batch(connection, """
+                    INSERT INTO stock_adj_factors SELECT * FROM _tdx_write_batch WHERE TRUE
                     ON CONFLICT (ts_code, trade_date) DO UPDATE SET
                         adj_factor = EXCLUDED.adj_factor,
                         updated_at = EXCLUDED.updated_at
-                    """,
-                    [
+                    """, [
                         tuple(row[key] for key in ("ts_code", "trade_date", "adj_factor", "updated_at"))
                         for row in factor_rows
-                    ],
-                )
+                    ])
             connection.execute("COMMIT")
             with self._quality_lock:
                 for code in {row["ts_code"] for row in [*stock_rows, *factor_rows]}:
@@ -579,9 +608,8 @@ class TdxMarketCache:
         try:
             connection.execute("BEGIN TRANSACTION")
             if index_rows:
-                connection.executemany(
-                    """
-                    INSERT INTO index_daily_bars VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                _write_batch(connection, """
+                    INSERT INTO index_daily_bars SELECT * FROM _tdx_write_batch WHERE TRUE
                     ON CONFLICT (ts_code, trade_date) DO UPDATE SET
                         open = EXCLUDED.open,
                         high = EXCLUDED.high,
@@ -593,27 +621,22 @@ class TdxMarketCache:
                         vol = EXCLUDED.vol,
                         amount = EXCLUDED.amount,
                         updated_at = EXCLUDED.updated_at
-                    """,
-                    [
+                    """, [
                         tuple(row[key] for key in (
                             "ts_code", "trade_date", "open", "high", "low", "close",
                             "pre_close", "change", "pct_chg", "vol", "amount", "updated_at",
                         ))
                         for row in index_rows
-                    ],
-                )
+                    ])
             if calendar_rows is not None:
                 connection.execute("DELETE FROM trade_calendar WHERE exchange = ?", [exchange])
                 if calendar_by_key:
-                    connection.executemany(
-                        "INSERT INTO trade_calendar VALUES (?, ?, ?, ?, ?)",
-                        [
+                    _write_batch(connection, "INSERT INTO trade_calendar SELECT * FROM _tdx_write_batch", [
                             tuple(row[key] for key in (
                                 "exchange", "cal_date", "is_open", "pretrade_date", "updated_at",
                             ))
                             for row in calendar_by_key.values()
-                        ],
-                    )
+                        ])
             connection.execute("COMMIT")
         except Exception:
             connection.execute("ROLLBACK")
@@ -637,6 +660,13 @@ class TdxMarketCache:
         self.ensure_schema()
         with self._connect() as connection:
             return int(connection.execute("SELECT COUNT(*) FROM tdx_resource_sync WHERE last_error <> ''").fetchone()[0])
+
+    def resource_sync_statuses(self) -> dict[tuple[str, str], tuple[datetime | None, str]]:
+        self.ensure_schema()
+        with self._connect() as connection:
+            return {(code, kind): (succeeded, error) for code, kind, succeeded, error in connection.execute(
+                "SELECT instrument_code, resource_type, last_success_at, last_error FROM tdx_resource_sync"
+            ).fetchall()}
 
     def completed_trade_date(self, now: datetime | None = None) -> date | None:
         self.ensure_schema()
@@ -801,6 +831,7 @@ class TdxMarketDataProvider:
         minimum_replay_bars: int = 370,
         benchmark_codes: tuple[str, ...] = DEFAULT_REPLAY_BENCHMARK_CODES,
         now: Any = market_now,
+        download_workers: int = 3,
     ) -> None:
         self.cache = cache
         self.hosts = hosts
@@ -809,6 +840,7 @@ class TdxMarketDataProvider:
         self.minimum_replay_bars = int(minimum_replay_bars)
         self.benchmark_codes = tuple(str(code).upper() for code in benchmark_codes)
         self.now = now
+        self.download_workers = max(1, min(int(download_workers), 3))
         self._attempt_key: str | None = None
         self._last_attempt_at: datetime | None = None
         self._status_lock = Lock()
@@ -855,23 +887,66 @@ class TdxMarketDataProvider:
 
     def _sync_stock(self, client: Any, code: str, metadata: dict[str, Any] | None, timestamp: datetime) -> None:
         try:
-            latest = self.cache.latest_trade_date("stock_daily_bars", code)
-            bars = self._fetch_daily_pages(client, code, is_index=False, latest_cached_date=latest,
-                maximum_bars=TDX_PAGE_SIZE if latest is None else TDX_MAX_DAILY_BARS)
-            xdxr = client.get_xdxr_info(self._market_for_code(code), self._symbol(code))
-            stock_rows, factor_rows = build_stock_history(code, bars, xdxr, updated_at=timestamp)
-            self.cache.upsert_stock_history(stock_rows, factor_rows)
-            if metadata is not None:
-                item = {**metadata, "list_date": metadata.get("list_date") or stock_rows[0]["trade_date"], "updated_at": timestamp}
-                self.cache.upsert_instruments([item])
-            target = self.cache.completed_trade_date(timestamp)
-            latest = self.cache.latest_trade_date("stock_daily_bars", code)
-            if target is not None and (latest is None or latest < target):
-                raise ValueError("日线尚未覆盖基准已收盘数据日，待续更或核实停牌")
-            self.cache.record_resource_sync(code, "stock-day", now=timestamp)
+            history = self._download_stock(client, code, timestamp)
+            self._store_stock(code, metadata, timestamp, *history)
         except Exception as exc:
             self.cache.record_resource_sync(code, "stock-day", error=str(exc), now=timestamp)
             raise
+
+    def _download_stock(self, client: Any, code: str, timestamp: datetime, cached_history: pd.DataFrame | None = None):
+        if cached_history is None:
+            latest = self.cache.latest_trade_date("stock_daily_bars", code)
+        else:
+            latest = pd.to_datetime(cached_history["datetime"]).max().date() if not cached_history.empty else None
+        bars = self._fetch_daily_pages(client, code, is_index=False, latest_cached_date=latest,
+            maximum_bars=TDX_PAGE_SIZE if latest is None else TDX_MAX_DAILY_BARS, cached_history=cached_history)
+        xdxr = client.get_xdxr_info(self._market_for_code(code), self._symbol(code))
+        return build_stock_history(code, bars, xdxr, updated_at=timestamp)
+
+    def _store_stock(self, code, metadata, timestamp, stock_rows, factor_rows):
+        self.cache.upsert_stock_history(stock_rows, factor_rows)
+        if metadata is not None:
+            item = {**metadata, "list_date": metadata.get("list_date") or stock_rows[0]["trade_date"], "updated_at": timestamp}
+            self.cache.upsert_instruments([item])
+        target = self.cache.completed_trade_date(timestamp)
+        latest = self.cache.latest_trade_date("stock_daily_bars", code)
+        if target is not None and (latest is None or latest < target):
+            raise ValueError("日线尚未覆盖基准已收盘数据日，待续更或核实停牌")
+        self.cache.record_resource_sync(code, "stock-day", now=timestamp)
+
+    def _download_stocks(self, client: _FailoverTdxClient, codes: list[str], timestamp: datetime):
+        worker = local()
+        contexts = []
+
+        def download(code, cached_history):
+            if getattr(worker, "client", None) is None:
+                worker.client = client.fork()
+                worker.client.__enter__()
+                contexts.append(worker.client)
+            try:
+                return self._download_stock(worker.client, code, timestamp, cached_history)
+            except Exception:
+                # A failed resource must not poison later stocks assigned to this worker.
+                worker.client.close()
+                worker.client = None
+                raise
+
+        try:
+            with ThreadPoolExecutor(max_workers=self.download_workers, thread_name_prefix="tdx-download") as executor:
+                # Bound pending results to one existing daily batch, while reusing
+                # each worker's connection across batches. Only the caller writes.
+                for start in range(0, len(codes), DAILY_BATCH_SIZE):
+                    cached = {code: self.cache.load_history("stock_daily_bars", code) for code in codes[start:start + DAILY_BATCH_SIZE]}
+                    futures = {executor.submit(download, code, history): code for code, history in cached.items()}
+                    for future in as_completed(futures):
+                        try:
+                            history, error = future.result(), None
+                        except Exception as exc:
+                            history, error = None, exc
+                        yield futures[future], history, error
+        finally:
+            for context in contexts:
+                context.close()
 
     def load_hybrid_daily_history(
         self,
@@ -990,6 +1065,7 @@ class TdxMarketDataProvider:
         is_index: bool,
         latest_cached_date: date | None,
         maximum_bars: int = TDX_MAX_DAILY_BARS,
+        cached_history: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
         from .tdx_api import KlineCategory
 
@@ -1017,7 +1093,7 @@ class TdxMarketDataProvider:
             raise ValueError(f"通达信未返回 {ts_code} 的日线")
         downloaded = pd.concat(frames, ignore_index=True)
         table_name = "index_daily_bars" if is_index else "stock_daily_bars"
-        cached = self.cache.load_history(table_name, ts_code)
+        cached = cached_history if cached_history is not None else self.cache.load_history(table_name, ts_code)
         if not cached.empty:
             downloaded = pd.concat([cached, downloaded], ignore_index=True)
         return downloaded
@@ -1027,13 +1103,20 @@ class TdxMarketDataProvider:
         client: Any,
         *,
         progress_callback: Any | None = None,
+        skip_current: bool = False,
     ) -> dict[str, Any]:
         updated_at = self.now().replace(microsecond=0)
         self.cache.ensure_schema()
         total = 1 + len(self.benchmark_codes) + self.initial_stock_count
         completed = 0
+        was_ready = self._cache_ready()
+        statuses = self.cache.resource_sync_statuses() if skip_current else {}
 
-        def report(message: str, *, ready: bool = False) -> None:
+        def current_phase(code: str, kind: str) -> bool:
+            succeeded, error = statuses.get((code, kind), (None, ""))
+            return bool(succeeded and not error and maintenance_key(succeeded) == maintenance_key(updated_at))
+
+        def report(message: str, *, ready: bool = was_ready) -> None:
             if progress_callback is not None:
                 progress_callback(
                     {
@@ -1048,27 +1131,46 @@ class TdxMarketDataProvider:
 
         report("正在下载通达信证券名单")
         failures: list[str] = []
+        with self.cache._connect() as connection:
+            rows = connection.execute("SELECT ts_code, symbol, name, market, list_date, list_status, updated_at, industry, area, delist_date FROM stock_instruments").fetchall()
+        instruments = [dict(zip(("ts_code", "symbol", "name", "market", "list_date", "list_status", "updated_at", "industry", "area", "delist_date"), row)) for row in rows]
         try:
-            instruments = self._fetch_instruments(client, updated_at)
-            if not instruments:
-                raise ValueError("通达信证券列表为空")
-            self.cache.upsert_instruments(instruments)
-            self.cache.record_resource_sync("instruments", "metadata", now=updated_at)
+            if not (instruments and current_phase("instruments", "metadata")):
+                fetched = self._fetch_instruments(client, updated_at)
+                if not fetched:
+                    raise ValueError("通达信证券列表为空")
+                self.cache.upsert_instruments(fetched)
+                instruments = fetched
+                self.cache.record_resource_sync("instruments", "metadata", now=updated_at)
         except Exception as exc:
             failures.append(str(exc))
             self.cache.record_resource_sync("instruments", "metadata", error=str(exc), now=updated_at)
-            with self.cache._connect() as connection:
-                rows = connection.execute("SELECT ts_code, symbol, name, market, list_date, list_status, updated_at, industry, area, delist_date FROM stock_instruments").fetchall()
-            instruments = [dict(zip(("ts_code", "symbol", "name", "market", "list_date", "list_status", "updated_at", "industry", "area", "delist_date"), row)) for row in rows]
         completed += 1
         report(f"证券名单已缓存，共 {len(instruments)} 只")
 
         for benchmark_code in self.benchmark_codes:
             try:
-                latest = self.cache.latest_trade_date("index_daily_bars", benchmark_code)
+                exchange = "SSE" if benchmark_code.endswith(".SH") else "SZSE"
+                # Re-discover the calendar each new phase; a cached MAX(date) alone
+                # cannot tell us whether a new trading day has just completed.
+                with self.cache._connect() as connection:
+                    bar_count, latest = connection.execute("SELECT COUNT(*), MAX(trade_date) FROM index_daily_bars WHERE ts_code = ?", [benchmark_code]).fetchone()
+                    calendar_count, calendar_latest = connection.execute("SELECT COUNT(*), MAX(cal_date) FROM trade_calendar WHERE exchange = ? AND is_open = 1", [exchange]).fetchone()
+                    missing_dates = connection.execute("""
+                        SELECT COUNT(*) FROM trade_calendar AS cal
+                        WHERE cal.exchange = ? AND cal.is_open = 1
+                            AND cal.cal_date BETWEEN (SELECT MIN(trade_date) FROM index_daily_bars WHERE ts_code = ?) AND ?
+                            AND NOT EXISTS (SELECT 1 FROM index_daily_bars AS bars WHERE bars.ts_code = ? AND bars.trade_date = cal.cal_date)
+                    """, [exchange, benchmark_code, calendar_latest, benchmark_code]).fetchone()[0]
+                canonical = benchmark_code in {"000001.SH", "399001.SZ"}
+                intact = (min(bar_count, calendar_count) >= self.minimum_replay_bars and not missing_dates
+                    and (not canonical or (bar_count == calendar_count and latest == calendar_latest)))
+                if current_phase(benchmark_code, "index-day") and intact:
+                    completed += 1
+                    report("复用已更新的指数与交易日历")
+                    continue
                 bars = self._fetch_daily_pages(client, benchmark_code, is_index=True, latest_cached_date=latest,
                     maximum_bars=TDX_PAGE_SIZE if latest is None else TDX_MAX_DAILY_BARS)
-                exchange = "SSE" if benchmark_code.endswith(".SH") else "SZSE"
                 index_rows, calendar_rows = build_index_history(benchmark_code, exchange, bars, updated_at=updated_at)
                 self.cache.replace_index_history(benchmark_code, exchange, index_rows,
                     calendar_rows if benchmark_code in {"000001.SH", "399001.SZ"} else None)
@@ -1106,8 +1208,36 @@ class TdxMarketDataProvider:
             total = 1 + len(self.benchmark_codes) + len(selected_codes)
 
             synced_codes: list[str] = []
+            skipped_codes: list[str] = []
+            pending_codes: list[str] = []
+            target = self.cache.completed_trade_date(updated_at)
+            inventory = {item["code"]: item for item in self.cache.sample_inventory(self.minimum_replay_bars)} if skip_current else {}
             for batch_start in range(0, len(selected_codes), DAILY_BATCH_SIZE):
                 for ts_code in selected_codes[batch_start:batch_start + DAILY_BATCH_SIZE]:
+                    item = inventory.get(ts_code)
+                    succeeded = datetime.fromisoformat(item["lastSuccessAt"]) if item and item["lastSuccessAt"] else None
+                    if (target and item and item["eligible"] and not item["error"]
+                            and item["latestDate"] and date.fromisoformat(item["latestDate"]) >= target
+                            and succeeded and succeeded >= datetime.combine(target, CLOSE_GRACE)):
+                        skipped_codes.append(ts_code)
+                        completed += 1
+                    else:
+                        pending_codes.append(ts_code)
+            report(f"复用 {len(skipped_codes)} 只已更新股票，待续更 {len(pending_codes)} 只")
+            if self.download_workers > 1 and len(pending_codes) > 1 and isinstance(client, _FailoverTdxClient):
+                for ts_code, history, error in self._download_stocks(client, pending_codes, updated_at):
+                    try:
+                        if error is not None:
+                            raise error
+                        self._store_stock(ts_code, available_codes.get(ts_code), updated_at, *history)
+                        synced_codes.append(ts_code)
+                    except Exception as exc:
+                        self.cache.record_resource_sync(ts_code, "stock-day", error=str(exc), now=updated_at)
+                        failures.append(str(exc))
+                    completed += 1
+                    report(f"日线分批续更 {completed - 1 - len(self.benchmark_codes)}/{len(selected_codes)} 只，失败 {len(failures)} 项")
+            else:
+                for ts_code in pending_codes:
                     try:
                         self._sync_stock(client, ts_code, available_codes.get(ts_code), updated_at)
                         synced_codes.append(ts_code)
@@ -1132,8 +1262,9 @@ class TdxMarketDataProvider:
             "state": "partial" if failures else "ready",
             "error": f"{len(failures)}项更新失败，将自动重试" if failures else "",
             "stockCount": len(synced_codes),
+            "skippedStockCount": len(skipped_codes),
             "benchmarkCount": len(self.benchmark_codes),
-            "message": f"日线续更完成 {len(synced_codes)}/{len(selected_codes)}只" + (f"，{len(failures)}项失败，保留原缓存" if failures else ""),
+            "message": f"日线续更完成 {len(synced_codes)}/{len(selected_codes)}只，复用 {len(skipped_codes)}只" + (f"，{len(failures)}项失败，保留原缓存" if failures else ""),
         }
 
     def _resolved_client_factory(self):
@@ -1148,6 +1279,7 @@ class TdxMarketDataProvider:
         *,
         force_refresh: bool = False,
         progress_callback: Any | None = None,
+        skip_current: bool = False,
     ) -> dict[str, Any]:
         ready = self.cache.is_replay_ready(
             self.benchmark_codes,
@@ -1167,7 +1299,7 @@ class TdxMarketDataProvider:
         last_error: Exception | None = None
         try:
             with _FailoverTdxClient(factory, self._connection_hosts()) as client:
-                return self.sync_with_client(client, progress_callback=progress_callback)
+                return self.sync_with_client(client, progress_callback=progress_callback, skip_current=skip_current)
         except Exception as exc:
             last_error = exc
         if ready:
@@ -1279,18 +1411,8 @@ class TdxMarketDataProvider:
         key = maintenance_key(self.now())
         if self._attempt_key == key and self._sync_status['state'] in {'ready', 'partial', 'failed'} and not retry_failed:
             return self.replay_cache_status()
-        if self._attempt_key is None and self._cache_ready() and self.cache.synced_today(self.now()) and key.endswith(':open'):
-            self._update_sync_status(
-                {
-                    "state": "ready",
-                    "ready": True,
-                    "completed": self._sync_status["total"],
-                    "message": "本地日线缓存可用，覆盖与更新状态见下方",
-                    "error": "",
-                }
-            )
-            return self.replay_cache_status()
-
+        # Inspect individual resources in the worker even if a global success
+        # marker exists: subsequent failures or incomplete rows still need repair.
         with self._status_lock:
             if self._sync_thread is not None and self._sync_thread.is_alive():
                 return dict(self._sync_status)
@@ -1316,6 +1438,7 @@ class TdxMarketDataProvider:
         try:
             result = self.ensure_ready(
                 force_refresh=True,
+                skip_current=True,
                 progress_callback=self._update_sync_status,
             )
         except Exception as exc:

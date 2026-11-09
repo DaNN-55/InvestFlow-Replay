@@ -5,13 +5,24 @@ from __future__ import annotations
 import asyncio
 import math
 from concurrent.futures import Future
+from contextlib import contextmanager
 from datetime import datetime
 from threading import Event, Thread
+from time import monotonic
 from typing import Any, Callable
 
 import pandas as pd
 from pytdxdata import KlinePeriod as KlineCategory
 from pytdxdata import Market, TdxData
+
+
+class _OnDemandTdxData(TdxData):
+    async def start(self) -> None:
+        # pytdxdata==0.3.2 pools acquire connections lazily without start().
+        # Its default start probes/prewarms standard, MAC and unrelated EX hosts.
+        # Keep this pinned-SDK lifecycle adjustment inside the adapter.
+        await self._cache.start()
+        self._started = True
 
 
 def get_known_hosts() -> tuple[str, ...]:
@@ -29,13 +40,18 @@ class TdxClient:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: Thread | None = None
         self._started = Event()
+        self._request_deadline: float | None = None
         self._security_lists: dict[Market, list[Any]] = {}
 
     def __enter__(self) -> "TdxClient":
         self._thread = Thread(target=self._run_loop, name=f"tdx-{self.host}", daemon=True)
         self._thread.start()
         self._started.wait()
-        self._call(self._start)
+        try:
+            self._call(self._start)
+        except Exception:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def __exit__(self, *_args: Any) -> None:
@@ -43,7 +59,7 @@ class TdxClient:
             return
         try:
             if self._data is not None:
-                self._call(self._close)
+                self._call(self._close, cleanup=True)
         finally:
             self._loop.call_soon_threadsafe(self._loop.stop)
             if self._thread is not None:
@@ -58,15 +74,21 @@ class TdxClient:
         self._loop = loop
         self._started.set()
         loop.run_forever()
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        loop.run_until_complete(loop.shutdown_asyncgens())
         loop.close()
 
     async def _start(self) -> None:
-        self._data = TdxData(
+        self._data = _OnDemandTdxData(
             standard_servers=[self.host],
             mac_servers=[self.host],
             timeout=self.timeout,
             cache_dir=None,
-            pool_min=1,
+            pool_min=0,
             pool_max=6,
         )
         await self._data.start()
@@ -75,11 +97,33 @@ class TdxClient:
         if self._data is not None:
             await self._data.close()
 
-    def _call(self, operation: Callable[[], Any]) -> Any:
+    @contextmanager
+    def request_budget(self, seconds: float):
+        previous = self._request_deadline
+        self._request_deadline = monotonic() + seconds
+        try:
+            yield
+        finally:
+            self._request_deadline = previous
+
+    def _call(self, operation: Callable[[], Any], *, cleanup: bool = False) -> Any:
         if self._loop is None:
             raise RuntimeError("通达信客户端未连接")
-        future: Future[Any] = asyncio.run_coroutine_threadsafe(operation(), self._loop)
-        return future.result(timeout=self.timeout * 12)
+        timeout = 2.0 if cleanup else min(24.0, self.timeout * 3)
+        if not cleanup and self._request_deadline is not None:
+            timeout = min(timeout, self._request_deadline - monotonic())
+        if timeout <= 0:
+            raise TimeoutError("通达信请求已超过总时间预算")
+
+        async def bounded():
+            return await asyncio.wait_for(operation(), timeout=timeout)
+
+        future: Future[Any] = asyncio.run_coroutine_threadsafe(bounded(), self._loop)
+        try:
+            return future.result(timeout=timeout + .25)
+        except TimeoutError:
+            future.cancel()
+            raise
 
     @staticmethod
     def _frame(rows: list[Any]) -> pd.DataFrame:

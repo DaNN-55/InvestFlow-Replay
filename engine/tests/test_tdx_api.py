@@ -69,7 +69,7 @@ class TdxApiTest(unittest.TestCase):
                     async def close(self):
                         pass
 
-                with patch("replay_engine.tdx_api.TdxData", InMemoryTransportData), TdxClient("fake") as client:
+                with patch("replay_engine.tdx_api._OnDemandTdxData", InMemoryTransportData), TdxClient("fake") as client:
                     for method in (client.get_security_bars, client.get_index_bars):
                         channel = "mac" if period == KlineCategory.MIN_1 and method == client.get_security_bars else "standard"
                         code = "600000" if method == client.get_security_bars else "000001"
@@ -119,7 +119,7 @@ class TdxApiTest(unittest.TestCase):
             async def get_xdxr(self, *_args, **_kwargs):
                 return [SimpleNamespace(year=2026, month=1, day=2, category=1, fenhong=0.1, peigujia=0, songzhuangu=0, peigu=0)]
 
-        with patch("replay_engine.tdx_api.TdxData", FakeData), TdxClient("fake", timeout=1) as client:
+        with patch("replay_engine.tdx_api._OnDemandTdxData", FakeData), TdxClient("fake", timeout=1) as client:
             stock = client.get_security_bars(Market.SH, "600000", KlineCategory.DAY, 0, 1)
             index = client.get_index_bars(Market.SH, "000001", KlineCategory.DAY, 0, 1)
             securities = client.get_security_list(Market.SH, 1000)
