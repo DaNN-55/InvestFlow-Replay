@@ -1,5 +1,6 @@
 <script setup>
 import { computed, shallowRef } from "vue";
+import { vMotionEnter } from "../../directives/motion.js";
 import { useRouter } from "vue-router";
 
 import { useReplayPlaybooks } from "../../composables/useReplayPlaybooks.js";
@@ -124,6 +125,7 @@ async function confirmDeleteVersion() {
   <section class="replay-playbook-panel">
     <div
       v-if="error || success"
+      v-motion-enter="!error"
       class="replay-playbook-panel__feedback"
       :class="{ 'replay-playbook-panel__feedback--error': error }"
       role="status"

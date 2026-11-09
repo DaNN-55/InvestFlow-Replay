@@ -163,7 +163,6 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
 .replay-kline-chart__canvas {
   width: 100%;
   min-width: 0;
-  transition: height 160ms ease;
 }
 
 .replay-kline-chart__drawing-toolbar {

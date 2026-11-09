@@ -1,4 +1,5 @@
 <script setup>
+import { vMotionDisclosure } from "../../directives/motion.js";
 import {
   ChevronDown,
   Play,
@@ -325,7 +326,7 @@ function submit() {
                 </span>
               </label>
 
-              <details open class="replay-setup__advanced">
+              <details v-motion-disclosure="'auto'" open class="replay-setup__advanced">
                 <summary class="replay-setup__advanced-trigger">
                   <span>高级成本设置</span>
                   <ChevronDown :size="16" />

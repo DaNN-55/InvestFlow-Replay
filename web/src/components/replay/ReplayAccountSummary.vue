@@ -94,130 +94,37 @@ function formatShares(value) {
 <style scoped>
 .replay-account {
   display: grid;
-  grid-template-columns: minmax(260px, 1.1fr) minmax(0, 2.4fr);
-  gap: 26px;
-  padding: 22px 24px;
-  border: 1px solid var(--ql-line-strong);
-  border-radius: 12px;
-  background:
-    linear-gradient(105deg, rgba(235, 242, 255, 0.76), transparent 34%),
-    var(--ql-color-bg-surface-strong);
-  box-shadow: var(--ql-shadow-xs);
-}
-
-.replay-account__primary {
-  min-width: 0;
-}
-
-.replay-account__label {
-  display: block;
-  color: var(--ql-color-text-muted);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.replay-account__hero {
-  display: block;
-  margin-top: 4px;
-  font-family: "SF Mono", "SFMono-Regular", Menlo, monospace;
-  font-size: clamp(28px, 3vw, 38px);
-  font-weight: 700;
-  letter-spacing: -0.055em;
-}
-
-.replay-account__hero small {
-  margin-right: 3px;
-  color: var(--ql-color-text-muted);
-  font-size: 16px;
-}
-
-.replay-account__progress {
-  display: flex;
+  grid-template-columns: minmax(200px, 1.1fr) minmax(0, 4fr);
   align-items: center;
-  gap: 9px;
-  margin-top: 7px;
-  color: var(--ql-color-text-muted);
-  font-size: 11px;
+  gap: 20px;
+  padding: 14px 18px;
+  border-block: 1px solid var(--ql-line-strong);
+  font-variant-numeric: tabular-nums;
 }
-
-.replay-account__status {
-  padding: 3px 7px;
-  border-radius: 999px;
-  color: #0369a1;
-  background: var(--ql-color-info-soft);
-  font-weight: 700;
+.replay-account__primary { min-width: 0; }
+.replay-account__label { color: var(--ql-color-text-muted); font-size: 12px; }
+.replay-account__hero { display: block; margin-top: 3px; font-size: 23px; line-height: 1.3; font-weight: 650; overflow-wrap: anywhere; }
+.replay-account__hero small { margin-right: 3px; font-size: 14px; font-weight: 400; }
+.replay-account__progress { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 4px; color: var(--ql-color-text-muted); font-size: 11px; }
+.replay-account__status { color: var(--ql-color-info); }
+.replay-account__status--done { color: color-mix(in srgb, var(--ql-color-success) 45%, var(--ql-ink)); }
+.replay-account__metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: start; gap: 12px; margin: 0; }
+.replay-account__metric { min-width: 0; }
+.replay-account__metric dt { color: var(--ql-color-text-muted); font-size: 12px; }
+.replay-account__metric dd { margin: 6px 0 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.replay-account__metric dd span { color: var(--ql-color-text-muted); font-size: 12px; font-weight: 400; }
+.replay-account__value--rise { color: var(--ql-rise); }
+.replay-account__value--fall { color: var(--ql-fall); }
+@media (max-width: 1100px) {
+  .replay-account { grid-template-columns: 1fr; gap: 12px; }
+  .replay-account__primary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+  .replay-account__hero { margin: 0; }
+  .replay-account__progress { margin: 0 0 0 auto; }
 }
-
-.replay-account__status--done {
-  color: #047857;
-  background: var(--ql-color-success-soft);
-}
-
-.replay-account__metrics {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  align-items: center;
-  margin: 0;
-}
-
-.replay-account__metric {
-  min-width: 0;
-  padding: 4px 16px;
-  border-left: 1px solid var(--ql-line);
-}
-
-.replay-account__metric dt {
-  color: var(--ql-color-text-muted);
-  font-size: 11px;
-}
-
-.replay-account__metric dd {
-  overflow: hidden;
-  margin: 7px 0 0;
-  font-family: "SF Mono", "SFMono-Regular", Menlo, monospace;
-  font-size: 14px;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.replay-account__metric dd span {
-  color: var(--ql-color-text-muted);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.replay-account__value--rise {
-  color: var(--ql-rise);
-}
-
-.replay-account__value--fall {
-  color: var(--ql-fall);
-}
-
-@media (max-width: 1280px) {
-  .replay-account {
-    grid-template-columns: 1fr;
-  }
-
-  .replay-account__metrics {
-    border-top: 1px solid var(--ql-line);
-    padding-top: 14px;
-  }
-
-  .replay-account__metric:first-child {
-    border-left: 0;
-  }
-}
-
-@media (max-width: 760px) {
-  .replay-account__metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px 0;
-  }
-
-  .replay-account__metric:nth-child(odd) {
-    border-left: 0;
-  }
+@media (max-width: 600px) {
+  .replay-account { padding: 12px 0; }
+  .replay-account__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+  .replay-account__progress { flex-basis: 100%; margin: 0; }
+  .replay-account__metric dd { margin-top: 3px; }
 }
 </style>

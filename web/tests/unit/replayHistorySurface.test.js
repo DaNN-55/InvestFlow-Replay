@@ -106,9 +106,10 @@ describe("replay history tracking surface", () => {
     assert.match(recordsSource, /router\.push\(\{ path: "\/decision\/market-replay", query: \{ session: item\.id \} \}\)/u);
     assert.match(filtersSource, /状态筛选/u);
     assert.match(filtersSource, /关键词/u);
-    assert.match(filtersSource, />\s*查询\s*</u);
-    assert.match(filtersSource, /class="replay-history-filters__submit"[\s\S]*?size="lg"/u);
-    assert.match(filtersSource, /\.replay-history-filters__submit \{[\s\S]*?font-size: 14px;/u);
+    for (const label of ["演练市场筛选", "状态筛选", "演练次数", "关键词"]) {
+      assert.match(filtersSource, new RegExp(`aria-label="${label}"`, "u"));
+    }
+    assert.doesNotMatch(filtersSource, /<span>|\btitle=|<UiButton|replay-history-filters__submit/u);
     assert.doesNotMatch(filtersSource, />\s*刷新\s*</u);
     assert.doesNotMatch(recordsSource, /@refresh=/u);
     assert.match(listSource, /共 \{\{ total \}\} 局/u);
@@ -205,7 +206,7 @@ describe("replay history tracking surface", () => {
     assert.match(detailSource, /replay-history-detail__review-section/u);
     assert.match(
       detailSource,
-      /replay-history-detail__algorithm[\s\S]*?attemptPresentation\.scoreNote/u,
+      /replay-history-detail__score-note[\s\S]*?attemptPresentation\.scoreNote/u,
     );
   });
 

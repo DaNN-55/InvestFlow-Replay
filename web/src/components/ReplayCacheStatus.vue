@@ -1,4 +1,5 @@
 <script setup>
+import { vMotionDisclosure } from "../directives/motion.js";
 import { AlertTriangle, ChevronDown, Database, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { computed, onBeforeUnmount, onMounted, shallowRef, useTemplateRef } from "vue";
 
@@ -108,7 +109,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutsideP
         </dl>
       </div>
 
-      <details v-if="coverage?.boards?.length" class="replay-cache-status__coverage">
+      <details v-motion-disclosure="'auto'" v-if="coverage?.boards?.length" class="replay-cache-status__coverage">
         <summary>板块样本覆盖<ChevronDown :size="14" aria-hidden="true" /></summary>
         <p>更新基准日：{{ coverage.targetTradeDate || "交易日历不足，暂无法判断" }}</p>
         <p v-if="coverage.dailyFailedResourceCount" class="replay-cache-status__warning">日线、指数或证券名单更新失败：{{ coverage.dailyFailedResourceCount }} 项，稍后自动重试。</p>
@@ -179,7 +180,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", handleOutsideP
 .replay-cache-status__coverage summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; color: var(--ql-ink); font-size: 12px; font-weight: 600; list-style: none; cursor: pointer; }
 .replay-cache-status__coverage summary::-webkit-details-marker { display: none; }
 .replay-cache-status__coverage summary:focus-visible { outline: 2px solid var(--ql-color-primary); outline-offset: 2px; border-radius: 4px; }
-.replay-cache-status__coverage[open] summary svg { transform: rotate(180deg); }
+.replay-cache-status__coverage[data-motion-open="true"] summary svg { transform: rotate(180deg); }
 .replay-cache-status__coverage p { margin: 5px 0 0; font-size: 11px; line-height: 1.5; }
 .replay-cache-status__coverage article { padding: 10px 0; border-bottom: 1px solid var(--ql-line); }
 .replay-cache-status__coverage article strong { color: var(--ql-ink); font-size: 12px; }

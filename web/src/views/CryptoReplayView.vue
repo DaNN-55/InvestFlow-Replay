@@ -1,6 +1,7 @@
 <script setup>
 import { computed, inject, nextTick, onActivated, onDeactivated, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { vMotionEnter } from '../directives/motion.js';
 import { Settings2 } from 'lucide-vue-next';
 import { api } from '../services/api.js';
 import UiButton from '../components/ui/UiButton.vue';
@@ -78,6 +79,15 @@ const availableBalanceAmount=value=>Number(value)<0&&Number(value)>-0.01?'缺口
 const locked=computed(()=>confirmationView.value.blockNewActions);
 watch(()=>[s.value?.id,s.value?.revision,state.value.controls.newActionsBlocked,routeMismatch.value],()=>confirmation.reconcile());
 const finishOpen=ref(false),settingsOpen=ref(false);
+const reviewStage=ref(null);
+watch(()=>[s.value?.id,s.value?.status],async([id,status],[previousId,previousStatus])=>{
+  if(id===previousId&&status==='completed'&&previousStatus&&previousStatus!=='completed'&&active.value) {
+    finishOpen.value=false;
+    await nextTick();
+    reviewStage.value?.focus({preventScroll:true});
+    reviewStage.value?.scrollIntoView({block:'start',behavior:'instant'});
+  }
+});
 const playbackView=shallowRef(null);
 const playback=createCryptoReplayPlayback({
   readContext:()=>({session:s.value,traces:state.value.traces,speed:preferences.value.playbackSpeed,
@@ -144,7 +154,7 @@ function handleAdvanceKey(event) {
   const minutes={'1':1,'2':5,'3':15}[event.key];
   if(!minutes||event.defaultPrevented||event.repeat||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||!active.value||route.name!=='crypto-market-replay'||!s.value||s.value.status!=='active'||locked.value||state.value.controls.newActionsBlocked||routeMismatch.value) return;
   if(event.target instanceof Element&&event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="combobox"]')) return;
-  if([...document.querySelectorAll('[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"]')].some(element=>element.getClientRects().length)) return;
+  if([...document.querySelectorAll('[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"]')].some(element=>!element.closest('[inert]')&&element.getClientRects().length)) return;
   event.preventDefault();advance(minutes);
 }
 function stop() {playback.pause();}
@@ -158,7 +168,7 @@ async function retrain() {
 </script>
 <template>
   <div class="crypto-workspace crypto-controls" :class="{'crypto-workspace--setup':!s}" :aria-busy="state.busy">
-    <header v-if="s" class="crypto-header"><div><p class="crypto-eyebrow">USDT 永续 / 历史盲测</p><h1>{{ s?s.instrumentId:'合约练习' }} <span v-if="s">逐仓 · 单向</span></h1><div v-if="s" class="crypto-quotes"><span>最新价 <b data-testid="crypto-last">{{ amount(s.currentPrices.last,4) }}</b></span><span>标记价格 <b>{{ amount(s.currentPrices.mark,4) }}</b></span></div></div><div class="crypto-header-actions"><button type="button" class="crypto-icon" aria-label="交易与显示设置" title="交易与显示设置" @click="settingsOpen=true"><Settings2 :size="17" /></button></div></header>
+    <header v-if="s" class="crypto-header"><div><h1>{{ s?s.instrumentId:'合约练习' }} <span v-if="s">USDT 永续 · 逐仓 · 单向</span></h1><div v-if="s" class="crypto-quotes"><span>最新价 <b data-testid="crypto-last">{{ amount(s.currentPrices.last,4) }}</b></span><span>标记价格 <b>{{ amount(s.currentPrices.mark,4) }}</b></span></div></div><div class="crypto-header-actions"><button type="button" class="crypto-icon" aria-label="交易与显示设置" title="交易与显示设置" @click="settingsOpen=true"><Settings2 :size="17" /></button></div></header>
     <Teleport to="body">
       <UiAlert v-if="active&&visibleAlert" id="crypto-active-alert" floating variant="warning" role="alert" :title="visibleAlert.title" :dismissible="visibleAlert.canDismiss" data-testid="crypto-persistent-alert" @dismiss="confirmation.dismissNotice">
         <p v-if="visibleAlert.message" class="crypto-notification-text">{{ visibleAlert.message }}</p>
@@ -167,18 +177,24 @@ async function retrain() {
         <UiButton v-if="visibleAlert.action" variant="secondary" class="crypto-notification-action" :disabled="state.busy" @click="visibleAlert.action==='retry'?retryPending():resync()">{{ state.busy?'正在核对…':visibleAlert.kind==='storage'?'重试恢复':visibleAlert.action==='retry'?'重试原动作':'重新同步' }}</UiButton>
       </UiAlert>
     </Teleport>
-    <p v-if="state.busy" class="crypto-save-status" role="status">正在同步与保存…</p><p v-else-if="state.notice" class="crypto-save-status" role="status">{{ state.notice }}</p>
+    <p v-if="state.busy" class="crypto-save-status" role="status">正在同步与保存…</p><p v-else-if="state.notice" v-motion-enter class="crypto-save-status" role="status">{{ state.notice }}</p>
     <CryptoSetupPanel v-if="!s" :busy="state.busy" :pool="state.pool" :history="state.history" :blocked="state.controls.newActionsBlocked||Boolean(state.poolError)" @create="controller.act('create',$event)" @resume="controller.select($event)" @records="records" />
     <template v-else>
       <div class="crypto-account" data-testid="crypto-account"><div v-for="[label,value,id] in [['账户权益 · USDT',s.summary.accountEquity,'crypto-equity'],['仓外可用',s.account.availableBalance,'crypto-available'],['委托冻结',s.reservedBalance,'crypto-reserved'],['本次净盈亏',s.summary.netPnl,'crypto-net-summary']]" :key="label"><span>{{ label }}</span><strong :data-testid="id" :title="String(value)">{{ moneyAmount(value) }}</strong></div></div>
-      <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed}">
+      <div class="crypto-terminal-grid" :class="{'order-collapsed':preferences.collapsed&&s.status!=='completed','crypto-terminal-grid--review':s.status==='completed'}">
         <div class="crypto-terminal-main">
           <CryptoChartWorkspace ref="chartWorkspace" v-model="chartPreferences" :session="s" :markets="state.markets" :busy="state.busy" :blocked="confirmationView.blockChartActions" :price-draft="orderChartDraft" @price-drag="confirmation.handlePriceDrag" @confirm-price="confirmation.confirm" @cancel-price="confirmation.cancel" @request-cancellation="confirmation.openCancellation" />
           <CryptoPositionPanel :key="s.id" :session="s" :traces="state.traces" :busy="state.busy" :blocked="confirmationView.blockNewActions" @command="command" @cancel-order="confirmation.openCancellation" @edit-order="confirmation.openOrder" @records="records" />
-          <CryptoReviewPanel v-if="s.status==='completed'" :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="state.controls.newActionsBlocked||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
           <footer class="crypto-workspace-footer"><span>成交、资金费与风险事件后自动暂停</span><button type="button" class="crypto-text-button" @click="openData">数据来源与教学规则</button><button type="button" class="crypto-text-button" @click="records(true)">完整记录与资金账本 ↗</button></footer>
         </div>
         <div class="crypto-terminal-side">
+          <template v-if="s.status==='completed'">
+            <div ref="reviewStage" class="crypto-review-stage" tabindex="-1">
+              <CryptoReviewPanel :key="`review:${s.id}`" :session="s" :traces="state.traces" :ledger="state.ledger" :analysis="state.analysis" :analysis-error="state.analysisError" :busy="state.busy" :blocked="state.controls.newActionsBlocked||routeMismatch" @blind="controller.act('blind',{review:$event})" @reveal="controller.act('reveal')" @post="controller.act('post',{review:$event})" @retrain="retrain" />
+            </div>
+            <UiButton class="crypto-review-new" variant="secondary" :disabled="locked" @click="fresh">新开一局</UiButton>
+          </template>
+          <template v-else>
           <ReplayPlaybackControls
             class="crypto-playback"
             :label="relativeTime(s.elapsedMinutes)" :detail="`${s.attemptInfo.kind==='first'?'首次盲测':`复练 #${s.attemptInfo.attemptNumber}`} · ${s.config.leverage}倍`"
@@ -191,6 +207,7 @@ async function retrain() {
             <template #actions><UiButton variant="secondary" class="crypto-finish" :disabled="locked||s.status!=='active'||s.ending" @click="stop();finishOpen=true">结束练习</UiButton><UiButton variant="secondary" :disabled="locked" @click="fresh">新开一局</UiButton></template>
           </ReplayPlaybackControls>
           <CryptoTradingPanel v-show="!preferences.collapsed" :key="s.id" :session="s" :preview-order="api.cryptoPreview" :submit-order="command" :order-receipt="state.orderReceipt" :busy="state.busy" :blocked="confirmationView.blockNewActions" @validation-error="orderInputError=$event" />
+          </template>
         </div>
       </div>
     </template>

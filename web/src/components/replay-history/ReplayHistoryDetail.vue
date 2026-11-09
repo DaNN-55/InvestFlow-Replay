@@ -1,6 +1,7 @@
 <script setup>
+import { vMotionDisclosure, vMotionEnter } from "../../directives/motion.js";
 import { computed, shallowRef } from "vue";
-import { ChevronDown, ChevronUp, Ellipsis, ExternalLink, RefreshCw, Trash2 } from "lucide-vue-next";
+import { ChevronDown, ChevronUp, Ellipsis, RefreshCw, Trash2 } from "lucide-vue-next";
 
 import {
   buildReplayHistoryScoreDimensions,
@@ -205,18 +206,18 @@ function isPositiveMetric(metric) {
 </script>
 
 <template>
-  <article class="replay-history-detail">
+  <article v-motion-enter="'detail'" class="replay-history-detail">
     <header class="replay-history-detail__header">
       <div>
-        <p>{{ item.revealed ? "真实标的已揭晓" : "匿名行情" }}</p>
         <h2>{{ formatReplayHistoryIdentity(item) }}</h2>
         <span>
-          {{ getReplayHistoryStatePresentation(item.reviewState).label }}
+          {{ item.revealed ? "真实标的已揭晓" : "匿名行情" }} · {{ getReplayHistoryStatePresentation(item.reviewState).label }}
           · {{ item.interval === "1m" ? "1 分钟" : item.interval === "hybrid" ? `日内模拟 · ${item.stepMinutes ?? 1}分钟` : "日线" }}
           {{ item.gameLength }} {{ item.interval === "1m" ? "分钟" : "日" }}
         </span>
       </div>
       <div class="replay-history-detail__actions">
+        <UiButton variant="secondary" size="sm" @click="emit('open', item)">打开演练</UiButton>
         <UiActionMenu
           class="replay-history-detail__action-menu"
           label="演练记录操作"
@@ -224,7 +225,6 @@ function isPositiveMetric(metric) {
           :trigger-size="32"
         >
           <template #trigger><Ellipsis :size="17" /></template>
-          <button class="ui-action-menu__item" type="button" @click="emit('open', item)"><ExternalLink :size="14" />打开演练</button>
           <button v-if="item.revealed" class="ui-action-menu__item" type="button" :disabled="retrainState.loading" @click="emit('retrain', item)"><RefreshCw :size="14" />复练此行情</button>
           <button class="ui-action-menu__item ui-action-menu__item--danger" type="button" :disabled="deleteState.loading || retrainState.loading" @click="emit('delete', item)"><Trash2 :size="14" />删除记录</button>
         </UiActionMenu>
@@ -261,11 +261,12 @@ function isPositiveMetric(metric) {
     </dl>
 
     <section class="replay-history-detail__comparison-entry">
-      <div><strong>同场景训练对照</strong><p>{{ item.revealed ? '保留首次成绩，查看历次复练的判断和结果。' : '揭晓后可查看首次与历次复练对照。' }}</p></div>
+      <p v-if="!item.revealed">揭晓后可查看复练对照。</p>
       <UiButton variant="secondary" size="sm" :disabled="!item.revealed" @click="comparisonOpen = true">首次与复练对照</UiButton>
     </section>
 
     <details
+      v-motion-disclosure="'auto'"
       v-if="item.scoreCard"
       class="replay-history-detail__score"
       open
@@ -285,8 +286,7 @@ function isPositiveMetric(metric) {
           <small>/ 100</small>
 </div>
         <div class="replay-history-detail__score-summary-side">
-          <small class="replay-history-detail__algorithm">
-            算法 {{ item.scoreCard.algorithmVersion || "旧版评分" }}
+          <small>
             <span
               class="replay-history-detail__score-note"
               :class="{
@@ -312,6 +312,9 @@ function isPositiveMetric(metric) {
         </div>
       </summary>
       <div class="replay-history-detail__score-body">
+        <details v-motion-disclosure="'auto'" class="replay-history-detail__score-explanation">
+          <summary>评分说明</summary>
+          <p class="replay-history-detail__algorithm">算法 {{ item.scoreCard.algorithmVersion || "旧版评分" }}</p>
         <div class="replay-history-detail__score-meta">
           <span class="replay-history-detail__score-meta-item">
             <span>权重快照：</span>
@@ -339,6 +342,7 @@ function isPositiveMetric(metric) {
             </span>
           </span>
         </div>
+        </details>
         <div
           class="replay-history-detail__dimensions"
           aria-label="评分维度"
@@ -459,7 +463,7 @@ function isPositiveMetric(metric) {
       </p>
     </section>
 
-    <details class="replay-history-detail__reviews" open>
+    <details v-motion-disclosure="'auto'" class="replay-history-detail__reviews" open>
       <summary class="replay-history-detail__reviews-summary">
         <div>
           <h3>两阶段复盘</h3>
@@ -641,13 +645,12 @@ function isPositiveMetric(metric) {
 </template>
 
 <style scoped>
-.replay-history-detail__comparison-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--ql-line); }
-.replay-history-detail__comparison-entry strong { color: var(--ql-ink); font-size: 13px; }
+.replay-history-detail__comparison-entry { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 16px 12px; border-bottom: 1px solid var(--ql-line); }
 .replay-history-detail__comparison-entry p { margin: 4px 0 0; color: var(--ql-color-text-muted); font-size: 12px; }
 @media (max-width: 640px) { .replay-history-detail__comparison-entry { align-items: flex-start; flex-direction: column; } }
 
 .replay-history-detail {
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--ql-line-strong);
   border-radius: 10px;
   background: var(--ql-color-bg-surface-strong);
   min-width: 0;
@@ -663,18 +666,14 @@ function isPositiveMetric(metric) {
   padding: 1rem;
 }
 
-.replay-history-detail__header p {
-  color: #2563eb;
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-}
+.replay-history-detail__header > div:first-child { min-width: 0; flex: 1; }
 
 .replay-history-detail__header h2 {
   color: var(--ql-color-text-strong);
   font-size: 1rem;
   font-weight: 800;
-  margin-top: 0.25rem;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .replay-history-detail__header span {
@@ -712,17 +711,13 @@ function isPositiveMetric(metric) {
 
 .replay-history-detail__facts {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 1rem;
+  margin: 0;
+  padding: 12px 16px;
 }
 
 .replay-history-detail__facts > div,
 .replay-history-detail__dimensions > div,
-.replay-history-detail__metrics > div {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 8px;
-  background: var(--ql-color-bg-muted);
-  padding: 0.75rem;
-}
+.replay-history-detail__metrics > div { min-width: 0; padding: 4px 0; }
 
 .replay-history-detail dt,
 .replay-history-detail__score span {
@@ -798,7 +793,7 @@ function isPositiveMetric(metric) {
   transition: transform 160ms ease;
 }
 
-.replay-history-detail__reviews[open] .replay-history-detail__reviews-chevron {
+.replay-history-detail__reviews[data-motion-open="true"] .replay-history-detail__reviews-chevron {
   transform: rotate(180deg);
 }
 
@@ -1039,10 +1034,13 @@ function isPositiveMetric(metric) {
   padding: 0.875rem 1rem 1rem;
 }
 
-.replay-history-detail__algorithm {
-  display:inline;
-  margin:0;
-}
+.replay-history-detail__algorithm { margin: 8px 0; color: var(--ql-color-text-muted); font-size: 11px; }
+.replay-history-detail__score-explanation { margin-bottom: 12px; }
+.replay-history-detail__score-explanation > summary { cursor: pointer; min-height: 32px; align-content: center; color: var(--ql-color-text-muted); font-size: 12px; }
+.replay-history-detail__facts,
+.replay-history-detail__dimensions,
+.replay-history-detail__metrics { font-variant-numeric: tabular-nums; }
+.replay-history-detail__metrics { border-top: 1px solid var(--ql-line); padding-top: 12px; }
 
 .replay-history-detail__score-meta {
   display: flex;
@@ -1073,7 +1071,7 @@ function isPositiveMetric(metric) {
 
 .replay-history-detail__dimensions > div {
   min-height: 64px;
-  padding: 0.625rem 0.75rem;
+  padding: 4px 0;
 }
 
 .replay-history-detail__dimensions strong,
@@ -1090,17 +1088,15 @@ function isPositiveMetric(metric) {
 }
 
 .replay-history-detail__value--positive {
-  color: var(--ql-color-success) !important;
+  color: color-mix(in srgb, var(--ql-color-success) 45%, var(--ql-ink)) !important;
 }
 
 .replay-history-detail__data-card--positive {
-  border-color: rgba(16, 185, 129, 0.32) !important;
-  background: var(--ql-color-success-soft) !important;
-  box-shadow: inset 3px 0 0 #10b981;
+  background: transparent;
 }
 
 .replay-history-detail__data-card--positive strong {
-  color: var(--ql-color-success);
+  color: color-mix(in srgb, var(--ql-color-success) 45%, var(--ql-ink));
 }
 
 .replay-history-detail__not-applicable {
@@ -1108,14 +1104,6 @@ function isPositiveMetric(metric) {
 }
 
 @media (max-width: 720px) {
-  .replay-history-detail__header {
-    flex-direction: column;
-  }
-
-  .replay-history-detail__actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
 
   .replay-history-detail__action-error {
     max-width: none;
@@ -1137,12 +1125,10 @@ function isPositiveMetric(metric) {
   }
 
   .replay-history-detail__facts,
-  .replay-history-detail__order-columns,
-  .replay-history-detail__review,
   .replay-history-detail__dimensions,
-  .replay-history-detail__metrics {
-    grid-template-columns: 1fr;
-  }
+  .replay-history-detail__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .replay-history-detail__order-columns,
+  .replay-history-detail__review { grid-template-columns: 1fr; }
 
   .replay-history-detail__review-field--wide {
     grid-column: auto;

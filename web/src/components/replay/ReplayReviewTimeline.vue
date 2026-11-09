@@ -1,4 +1,5 @@
 <script setup>
+import { vMotionDisclosure } from "../../directives/motion.js";
 import { computed } from "vue";
 import { ChevronDown, Ellipsis, Pencil, Trash2 } from "lucide-vue-next";
 
@@ -47,6 +48,7 @@ const stages = computed(() =>
 
 <template>
   <details
+    v-motion-disclosure="'auto'"
     v-if="stages.length"
     class="replay-review-timeline"
     aria-label="复盘修正时间线"
@@ -160,7 +162,7 @@ const stages = computed(() =>
 }
 
 .replay-review-timeline__chevron { color: var(--ql-color-text-muted); transition: transform 160ms ease; }
-.replay-review-timeline[open] .replay-review-timeline__chevron { transform: rotate(180deg); }
+.replay-review-timeline[data-motion-open="true"] .replay-review-timeline__chevron { transform: rotate(180deg); }
 
 .replay-review-timeline__stage {
   display: grid;

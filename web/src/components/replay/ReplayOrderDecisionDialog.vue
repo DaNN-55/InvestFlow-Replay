@@ -1,5 +1,6 @@
 <script setup>
-import { computed, reactive, watch } from "vue";
+import { vMotionEnter } from "../../directives/motion.js";
+import { computed, nextTick, reactive, shallowRef, watch } from "vue";
 import { Check, X } from "lucide-vue-next";
 
 import {
@@ -30,7 +31,16 @@ const props = defineProps({
 
 const emit = defineEmits(["close", "submit"]);
 
+const panel = shallowRef(null);
 const form = reactive(createEmptyForm());
+watch(() => props.open, async open => {
+  if (!open) return;
+  await nextTick();
+  if (window.matchMedia("(min-width: 641px)").matches) {
+    panel.value?.scrollIntoView({ block: "start", behavior: "instant" });
+  }
+  panel.value?.focus({ preventScroll: true });
+});
 const quickRatios = [0.25, 0.5, 0.75, 1];
 const isBuy = computed(() => props.side === "buy");
 const advancedOrders = computed(() => isReplayBarOrderModel(props.executionModelVersion));
@@ -122,9 +132,11 @@ const orderHelp = computed(() => {
 </script>
 
 <template>
-  <Transition name="replay-order-drawer">
       <aside
         v-if="open"
+        ref="panel"
+        tabindex="-1"
+        v-motion-enter="'surface'"
         class="replay-order-dialog"
         role="dialog"
         aria-modal="false"
@@ -143,8 +155,8 @@ const orderHelp = computed(() => {
             <X :size="18" />
           </button>
         </header>
-        <div class="replay-order-dialog__body">
-          <form class="replay-order-decision" @submit.prevent="submit">
+        <form class="replay-order-decision" @submit.prevent="submit">
+          <div class="replay-order-dialog__body">
       <section class="replay-order-decision__section">
         <div class="replay-order-decision__heading">
           <span>01</span><div><h3>委托规模<UiTooltip clickable wide label="委托规模说明" :content="orderHelp" /></h3></div>
@@ -278,27 +290,26 @@ const orderHelp = computed(() => {
           <UiTextarea v-model="form.remainingPositionPlan" maxlength="1000" placeholder="清仓后如何观察，或剩余仓位如何处理？" />
         </label>
       </section>
-
+          </div>
       <footer class="replay-order-decision__actions">
         <UiButton type="button" variant="secondary" :disabled="submitting" @click="emit('close')">暂时收起</UiButton>
-        <UiButton type="submit" :variant="isBuy ? 'danger' : 'primary'" :loading="submitting" :disabled="!canSubmit">
+        <UiButton type="submit" variant="primary" class="replay-order-decision__submit" :loading="submitting" :disabled="!canSubmit">
           提交{{ isBuy ? '买入' : '卖出' }}委托
         </UiButton>
       </footer>
-          </form>
-        </div>
+        </form>
       </aside>
-  </Transition>
 </template>
 
 <style scoped>
 .replay-order-dialog {
   position: sticky;
-  top: 16px;
+  top: 60px;
+  scroll-margin-top: 60px;
   z-index: 5;
   display: flex;
   width: 100%;
-  height: min(820px, calc(100vh - 86px));
+  height: min(760px, calc(100dvh - 76px));
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--ql-line-strong);
@@ -306,16 +317,14 @@ const orderHelp = computed(() => {
   background: var(--ql-color-bg-surface-strong);
   box-shadow: 0 20px 56px rgba(15, 23, 42, 0.2);
 }
-.replay-order-dialog__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 16px 18px; border-bottom: 1px solid var(--ql-line); }
+.replay-order-dialog__header { flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 16px 18px; border-bottom: 1px solid var(--ql-line); }
 .replay-order-dialog__header h2, .replay-order-dialog__header p { margin: 0; }
 .replay-order-dialog__header h2 { color: var(--ql-ink); font-size: 17px; }
 .replay-order-dialog__header p { margin-top: 4px; color: var(--ql-color-text-muted); font-size: 11px; line-height: 1.5; }
 .replay-order-dialog__header button { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid var(--ql-line-strong); border-radius: 8px; color: var(--ql-color-text-muted); background: var(--ql-color-bg-surface-strong); cursor: pointer; }
 .replay-order-dialog__header button:disabled { cursor: not-allowed; opacity: 0.5; }
-.replay-order-dialog__body { min-height: 0; overflow: auto; padding: 18px; }
-.replay-order-drawer-enter-active, .replay-order-drawer-leave-active { transition: opacity 160ms ease, transform 180ms ease; }
-.replay-order-drawer-enter-from, .replay-order-drawer-leave-to { opacity: 0; transform: translateX(24px); }
-.replay-order-decision { display: grid; gap: 20px; }
+.replay-order-dialog__body { display: grid; gap: 20px; flex: 1; min-height: 0; overflow: auto; padding: 18px; }
+.replay-order-decision { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 .replay-order-decision__section { display: grid; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--ql-line); }
 .replay-order-decision__heading { display: flex; align-items: flex-start; gap: 10px; }
 .replay-order-decision__heading > span { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 7px; color: var(--ql-accent); background: var(--ql-color-primary-soft); font-size: 10px; font-weight: 800; }
@@ -351,10 +360,13 @@ const orderHelp = computed(() => {
 .replay-order-decision__toggle { display: flex !important; min-height: 40px; grid: none !important; align-items: center; gap: 7px !important; }
 .replay-order-decision__invalidation { display: grid; grid-template-columns: 140px 1fr 2fr; gap: 8px; }
 .replay-order-decision__invalidation-help { margin: -4px 0 0; color: var(--ql-color-text-muted); font-size: 10px; line-height: 1.6; }
-.replay-order-decision__actions { position: sticky; bottom: -18px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: 0 -18px -18px; padding: 12px 18px; border-top: 1px solid var(--ql-line); background: var(--ql-color-bg-glass); }
+.replay-order-decision__actions { flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--ql-line); background: var(--ql-color-bg-surface-strong); }
+.replay-order-decision__submit { background: var(--ql-accent); border-color: var(--ql-accent); color: var(--ql-panel); border-radius: 8px; }
+.replay-order-decision__submit:hover:not(:disabled) { background: var(--ql-accent-hover); }
+.replay-order-decision__actions :deep(.ql-ui-button) { border-radius: 8px; }
 .replay-order-decision__actions > span { margin-right: auto; color: var(--ql-color-text-muted); font-size: 10px; }
 @media (max-width: 640px) {
-  .replay-order-dialog { position: fixed; inset: 0; z-index: 90; width: 100vw; height: 100vh; border-radius: 0; }
+  .replay-order-dialog { position: fixed; inset: 0; z-index: 90; width: 100vw; height: 100dvh; border-radius: 0; }
   .replay-order-decision__sizing, .replay-order-decision__risk-grid, .replay-order-decision__invalidation { grid-template-columns: 1fr; }
   .replay-order-decision__evidence-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
   .replay-order-decision__actions { flex-wrap: wrap; }

@@ -1,4 +1,5 @@
 import { zoomReplayYAxisAt } from '../utils/replayYAxisZoom.js';
+import { fadeMotionElement } from '../directives/motion.js';
 import { repriceProtectionLine } from '../utils/cryptoProtectionEstimate.js';
 import { REPLAY_PRICE_LINE_GROUP, REPLAY_PRICE_LINE_OVERLAY } from '../utils/replayPriceLines.js';
 import { snapProtectionPrice } from '../utils/cryptoPriceDraft.js';
@@ -267,6 +268,7 @@ export function useReplayKlineChart({
       }
       return;
     }
+    const previousPanes = indicatorStructureKey ? new Set(indicatorInstances.map(instance => instance.paneId)) : null;
     removeIndicators();
     indicatorStructureKey = nextStructureKey;
     for (const name of model.builtins?.main ?? []) {
@@ -295,6 +297,16 @@ export function useReplayKlineChart({
       } catch (error) {
         reportError(error);
       }
+    }
+    if (previousPanes) {
+      const added = indicatorInstances.filter(instance => instance.paneId !== CANDLE_PANE_ID && !previousPanes.has(instance.paneId));
+      nextTick(() => {
+        if (chart.value !== current) return;
+        for (const instance of added) {
+          const pane = current.getDom(instance.paneId);
+          if (pane) fadeMotionElement(pane);
+        }
+      });
     }
   }
 
@@ -659,6 +671,14 @@ export function useReplayKlineChart({
       dispose(chart.value);
       chart.value = null;
     }
+    // A reactivated view creates a new native chart; its instance caches must
+    // not make unchanged bars, indicators or trade markers look synchronized.
+    appliedData = [];
+    labelByTimestamp = new Map();
+    indicatorInstances = [];
+    indicatorStructureKey = "";
+    overlayIds = [];
+    tradeOverlayKey = "";
     priceLineIds = []; priceLineKey = '';
     drawingIds = [];
     pendingDrawingId = "";
@@ -672,7 +692,13 @@ export function useReplayKlineChart({
   onDeactivated(unmountChart);
   onBeforeUnmount(unmountChart);
   watch(bars, applyBars);
-  watch(() => model.value?.showVolume, syncVolume);
+  watch(() => model.value?.showVolume, (visible, previous) => {
+    syncVolume();
+    if (visible && previous === false) nextTick(() => {
+      const pane = chart.value?.getDom('replay-volume');
+      if (pane) fadeMotionElement(pane);
+    });
+  });
   watch(trades, syncTrades);
   watch(priceLines, syncPriceLines, { deep: true });
   watch(indicators, syncIndicators, { deep: true });

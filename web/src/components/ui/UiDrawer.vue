@@ -54,14 +54,14 @@ function handleOpenUpdate(nextOpen) {
   <DialogRoot :open="open" @update:open="handleOpenUpdate">
     <DialogPortal>
       <DialogOverlay
-        class="ql-ui-drawer"
+        class="ql-ui-drawer ql-motion-overlay"
         :class="{
           'ql-ui-drawer--clear': overlayTone === 'clear',
           'ql-ui-drawer--transparent': overlayTone === 'transparent',
         }"
       >
-        <DialogContent as-child>
-          <aside class="ql-ui-drawer__panel" :class="panelClass">
+        <DialogContent as-child :disable-outside-pointer-events="open">
+          <aside class="ql-ui-drawer__panel ql-motion-drawer" :class="panelClass" :inert="!open">
             <header class="ql-ui-drawer__header" :class="headerClass">
               <div class="ql-ui-drawer__header-main">
                 <div class="ql-ui-drawer__header-top">

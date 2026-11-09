@@ -25,7 +25,6 @@ const menuId = `ui-action-menu-${useId()}`;
 
 function close({ restoreFocus = false } = {}) {
   open.value = false;
-  positioned.value = false;
   if (restoreFocus) {
     trigger.value?.focus();
   }
@@ -139,6 +138,7 @@ onBeforeUnmount(() => {
     </button>
 
     <Teleport to="body">
+      <Transition name="ql-popover" @before-enter="el => el.inert = false" @before-leave="el => el.inert = true">
       <div
         v-if="open"
         :id="menuId"
@@ -152,6 +152,7 @@ onBeforeUnmount(() => {
       >
         <slot />
       </div>
+      </Transition>
     </Teleport>
   </span>
 </template>

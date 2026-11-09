@@ -1,13 +1,14 @@
 <script setup>
 import {
-  CheckCircle2,
   ClipboardCheck,
+  ChevronDown,
   Clock3,
   Eye,
   Minus,
   Plus,
 } from "lucide-vue-next";
 import { computed } from "vue";
+import { vMotionList } from "../../directives/motion.js";
 
 import UiButton from "../ui/UiButton.vue";
 import { getReplayReviewEntryState } from "../../utils/replayReviewPresentation.js";
@@ -42,6 +43,7 @@ const emit = defineEmits([
   "openReview",
   "reveal",
   "cancelOrder",
+  "startNew",
 ]);
 
 const completed = computed(() => props.session.status === "completed");
@@ -85,19 +87,18 @@ function formatMoney(value) {
 </script>
 
 <template>
-  <aside class="replay-trading">
+  <aside class="replay-trading" v-motion-list="{ scope: session.id, keys: recentExecutions.map(e => String(e.executionId ?? e.orderId) + ':' + e.status) }">
     <header class="replay-trading__header">
       <div>
-        <h2 class="replay-trading__title">交易台</h2>
-        <p class="replay-trading__subtitle">
+        <h2 class="replay-trading__title">{{ completed ? "本局已结束" : "交易台" }}</h2>
+        <p v-if="!completed" class="replay-trading__subtitle">
           {{ isHybridReplay ? `盘中决策 · 下一个${stepLabel}开盘执行` : isMinuteReplay ? "盘中决策 · 下一分钟开盘执行" : "收盘后决策 · 下一开盘执行" }}
         </p>
       </div>
-      <span class="replay-trading__revision">REV {{ session.revision }}</span>
     </header>
 
     <div class="replay-trading__body">
-      <div class="replay-trading__sides">
+      <div v-if="!completed" class="replay-trading__sides">
         <button
           type="button"
           class="replay-trading__side replay-trading__side--buy"
@@ -117,10 +118,10 @@ function formatMoney(value) {
           卖出
         </button>
       </div>
-      <p v-if="session.tradingRules" class="replay-trading__decision-hint">{{ session.tradingRules.label }} · {{ session.tradingRules.board === 'star' ? '200股起，可逐股递增' : '买入100股整数倍' }} · T+1</p>
-      <p v-if="session.marketEvent?.status === 'rule_unavailable'" role="status" class="replay-trading__decision-hint">本根K线的历史交易规则信息不足，暂不撮合；请查看委托状态或继续观察。</p>
+      <p v-if="!completed && session.tradingRules" class="replay-trading__decision-hint">{{ session.tradingRules.label }} · {{ session.tradingRules.board === 'star' ? '200股起，可逐股递增' : '买入100股整数倍' }} · T+1</p>
+      <p v-if="!completed && session.marketEvent?.status === 'rule_unavailable'" role="status" class="replay-trading__decision-hint">本根K线的历史交易规则信息不足，暂不撮合；请查看委托状态或继续观察。</p>
 
-      <section v-if="pendingOrders.length" class="replay-trading__pending">
+      <section v-if="!completed && pendingOrders.length" class="replay-trading__pending">
         <div class="replay-trading__section-title">
           <Clock3 :size="14" />
           待处理委托
@@ -154,60 +155,32 @@ function formatMoney(value) {
 
       <section v-if="completed" class="replay-trading__completion">
         <template v-if="!session.revealed">
-          <p>
-            {{
-              canReveal
-                ? "盲评已保存，可以揭晓真实行情。"
-                : session.completionReason === "no_opportunity"
-                  ? "本局已记录为无交易机会。"
-                  : session.completionReason === "early"
-                    ? "本局已提前交卷，答案仍保持隐藏。"
-                    : "本局已自然完成，答案仍保持隐藏。"
-            }}
-          </p>
-          <p v-if="!canReveal">请先保存盲评，再揭晓答案。</p>
-          <UiButton v-if="!canReveal" block variant="secondary" @click="emit('openReview')">
-            填写揭晓前盲评
-          </UiButton>
-          <UiButton
-            block
-            :loading="revealing"
-            :disabled="busy || !canReveal"
-            @click="reveal"
-          >
-            <template #prefix>
-              <Eye :size="16" />
-            </template>
-            揭晓答案
+          <p>{{ canReveal ? "盲评已冻结，可揭晓行情。" : session.completionReason === 'no_opportunity' ? "本局已记录为无交易机会，请确认揭晓前判断。" : "请先完成揭晓前盲评。" }}</p>
+          <UiButton v-if="!canReveal" block class="replay-trading__primary" :disabled="busy" @click="emit('openReview')">填写揭晓前盲评</UiButton>
+          <UiButton v-else block class="replay-trading__primary" :loading="revealing" :disabled="busy" @click="reveal">
+            <template #prefix><Eye :size="16" /></template>
+            揭晓行情
           </UiButton>
         </template>
         <template v-else>
-          <div class="replay-trading__revealed">
-            <CheckCircle2 :size="16" />
-            答案已揭晓，可查看完整行情
-          </div>
-          <UiButton
-            v-if="reviewEntry.available"
-            block
-            variant="secondary"
-            @click="emit('openReview')"
-          >
-            <template #prefix>
-              <ClipboardCheck :size="15" />
-            </template>
-            {{ reviewEntry.label }}
+          <p>{{ session.review?.postSaved ? "复盘已完成，原始记录和评分已保留。" : "行情已揭晓，请完成事后复盘。" }}</p>
+          <UiButton v-if="reviewEntry.available" block class="replay-trading__primary" :disabled="busy" @click="emit('openReview')">
+            <template #prefix><ClipboardCheck :size="15" /></template>
+            {{ session.review?.postSaved ? reviewEntry.label : '继续事后复盘' }}
           </UiButton>
         </template>
+        <UiButton block variant="secondary" :disabled="busy" @click="emit('startNew')">新开一局</UiButton>
       </section>
 
-      <section class="replay-trading__history">
-        <div class="replay-trading__section-title">最近执行</div>
+      <details class="replay-trading__history" :open="!completed">
+        <summary class="replay-trading__section-title">最近执行<ChevronDown :size="14" aria-hidden="true" /></summary>
         <div v-if="!recentExecutions.length" class="replay-trading__empty">
           暂无成交或拒绝记录
         </div>
         <div
           v-for="execution in recentExecutions"
           :key="execution.executionId ?? execution.orderId"
+          :data-motion-key="String(execution.executionId ?? execution.orderId) + ':' + execution.status"
           class="replay-trading__execution"
         >
           <div>
@@ -230,12 +203,17 @@ function formatMoney(value) {
           </template>
           <ReplayOrderDecisionSnapshot :decision="execution.decision" :side="execution.side" />
         </div>
-      </section>
+      </details>
     </div>
   </aside>
 </template>
 
 <style scoped>
+.replay-trading__primary { background: var(--ql-accent); border-color: var(--ql-accent); color: var(--ql-panel); border-radius: 8px; }
+.replay-trading__primary:hover:not(:disabled) { background: var(--ql-accent-hover); }
+.replay-trading__history > summary { cursor: pointer; min-height: 32px; }
+.replay-trading__history[open] > summary svg { transform: rotate(180deg); }
+
 .replay-trading {
   min-width: 0;
   overflow: hidden;
@@ -263,12 +241,6 @@ function formatMoney(value) {
   margin: 3px 0 0;
   color: var(--ql-color-text-muted);
   font-size: 11px;
-}
-
-.replay-trading__revision {
-  color: var(--ql-color-text-subtle);
-  font-family: "SF Mono", "SFMono-Regular", Menlo, monospace;
-  font-size: 10px;
 }
 
 .replay-trading__body {

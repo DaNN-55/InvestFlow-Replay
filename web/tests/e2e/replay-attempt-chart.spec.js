@@ -142,7 +142,7 @@ test("创建、推进和周期切换通过 Attempt 与 Chart interface 工作", 
   await page.getByRole("button", { name: "空仓观望，推进一天" }).click();
 
   await expect(page.getByText("已推进 1 / 20 日")).toBeVisible();
-  await expect(page.getByText("REV 1")).toBeVisible();
+  await expect(page.getByText("REV 1")).toHaveCount(0);
   await expect(notice).not.toBeVisible();
   const tooltip=await page.evaluate(async()=>{
     const url=performance.getEntriesByType('resource').find(e=>/\/klinecharts\.js\?v=/.test(e.name)).name,{init}=await import(url);
@@ -155,7 +155,8 @@ test("创建、推进和周期切换通过 Attempt 与 Chart interface 工作", 
 
   await expect(page.getByRole("button", { name: "周", exact: true }))
     .toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("仅根据当前已揭示的 51 根 K 线计算")).toBeVisible();
+  await page.getByRole("button", { name: "指标计算范围", exact: true }).click();
+  await expect(page.locator('.ui-tooltip__content')).toContainText("仅根据当前已揭示的 51 根 K 线计算");
 });
 
 test("light 与 dark 使用同一组红涨绿跌图表颜色", async ({ page }) => {
@@ -202,7 +203,7 @@ test("复盘抽屉保留未提交草稿并让行情保持可见", async ({ page 
   const drawerBox = await drawer.boundingBox();
   expect(drawerBox.x).toBeGreaterThan(page.viewportSize().width / 2);
   await expect(page.locator("canvas").first()).toBeVisible();
-  await expect(drawer.getByText("两阶段复盘 · 决策记录与评分", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("本次复盘", { exact: true })).toBeVisible();
   await expect(page.getByText("复盘记录时间线")).toHaveCount(0);
 
   const thesis = page.getByPlaceholder("你看到了什么，为什么做出这个判断？");
@@ -229,7 +230,7 @@ test("揭晓后复盘先填写判断结果与两项评分", async ({ page }) => 
   });
 
   await page.getByRole("button", { name: "开始日线盲测" }).click();
-  await page.getByRole("button", { name: "查看复盘" }).click();
+  await page.getByRole("button", { name: "继续事后复盘" }).click();
 
   const scoreRow = page.locator(".replay-review__score-row");
   await expect(scoreRow.getByLabel("判断结果")).toBeVisible();

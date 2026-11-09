@@ -68,7 +68,8 @@ test("事后问题标签通过页面追加，分析可跳转具体样本，原�
   await page.addInitScript(value => localStorage.setItem("investflow.replay.active-session-id", value), id);
   await page.goto(`${baseUrl}/decision/market-replay?session=${id}`);
   await page.getByRole("button", { name: "查看复盘", exact: true }).click();
-  const review = page.getByRole("dialog", { name: "两阶段复盘 · 决策记录与评分" });
+  const review = page.getByRole("dialog", { name: "本次复盘" });
+  await review.locator('details.replay-review__completed-stage').nth(1).locator('summary').click();
   await review.getByRole("button", { name: "追加事后复盘修正", exact: true }).click();
   await review.getByRole("checkbox", { name: "提前入场", exact: true }).check();
   await review.getByLabel("修正说明（必填）").fill("确认本次入场时间问题，供跨会话复盘");

@@ -75,15 +75,16 @@ function handleDismissableEvent(event) {
   <DialogRoot :open="open" @update:open="handleOpenUpdate">
     <DialogPortal>
       <DialogOverlay
-        class="ql-fixed ql-inset-0 ql-z-[200] ql-flex ql-items-center ql-justify-center ql-bg-[rgba(0,0,0,0.56)] ql-p-4 ql-backdrop-blur-[20px]"
+        class="ql-motion-overlay ql-fixed ql-inset-0 ql-z-[200] ql-flex ql-items-center ql-justify-center ql-bg-[rgba(0,0,0,0.56)] ql-p-4 ql-backdrop-blur-[20px]"
       >
         <DialogContent
           as-child
+          :disable-outside-pointer-events="open"
           @escape-key-down="handleDismissableEvent"
           @interact-outside="handleDismissableEvent"
           @pointer-down-outside="handleDismissableEvent"
         >
-          <div class="ql-shell-card ql-w-full ql-max-w-md ql-p-6">
+          <div class="ql-motion-dialog ql-shell-card ql-w-full ql-max-w-md ql-p-6" :inert="!open">
             <div class="ql-flex ql-items-start ql-gap-4">
               <div
                 class="ql-flex ql-h-11 ql-w-11 ql-items-center ql-justify-center ql-rounded-[12px]"

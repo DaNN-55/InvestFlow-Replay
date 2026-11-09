@@ -1,6 +1,8 @@
 <script setup>
-import { computed, reactive, shallowRef, onActivated, watch } from "vue";
+import { computed, nextTick, reactive, shallowRef, onActivated, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { ArrowLeft } from "lucide-vue-next";
+import UiButton from "../ui/UiButton.vue";
 import CryptoHistoryDetail from '../crypto/CryptoHistoryDetail.vue';
 
 import { useReplayHistory } from "../../composables/useReplayHistory.js";
@@ -44,6 +46,38 @@ const {
 onActivated(()=>{if(items.value.length) refresh();});
 watch(()=>route.fullPath,()=>{if(route.name==='quant-trade-records'&&route.query.tab==='replay') applyFilters({market:['all','ashare','crypto-perpetual'].includes(route.query.market)?route.query.market:market.value,keyword:route.query.session??'',...(route.query.session?{state:'all',attemptKind:'all'}:{})});});
 
+const mobileDetail = shallowRef(Boolean(route.query.session));
+const listContainer = shallowRef(null);
+const detailContainer = shallowRef(null);
+
+async function focusMobileDetail() {
+  await nextTick();
+  if (!window.matchMedia("(max-width: 900px)").matches) return;
+  detailContainer.value?.focus({ preventScroll: true });
+  detailContainer.value?.scrollIntoView({ block: "start" });
+}
+
+function selectHistoryItem(item) {
+  mobileDetail.value = true;
+  void selectItem(item);
+  void focusMobileDetail();
+}
+
+async function returnToList() {
+  mobileDetail.value = false;
+  await nextTick();
+  const selected = listContainer.value?.querySelector('[aria-current="true"]');
+  selected?.focus({ preventScroll: true });
+  selected?.scrollIntoView({ block: "nearest" });
+}
+
+function filterHistory(filters) {
+  mobileDetail.value = false;
+  return applyFilters(filters);
+}
+
+watch(() => route.query.session, id => { mobileDetail.value = Boolean(id); });
+
 const candidateStates = reactive({});
 const retrainStates = reactive({});
 const deleteStates = reactive({});
@@ -81,6 +115,8 @@ const playbookFitApplicable = computed(
 async function openAnalysisRecord(sessionId) {
   activeView.value = "records";
   await applyFilters({ state: "all", attemptKind: "all", keyword: sessionId });
+  mobileDetail.value = true;
+  void focusMobileDetail();
 }
 
 function createActionId() {
@@ -279,7 +315,7 @@ async function addCandidate(item) {
 </script>
 
 <template>
-  <div class="replay-history-records crypto-controls">
+  <div class="replay-history-records crypto-controls" :class="{ 'replay-history-records--detail': mobileDetail && !error }">
     <p v-if="route.query.session" class="crypto-muted">当前定位本局练习。<button type="button" class="crypto-text-button" @click="router.replace({query:{...route.query,session:undefined}})">查看全部演练记录</button></p>
     <ReplayHistoryControls v-if="activeView === 'records'" :active-view="activeView" @view-change="activeView = $event">
       <ReplayHistoryFilters
@@ -288,7 +324,7 @@ async function addCandidate(item) {
         :attempt-kind="attemptKind"
         :keyword="keyword"
         :loading="loading"
-        @apply="applyFilters"
+        @apply="filterHistory"
       />
     </ReplayHistoryControls>
 
@@ -301,6 +337,7 @@ async function addCandidate(item) {
     </div>
 
     <div v-else class="replay-history-records__layout">
+      <div ref="listContainer" class="replay-history-records__list">
       <ReplayHistoryList
         :items="items"
         :total="total"
@@ -308,9 +345,12 @@ async function addCandidate(item) {
         :page-count="pageCount"
         :selected-id="selectedId"
         :loading="loading"
-        @select="selectItem"
+        @select="selectHistoryItem"
         @page="goToPage"
       />
+      </div>
+      <div ref="detailContainer" class="replay-history-records__detail" tabindex="-1" aria-label="所选演练详情">
+      <UiButton class="replay-history-records__back" variant="ghost" @click="returnToList"><ArrowLeft :size="16" />返回列表</UiButton>
       <CryptoHistoryDetail
         v-if="selectedDetailItem?.market === 'crypto-perpetual'"
         :key="selectedDetailItem.id"
@@ -357,6 +397,7 @@ async function addCandidate(item) {
         class="replay-history-records__message replay-history-records__message--empty"
       >
         正在加载历史演练…
+      </div>
       </div>
     </div>
     <ConfirmDialog
@@ -422,6 +463,11 @@ async function addCandidate(item) {
   grid-template-columns: 300px minmax(0, 1fr);
 }
 
+.replay-history-records__list,
+.replay-history-records__detail { min-width: 0; }
+.replay-history-records__detail { scroll-margin-top: 60px; }
+.replay-history-records__back { display: none; }
+
 .replay-history-records__message {
   align-items: center;
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -448,8 +494,11 @@ async function addCandidate(item) {
 }
 
 @media (max-width: 900px) {
-  .replay-history-records__layout {
-    grid-template-columns: 1fr;
-  }
+  .replay-history-records__layout { grid-template-columns: 1fr; }
+  .replay-history-records__detail { display: none; }
+  .replay-history-records--detail .replay-history-records__detail { display: block; }
+  .replay-history-records--detail .replay-history-records__list,
+  .replay-history-records--detail :deep(.replay-history-controls) { display: none; }
+  .replay-history-records__back { display: inline-flex; margin-bottom: 8px; }
 }
 </style>

@@ -1,4 +1,5 @@
 <script setup>
+import { vMotionDisclosure } from "../directives/motion.js";
 import { ChevronDown, ChevronUp, Ellipsis, Pencil, Plus, Trash2 } from "lucide-vue-next";
 import { reactive, shallowRef, ref } from "vue";
 
@@ -181,7 +182,7 @@ function formatSigned(value, suffix = "") {
     </div>
     <p v-else class="trade-execution-events__empty">还没有动作记录。你可以先记录计划外观察，也可以在实际发生时逐笔补录。</p>
 
-    <details ref="composer" class="trade-execution-events__composer">
+    <details v-motion-disclosure="'auto'" ref="composer" class="trade-execution-events__composer">
       <summary><span><Plus :size="15" />新增动作</span><ChevronDown :size="14" /></summary>
       <form class="trade-execution-events__form" @submit.stop.prevent="submit">
         <label>
@@ -358,7 +359,7 @@ function formatSigned(value, suffix = "") {
 .trade-execution-events__composer summary::-webkit-details-marker { display:none; }
 .trade-execution-events__composer summary>span { display:inline-flex;align-items:center;gap:6px; }
 .trade-execution-events__composer summary:focus-visible { outline:2px solid var(--ql-accent);outline-offset:2px;border-radius:4px; }
-.trade-execution-events__composer[open] summary>svg { transform:rotate(180deg); }
+.trade-execution-events__composer[data-motion-open="true"] summary>svg { transform:rotate(180deg); }
 .trade-execution-events__composer[open] summary { margin-bottom:10px; }
 .trade-execution-events__form {
   display: grid;

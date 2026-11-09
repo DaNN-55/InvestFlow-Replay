@@ -1,4 +1,5 @@
 <script setup>
+import { vMotionDisclosure, vMotionEnter, vMotionTabs } from "../directives/motion.js";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { Ellipsis, Pencil, Plus, Save, Trash2 } from "lucide-vue-next";
@@ -624,18 +625,18 @@ onMounted(() => {
   <section class="ql-page trade-records-page">
     <header class="ql-page-header trade-records-page__header">
       <div class="ql-page-heading ql-min-w-0">
-        <p class="ql-page-eyebrow">Decision</p>
         <h1 class="ql-page-title">交易追踪</h1>
-        <p class="ql-page-description">
+        <p v-if="primaryTab === 'records'" class="ql-page-description">
           记录模拟与实盘的逐笔成交、持仓结果和复盘备注；交易计划与风控按需使用。
         </p>
       </div>
     </header>
 
-    <nav class="trade-records-primary-tabs" aria-label="交易追踪分类">
+    <nav v-motion-tabs="primaryTab" class="trade-records-primary-tabs" aria-label="交易追踪分类">
       <button
         type="button"
         :class="{ 'trade-records-primary-tabs__button--active': primaryTab === 'records' }"
+        :data-motion-active="primaryTab === 'records'"
         @click="primaryTab = 'records'"
       >
         实盘与模拟
@@ -643,6 +644,7 @@ onMounted(() => {
       <button
         type="button"
         :class="{ 'trade-records-primary-tabs__button--active': primaryTab === 'replay' }"
+        :data-motion-active="primaryTab === 'replay'"
         @click="primaryTab = 'replay'"
       >
         演练记录
@@ -650,6 +652,7 @@ onMounted(() => {
       <button
         type="button"
         :class="{ 'trade-records-primary-tabs__button--active': primaryTab === 'playbooks' }"
+        :data-motion-active="primaryTab === 'playbooks'"
         @click="primaryTab = 'playbooks'"
       >
         战法库
@@ -736,12 +739,12 @@ onMounted(() => {
         <div v-if="detailLoading" class="trade-record-state">正在读取详情...</div>
         <div v-else-if="!selectedRecord" class="trade-record-state">暂无选中的交易追踪单。</div>
         <template v-else>
-          <div class="trade-record-content">
+          <div v-motion-enter="'detail'" class="trade-record-content">
             <div v-if="selectedViolations.length" class="trade-record-violation-alert" role="alert">
               <strong>纪律偏差：</strong>{{ selectedViolations.join("、") }}
             </div>
 
-            <div v-if="statusText" class="trade-record-message trade-record-message--success">{{ statusText }}</div>
+            <div v-if="statusText" v-motion-enter class="trade-record-message trade-record-message--success">{{ statusText }}</div>
             <div v-if="errorText" class="trade-record-message trade-record-message--error">{{ errorText }}</div>
 
             <TradeExecutionEventsPanel
@@ -756,7 +759,7 @@ onMounted(() => {
             />
 
             <form class="trade-record-form" @submit.prevent="saveSelectedRecord">
-              <details v-if="stageIs('draft')" class="trade-record-form__section trade-plan-details">
+              <details v-motion-disclosure="'auto'" v-if="stageIs('draft')" class="trade-record-form__section trade-plan-details">
                 <summary>
                   <span>交易计划与风控（可选）</span>
                   <small>风险预算、仓位和 T / S / G</small>

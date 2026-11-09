@@ -1,5 +1,4 @@
 <script setup>
-import { ChartCandlestick } from "lucide-vue-next";
 import { computed, toRef } from "vue";
 
 import { useReplayChartPresentation } from "../../composables/useReplayChartPresentation.js";
@@ -58,9 +57,6 @@ const costLines = computed(() => {
   <section class="replay-chart-panel">
     <header class="replay-chart-panel__header">
       <div class="replay-chart-panel__heading">
-        <span class="replay-chart-panel__icon">
-          <ChartCandlestick :size="17" />
-        </span>
         <div v-if="reveal">
           <h2 class="replay-chart-panel__title">
             {{ reveal.name || reveal.tsCode }} · {{ reveal.tsCode }}
@@ -73,9 +69,6 @@ const costLines = computed(() => {
           <h2 class="replay-chart-panel__title">
             匿名标的 · {{ sessionInterval === "1m" ? "1 分钟" : "日线" }}盲测
           </h2>
-          <p class="replay-chart-panel__subtitle">
-            仅包含当前已揭示行情
-          </p>
         </div>
       </div>
       <div class="replay-chart-panel__periods" aria-label="K线周期">
@@ -123,11 +116,11 @@ const costLines = computed(() => {
 
 .replay-chart-panel__header {
   display: flex;
-  min-height: 68px;
+  min-height: 52px;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 14px 18px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--ql-line);
 }
 
@@ -135,16 +128,6 @@ const costLines = computed(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.replay-chart-panel__icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 9px;
-  color: var(--ql-accent);
-  background: var(--ql-color-primary-soft);
 }
 
 .replay-chart-panel__title {
@@ -187,7 +170,7 @@ const costLines = computed(() => {
 }
 
 .replay-chart-panel__chart {
-  padding: 12px;
+  padding: 8px;
 }
 
 .replay-chart-panel__chart :deep(.ql-rounded-2xl) {
@@ -197,7 +180,8 @@ const costLines = computed(() => {
 
 @media (max-width: 640px) {
   .replay-chart-panel__header {
-    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .replay-chart-panel__chart {

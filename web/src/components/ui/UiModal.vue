@@ -30,18 +30,20 @@ function handleOpenUpdate(open) {
   <DialogRoot :open="open" @update:open="handleOpenUpdate">
     <DialogPortal>
       <DialogOverlay
-        class="ui-modal__overlay"
+        class="ui-modal__overlay ql-motion-overlay"
         :class="{ 'ui-modal__overlay--drawer': props.variant === 'drawer' }"
       >
         <DialogContent
           as-child
+          :disable-outside-pointer-events="open"
           @escape-key-down="busy ? $event.preventDefault() : undefined"
           @interact-outside="busy ? $event.preventDefault() : undefined"
           @pointer-down-outside="busy ? $event.preventDefault() : undefined"
         >
           <section
             class="ui-modal__panel"
-            :class="[panelClass, { 'ui-modal__panel--drawer': props.variant === 'drawer' }]"
+            :class="[panelClass, props.variant === 'drawer' ? 'ql-motion-drawer' : 'ql-motion-dialog', { 'ui-modal__panel--drawer': props.variant === 'drawer' }]"
+            :inert="!open"
             :data-busy="String(busy)"
           >
             <header class="ui-modal__header">

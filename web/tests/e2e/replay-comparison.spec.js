@@ -33,6 +33,7 @@ async function openHistory(page, { payload = group(), revealed = true, failOnce 
   });
   await page.goto(`${baseUrl}/decision/trade-records`);
   await page.getByRole("button", { name: "演练记录", exact: true }).click();
+  await page.getByRole("region", { name: "历史演练列表", exact: true }).locator(".replay-history-list__item").first().click();
   await expect(page.getByRole("button", { name: "首次与复练对照", exact: true })).toBeVisible();
   return () => calls;
 }
@@ -74,9 +75,12 @@ test("首次缺失时不会把复练提升为首次，窄屏仍能查看与切�
   const scoreRow = dialog.getByRole("row", { name: /原始评分/u });
   await expect(scoreRow).toContainText("—");
   await expect(scoreRow).toContainText("80.00 分");
-  const box = await dialog.boundingBox();
-  expect(box.x).toBeGreaterThanOrEqual(0);
-  expect(box.x + box.width).toBeLessThanOrEqual(391);
+  // The translated drawer is clipped during entry; assert its settled geometry.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect.poll(async () => {
+    const box = await dialog.boundingBox();
+    return box.x >= 0 && box.x + box.width <= 391;
+  }).toBe(true);
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(dialog).toBeHidden();
 });

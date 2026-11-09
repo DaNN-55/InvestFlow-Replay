@@ -1,4 +1,5 @@
 <script setup>
+import { vMotionDisclosure } from "../../directives/motion.js";
 import { computed, reactive, ref, shallowRef, watch, onBeforeUnmount } from 'vue';
 import UiButton from '../ui/UiButton.vue';
 import UiInput from '../ui/UiInput.vue';
@@ -99,7 +100,7 @@ onBeforeUnmount(()=>previewLoader.cancel());
           <div v-if="form.sizingMode === 'contracts'" class="crypto-quantity-row"><UiInput :id="`order-quantity-${session.id}`" v-model="form.contracts" aria-label="委托张数" inputmode="decimal" required placeholder="填写数量" :disabled="inactive" /><UiSelect v-model="form.unit" aria-label="数量单位" :disabled="inactive"><option value="contracts">张</option><option value="base">{{ session.instrumentId.startsWith('BTC')?'BTC':'ETH' }}</option><option value="quote">USDT</option></UiSelect></div>
           <div v-else class="order-estimated-quantity" role="status">{{ readyPreview?`${readyPreview.contracts} 张`:'等待预算估算' }}<small>{{ form.sizingMode==='margin'?'按保证金':'按风险预算' }}</small></div>
         </div>
-        <details class="order-advanced">
+        <details v-motion-disclosure="'auto'" class="order-advanced">
           <summary><span>高级设置</span><small v-if="advancedSummary">{{ advancedSummary }}</small></summary>
           <div class="order-advanced-content">
             <div class="order-field"><div class="order-field-title"><label :for="`order-sizing-${session.id}`">仓位输入方式</label><UiTooltip clickable label="预算估仓说明" content="保证金预算：按本单保证金估算张数，手续费另计。风险预算：按退出价、双边手续费和教学滑点估算张数，需先填止损价或保存手动退出计划；未知资金费未计入，不保证最大损失。" /></div><UiSelect :id="`order-sizing-${session.id}`" v-model="form.sizingMode" aria-label="仓位输入方式" :disabled="inactive || form.intent === 'reduce'"><option value="contracts">直接输入数量</option><option value="margin">按保证金预算</option><option value="risk">按风险预算</option></UiSelect></div>
@@ -119,7 +120,7 @@ onBeforeUnmount(()=>previewLoader.cancel());
           <p v-else-if="previewState.error" class="preview-error" role="status">{{ previewState.error }}</p>
           <template v-else-if="readyPreview">
             <dl class="order-preview-summary"><div><dt>保证金 · USDT</dt><dd :title="String(readyPreview.initialMargin)">{{ money(readyPreview.initialMargin) }}</dd></div><div><dt>预留资金 · USDT</dt><dd :title="String(readyPreview.requiredAvailable)">{{ money(readyPreview.requiredAvailable) }}</dd></div></dl>
-            <details class="order-estimates">
+            <details v-motion-disclosure="'auto'" class="order-estimates">
 <summary>更多估算</summary><dl class="facts">
               <div><dt>数量</dt><dd data-testid="crypto-preview-quantity">{{ readyPreview.contracts }} 张 / {{ readyPreview.baseQuantity }} {{ session.instrumentId.startsWith('BTC')?'BTC':'ETH' }}</dd></div>
               <div><dt>估算成交价</dt><dd>{{ readyPreview.fillPrice }}</dd></div>

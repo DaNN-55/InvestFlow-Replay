@@ -130,7 +130,10 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   await playback.getByRole('button',{name:'结束本局',exact:true}).click();
   await end.getByRole('button',{name:'确认结束',exact:true}).click();
   await expect(end).not.toBeVisible();expect(finishCalls).toBe(1);
-  await expect(playback.getByRole('button',{name:'结束本局',exact:true})).toBeDisabled();
+  await expect(page.getByRole('dialog',{name:'本次复盘',exact:true})).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(playback).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'填写揭晓前盲评',exact:true})).toBeVisible();
   const completed=(await (await request.get(`${fixture.url}/api/quant/replay/sessions/${session.id}`)).json()).session;
   expect(completed.status).toBe('completed');
   await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5180'}/decision/trade-records?tab=replay&market=ashare&session=${session.id}`);
@@ -147,7 +150,7 @@ test("limit partial fill, cancel, stop latch and reload use the real temporary b
   await snapshot.screenshot({path:test.info().outputPath('decision-row-mobile.png')});
   await page.goto(`${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5180'}/decision/market-replay?session=${session.id}`);
 
-  await playback.getByRole('button',{name:'新开一局',exact:true}).click();
+  await page.getByRole('button',{name:'新开一局',exact:true}).click();
   await expect(page.getByRole('heading',{name:'这次怎么练？',exact:true})).toBeVisible();
   const preserved=(await (await request.get(`${fixture.url}/api/quant/replay/sessions/${session.id}`)).json()).session;
   expect(preserved).toEqual(completed);

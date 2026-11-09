@@ -1,4 +1,5 @@
 <script setup>
+import { vMotionDisclosure } from "../../directives/motion.js";
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { GitCompareArrows } from "lucide-vue-next";
 import { api } from "../../services/api.js";
@@ -95,7 +96,7 @@ onBeforeUnmount(() => { ++requestVersion; });
               <h4>用户确认的复盘</h4>
               <p class="replay-comparison__caption">{{ (record.item.corrections ?? []).some(item => item.stage === 'post') ? '以下采用最新复盘修正；原始内容可在时间线查看。' : '以下为原始复盘，不根据盈亏自动归因。' }}</p>
               <dl class="replay-comparison__text-fields"><div><dt>自评判断</dt><dd>{{ outcomeLabel(confirmedPost(record.item)?.outcome) }}</dd></div><div v-if="confirmedPost(record.item)?.issueTags?.length"><dt>确认的问题标签</dt><dd>{{ confirmedPost(record.item).issueTags.join('、') }}</dd></div><div><dt>问题与教训</dt><dd>{{ confirmedPost(record.item)?.mistakes || '未确认' }}</dd><dd v-if="confirmedPost(record.item)?.lessons">{{ confirmedPost(record.item).lessons }}</dd></div></dl>
-              <details class="replay-comparison__trades" open>
+              <details v-motion-disclosure="'auto'" class="replay-comparison__trades" open>
                 <summary>委托与成交 · {{ record.item.executions?.length ?? 0 }} 条</summary>
                 <ol v-if="record.item.executions?.length"><li v-for="(execution, index) in record.item.executions" :key="execution.executionId || index"><span :class="execution.side === 'buy' ? 'replay-comparison__buy' : 'replay-comparison__sell'">{{ formatComparisonExecution(execution) }}</span><ReplayOrderDecisionSnapshot v-if="execution.decision" :decision="execution.decision" :side="execution.side" /><p v-if="execution.reasonMessage">{{ execution.reasonMessage }}</p></li></ol>
                 <p v-else class="replay-comparison__caption">本次没有成交或未成交委托记录。</p>

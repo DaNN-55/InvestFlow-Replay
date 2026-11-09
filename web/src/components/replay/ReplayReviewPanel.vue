@@ -1,6 +1,7 @@
 <script setup>
 import { ChevronDown, ChevronUp, ClipboardCheck, LockKeyhole } from "lucide-vue-next";
-import { computed, reactive, shallowRef, watch } from "vue";
+import { computed, nextTick, reactive, shallowRef, watch } from "vue";
+import { vMotionChange, vMotionDisclosure } from "../../directives/motion.js";
 
 import {
   buildReplayScoreDimensions,
@@ -36,6 +37,8 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  revealing: { type: Boolean, default: false },
+  revealError: { type: String, default: "" },
   savingBlindCorrection: {
     type: Boolean,
     default: false,
@@ -79,6 +82,7 @@ const comparisonOpen = shallowRef(false);
 const emit = defineEmits([
   "saveBlind",
   "savePost",
+  "reveal",
   "addBlindCorrection",
   "addPostCorrection",
   "updateCorrection",
@@ -112,6 +116,7 @@ const correctionStage = shallowRef("");
 const editingCorrection = shallowRef(null);
 const pendingCorrectionDelete = shallowRef(null);
 const contentCollapsed = shallowRef(false);
+const postHeading = shallowRef(null);
 let lastBlindDraftSignature = "";
 let lastPostDraftSignature = "";
 
@@ -125,6 +130,12 @@ const draftStatusLabels = {
 
 const completed = computed(() => props.session.status === "completed");
 const revealed = computed(() => Boolean(props.session.revealed));
+watch(revealed, async (value, previous) => {
+  if (value && !previous) {
+    await nextTick();
+    postHeading.value?.focus({ preventScroll: true });
+  }
+});
 const review = computed(() => props.session.review ?? {});
 const blindReview = computed(() => review.value.blindReview ?? null);
 const blindDecisionPrefill = computed(() =>
@@ -215,6 +226,9 @@ const scoreDimensions = computed(() =>
 const scoreMetrics = computed(() => buildReplayScoreMetrics(scoreCard.value, {
   benchmarkCode: props.session?.benchmarkCode,
 }));
+const summaryMetricKeys = new Set(["totalReturnPct", "maxDrawdownPct", "totalTradingCosts"]);
+const summaryMetrics = computed(() => scoreMetrics.value.filter(metric => summaryMetricKeys.has(metric.key)));
+const detailMetrics = computed(() => scoreMetrics.value.filter(metric => !summaryMetricKeys.has(metric.key)));
 const scoreWeightSnapshot = computed(() =>
   buildReplayScoreWeightSnapshot(scoreCard.value),
 );
@@ -504,7 +518,9 @@ watch(
 </script>
 
 <template>
-  <section class="replay-review" :class="{ 'replay-review--modal': modal }" aria-label="行情演练复盘">
+  <section
+    class="replay-review" :class="{ 'replay-review--modal': modal }" aria-label="行情演练复盘"
+    v-motion-change="{ scope: session.id, key: [review.blindSaved, revealed, review.postSaved].join(':'), kind: 'phase' }">
     <header v-if="!modal" class="replay-review__header">
       <div>
         <p class="replay-review__eyebrow">两阶段复盘</p>
@@ -540,7 +556,7 @@ watch(
           <UiButton v-if="draftStages[stage].needsConfirmation" variant="secondary" @click="emit('confirmFinal', stage)">重新核对提交结果</UiButton>
         </div>
       </template>
-      <div v-if="revealed" class="replay-review__comparison-entry"><span>原始成绩保留，复练单独记录。</span><UiButton variant="secondary" size="sm" @click="comparisonOpen = true">首次与复练对照</UiButton></div>
+
       <form
         v-if="!revealed && !review.blindSaved"
         class="replay-review__form"
@@ -554,6 +570,7 @@ watch(
         </div>
         <span
           class="replay-review__draft-status"
+          v-motion-change="{ scope: session.id, key: draftStatuses.blind === 'saved', kind: 'feedback' }"
           :class="`replay-review__draft-status--${draftStatuses.blind}`"
           role="status"
         >
@@ -561,14 +578,14 @@ watch(
         </span>
       </div>
       <p class="replay-review__intro">
-        演练中即可持续记录。买卖时的判断已经逐笔保存，这里只确认整局结论；如需按某套战法复核，可选择一个参考版本。约 600ms 后自动保存草稿，只有完成演练后才能提交冻结。
+        确认整局判断后冻结，随后揭晓行情。
       </p>
 
       <div
         v-if="blindDecisionPrefill && !hasBlindDraft"
         class="replay-review__decision-prefill"
       >
-        已自动带入最近一次买入判断，你只需检查并补充整局层面的变化，不必重新抄写。
+        已带入最近一次买入判断。
       </div>
 
       <label class="replay-review__field">
@@ -670,6 +687,7 @@ watch(
         <UiButton
           v-if="completed"
           type="submit"
+          class="replay-review__primary"
           :loading="savingBlind"
           :disabled="!blindReady"
         >
@@ -692,12 +710,23 @@ watch(
         </span>
       </div>
       <p class="replay-review__intro">
-        原始记录已永久保留。需要补充或纠错时，请追加一条带说明的完整修正快照。
+        补充或更正请追加修正，原记录保留。
       </p>
+      <UiButton
+        v-if="completed && review.blindSaved"
+        class="replay-review__primary"
+        :loading="revealing"
+        :disabled="revealing || savingBlindCorrection"
+        @click="emit('reveal')"
+      >
+        揭晓行情
+      </UiButton>
+      <p v-if="revealError" class="replay-review__reveal-error" role="alert">{{ revealError }}</p>
       <UiButton
         v-if="correctionStage !== 'blind'"
         type="button"
-        variant="secondary"
+        variant="ghost"
+        class="replay-review__secondary-action"
         size="sm"
         @click="openCorrection('blind')"
       >
@@ -728,8 +757,8 @@ watch(
     </div>
 
     <div v-else class="replay-review__revealed">
-      <section class="replay-review__frozen">
-        <div class="replay-review__stage-heading">
+      <details v-motion-disclosure="'auto'" class="replay-review__frozen replay-review__completed-stage" :open="correctionStage === 'blind'">
+        <summary class="replay-review__stage-heading">
           <div>
             <span>阶段一</span>
             <h3>{{ hasBlindCorrection ? "当前盲评修正版" : "揭晓前盲评" }}</h3>
@@ -738,9 +767,10 @@ watch(
             <LockKeyhole :size="13" />
             {{ hasBlindCorrection ? "当前修正版" : "盲评已冻结" }}
           </span>
-        </div>
+          <ChevronDown :size="16" class="replay-review__disclosure-icon" aria-hidden="true" />
+        </summary>
         <p v-if="hasBlindCorrection" class="replay-review__intro">
-          原始盲评和首次评分均已冻结，当前展示最新修正版；完整记录见修正时间线。
+          原始盲评和首次评分均已冻结；当前为最新修正版。
         </p>
         <dl v-if="currentBlindReview" class="replay-review__frozen-grid">
           <div>
@@ -804,7 +834,7 @@ watch(
           @cancel="closeCorrection"
           @submit="submitCorrection"
         />
-      </section>
+      </details>
 
       <form
         v-if="!review.postSaved"
@@ -815,10 +845,11 @@ watch(
         <div class="replay-review__stage-heading">
           <div>
             <span>阶段二</span>
-            <h3>揭晓后复盘</h3>
+            <h3 ref="postHeading" tabindex="-1">揭晓后复盘</h3>
           </div>
           <span
             class="replay-review__draft-status"
+            v-motion-change="{ scope: session.id, key: draftStatuses.post === 'saved', kind: 'feedback' }"
             :class="`replay-review__draft-status--${draftStatuses.post}`"
             role="status"
           >
@@ -919,16 +950,17 @@ watch(
           </UiButton>
           <UiButton
             type="submit"
+            class="replay-review__primary"
             :loading="savingPost"
             :disabled="!postReady"
           >
-            保存原始复盘并评分
+            提交复盘并评分
           </UiButton>
         </div>
         </fieldset>
     </form>
-      <section v-else class="replay-review__frozen">
-        <div class="replay-review__stage-heading">
+      <details v-motion-disclosure="'auto'" v-else class="replay-review__frozen replay-review__completed-stage" :open="correctionStage === 'post'">
+        <summary class="replay-review__stage-heading">
           <div>
             <span>阶段二</span>
             <h3>{{ hasPostCorrection ? "当前事后复盘修正版" : "原始事后复盘已锁定" }}</h3>
@@ -937,12 +969,13 @@ watch(
             <LockKeyhole :size="13" />
             {{ hasPostCorrection ? "当前修正版" : "不可覆盖" }}
           </span>
-        </div>
+          <ChevronDown :size="16" class="replay-review__disclosure-icon" aria-hidden="true" />
+        </summary>
         <p class="replay-review__intro">
           {{
             hasPostCorrection
-              ? "原始事后复盘和首次评分均已冻结，当前展示最新修正版；完整记录见修正时间线。"
-              : "原始评分不会改变。后续反思请追加修正，不会重算或覆盖首次评分。"
+              ? "当前为最新修正版，原始复盘和评分保留。"
+              : "后续反思可追加修正，原始复盘和评分保留。"
           }}
         </p>
         <dl v-if="currentPostReview" class="replay-review__frozen-grid">
@@ -1000,20 +1033,21 @@ watch(
           @cancel="closeCorrection"
           @submit="submitCorrection"
         />
-      </section>
+      </details>
 
       <section v-if="scoreCard" class="replay-review__score">
         <div class="replay-review__score-total">
           <div>
             <span>本局评分</span>
-            <small>算法 {{ scoreAlgorithmLabel }}</small>
           </div>
           <strong>{{ formatScore(scoreCard.total) }}</strong>
           <small>/ 100</small>
         </div>
-        <div class="replay-review__score-meta">
+        <details v-motion-disclosure="'auto'" class="replay-review__score-meta">
+          <summary>评分说明</summary>
+          <span>评分版本：{{ scoreAlgorithmLabel }}</span>
           <span>
-            权重快照：
+            各项权重：
             {{
               scoreWeightSnapshot
                 .map(
@@ -1031,7 +1065,7 @@ watch(
               · 原始得分 {{ formatScore(scoreCard.rawTotal) }}
             </template>
           </span>
-        </div>
+        </details>
         <div
           class="replay-review__dimensions"
           :class="{ 'replay-review__dimensions--five': scoreDimensions.length === 5 }"
@@ -1055,12 +1089,22 @@ watch(
           </div>
         </div>
         <div class="replay-review__metrics">
-          <div v-for="metric in scoreMetrics" :key="metric.key">
+          <div v-for="metric in summaryMetrics" :key="metric.key">
             <span>{{ metric.label }}</span>
             <strong>{{ formatReplayScoreMetric(metric) }}</strong>
           </div>
         </div>
+        <details v-motion-disclosure="'auto'" class="replay-review__score-details">
+          <summary>详细指标</summary>
+          <div class="replay-review__metrics">
+            <div v-for="metric in detailMetrics" :key="metric.key">
+              <span>{{ metric.label }}</span>
+              <strong>{{ formatReplayScoreMetric(metric) }}</strong>
+            </div>
+          </div>
+        </details>
       </section>
+      <div v-if="revealed" class="replay-review__comparison-entry"><UiButton variant="secondary" size="sm" @click="comparisonOpen = true">首次与复练对照</UiButton></div>
       <ReplayReviewTimeline
         v-if="!modal"
         editable
@@ -1190,6 +1234,16 @@ watch(
   flex-direction: column;
 }
 
+.replay-review__completed-stage > summary {
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+.replay-review__completed-stage > summary::-webkit-details-marker { display: none; }
+.replay-review__disclosure-icon { flex-shrink: 0; color: var(--ql-color-text-muted); }
+.replay-review__completed-stage[open] > summary .replay-review__disclosure-icon { transform: rotate(180deg); }
+.replay-review__reveal-error { margin: 0; color: var(--ql-color-danger); font-size: 12px; }
+
 .replay-review__revealed {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1276,15 +1330,7 @@ watch(
   line-height: 1.6;
 }
 
-.replay-review__decision-prefill {
-  padding: 9px 11px;
-  border: 1px solid rgba(16, 185, 129, 0.22);
-  border-radius: 8px;
-  color: #047857;
-  background: var(--ql-color-success-soft);
-  font-size: 11px;
-  line-height: 1.55;
-}
+.replay-review__decision-prefill { color: var(--ql-color-text-muted); font-size: 12px; line-height: 1.55; }
 
 .replay-review__field {
   display: grid;
@@ -1462,8 +1508,8 @@ watch(
 
 .replay-review__score-total strong {
   color: var(--ql-accent);
-  font-family: "SF Mono", "SFMono-Regular", Menlo, monospace;
-  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  font-size: 32px;
 }
 
 .replay-review__score-total small {
@@ -1472,59 +1518,29 @@ watch(
 }
 
 .replay-review__score-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 16px;
   color: var(--ql-color-text-muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.6;
 }
+.replay-review__score-meta > summary { cursor: pointer; }
+.replay-review__score-meta > span { display: block; margin-top: 6px; }
 
 .replay-review__dimensions,
-.replay-review__metrics {
-  display: grid;
-  gap: 8px;
-}
-
-.replay-review__dimensions {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.replay-review__dimensions--five {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
-.replay-review__metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
+.replay-review__metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; font-variant-numeric: tabular-nums; }
+.replay-review__dimensions { padding-block: 8px 12px; }
+.replay-review__metrics { border-top: 1px solid var(--ql-line); padding-top: 12px; }
 .replay-review__dimension,
-.replay-review__metrics > div {
-  display: grid;
-  gap: 6px;
-  padding: 11px;
-  border: 1px solid var(--ql-line);
-  border-radius: 8px;
-  background: var(--ql-color-bg-glass);
-}
-
+.replay-review__metrics > div { display: grid; align-content: start; min-width: 0; gap: 5px; }
 .replay-review__dimension span,
-.replay-review__metrics span {
-  color: var(--ql-color-text-muted);
-  font-size: 10px;
-  font-weight: 700;
-}
-
+.replay-review__metrics span { color: var(--ql-color-text-muted); font-size: 12px; line-height: 1.5; }
 .replay-review__dimension strong,
-.replay-review__metrics strong {
-  font-family: "SF Mono", "SFMono-Regular", Menlo, monospace;
-  font-size: 14px;
-}
-
-.replay-review__dimension small {
-  color: var(--ql-color-text-subtle);
-  font-size: 9px;
-}
+.replay-review__metrics strong { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.replay-review__dimension small { color: var(--ql-color-text-muted); font-size: 12px; font-weight: 400; }
+.replay-review__score-details > summary { min-height: 36px; align-content: center; cursor: pointer; color: var(--ql-color-text-muted); font-size: 12px; }
+.replay-review__score-details .replay-review__metrics { border: 0; }
+.replay-review__primary { background: var(--ql-accent); border-color: var(--ql-accent); color: var(--ql-panel); border-radius: 8px; }
+.replay-review__primary:hover:not(:disabled) { background: var(--ql-accent-hover); }
+.replay-review__secondary-action { justify-self: start; border-color: transparent; background: transparent; color: var(--ql-color-text-muted); }
 
 .replay-review__dimension-na {
   color: var(--ql-color-text-muted);
@@ -1540,10 +1556,6 @@ watch(
     border-left: 0;
   }
 
-  .replay-review__dimensions,
-  .replay-review__metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 760px) {

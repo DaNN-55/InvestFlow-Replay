@@ -44,11 +44,13 @@ const open = ref(false);
         <TooltipContent
           :class="[
             'ui-tooltip__content',
+            'ql-motion-tooltip',
             { 'ui-tooltip__content--wide': wide },
           ]"
           side="top"
           :side-offset="7"
           :collision-padding="10"
+          :inert="!open"
         >
           {{ content }}
           <TooltipArrow class="ui-tooltip__arrow" :width="10" :height="5" />

@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from "vue";
+import { vMotionDisclosure } from "../../directives/motion.js";
 import { ChevronDown, Pencil, Plus, Trash2 } from "lucide-vue-next";
 
 const MAIN_INDICATORS = [
@@ -76,7 +77,7 @@ const subSummary = computed(() => {
 <template>
   <div class="replay-indicator-toolbar">
     <div class="replay-indicator-toolbar__groups">
-      <details class="replay-indicator-toolbar__selector">
+      <details v-motion-disclosure="'popover'" class="replay-indicator-toolbar__selector">
         <summary aria-label="选择主图指标">
           <span class="replay-indicator-toolbar__selector-label">主图</span>
           <span class="replay-indicator-toolbar__selector-summary">{{ mainSummary }}</span>
@@ -122,7 +123,7 @@ const subSummary = computed(() => {
         </div>
       </details>
 
-      <details class="replay-indicator-toolbar__selector">
+      <details v-motion-disclosure="'popover'" class="replay-indicator-toolbar__selector">
         <summary aria-label="选择副图指标">
           <span class="replay-indicator-toolbar__selector-label">副图</span>
           <span class="replay-indicator-toolbar__selector-summary">{{ subSummary }}</span>
@@ -185,7 +186,7 @@ const subSummary = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .replay-indicator-toolbar__groups {
@@ -201,7 +202,7 @@ const subSummary = computed(() => {
 
 .replay-indicator-toolbar__selector summary,
 .replay-indicator-toolbar__create {
-  min-height: 30px;
+  min-height: 34px;
   border: 1px solid var(--ql-line-strong);
   border-radius: 7px;
   color: var(--ql-color-text-muted);
@@ -246,7 +247,7 @@ const subSummary = computed(() => {
   transition: transform 160ms ease;
 }
 
-.replay-indicator-toolbar__selector[open] summary svg {
+.replay-indicator-toolbar__selector[data-motion-open="true"] summary svg {
   transform: rotate(180deg);
 }
 
@@ -331,28 +332,11 @@ const subSummary = computed(() => {
   color: var(--ql-accent);
 }
 
-@media (max-width: 480px) {
-  .replay-indicator-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .replay-indicator-toolbar__groups {
-    width: 100%;
-  }
-
-  .replay-indicator-toolbar__selector {
-    min-width: 0;
-    flex: 1 1 0;
-  }
-
-  .replay-indicator-toolbar__selector summary {
-    display: flex;
-    max-width: none;
-  }
-
-  .replay-indicator-toolbar__create {
-    align-self: flex-start;
-  }
+@media (max-width: 600px) {
+  .replay-indicator-toolbar { flex-wrap: wrap; }
+  .replay-indicator-toolbar__groups { flex: 1; }
+  .replay-indicator-toolbar__selector { min-width: 0; flex: 1 1 0; }
+  .replay-indicator-toolbar__selector summary { display: flex; max-width: 135px; padding-inline: 6px; }
+  .replay-indicator-toolbar__create { padding-inline: 6px; }
 }
 </style>

@@ -40,11 +40,11 @@ test("真实首次与多代复练通过历史详情和揭晓后复盘入口展�
   await expect(dialog.getByText("首次 1 次 · 已知复练 3 次")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("dialog", { name: "两阶段复盘 · 决策记录与评分" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "本次复盘" })).toBeVisible();
 });
 
 
-test('score algorithm remains at the end of its score row on desktop and fits narrow screens',async({page})=>{
+test('score cohort stays visible while algorithm details expand on demand and fit narrow screens',async({page})=>{
   await page.route('**/api/**',async route=>{
     const url=new URL(route.request().url());
     const response=await route.fetch({url:`${fixture.url}${url.pathname}${url.search}`});await route.fulfill({response});
@@ -52,9 +52,16 @@ test('score algorithm remains at the end of its score row on desktop and fits na
   const base=process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5180';
   await page.goto(`${base}/decision/trade-records?tab=replay&market=ashare&session=${fixture.sessionIds.retrain3}`);
   const score=page.locator('.replay-history-detail__score-summary');
-  const algorithm=score.locator('.replay-history-detail__score-summary-side .replay-history-detail__algorithm');
+  const note=score.locator('.replay-history-detail__score-note');
+  await expect(note).toBeVisible();
+  await expect(note).toContainText('不计入首次盲测统计');
+  const explanation=page.locator('.replay-history-detail__score-explanation');
+  const algorithm=explanation.locator('.replay-history-detail__algorithm');
+  await expect(algorithm).toBeHidden();
+  await explanation.locator('summary').click();
   await expect(algorithm).toBeVisible();
-  const row=await score.boundingBox(),label=await algorithm.boundingBox();
+  await expect(explanation).toContainText('权重快照');
+  const row=await score.boundingBox(),label=await note.boundingBox();
   expect(label.y).toBeGreaterThanOrEqual(row.y);expect(label.y+label.height).toBeLessThanOrEqual(row.y+row.height);
   await score.screenshot({path:test.info().outputPath('score-row-desktop.png')});
   await score.click();await expect(page.locator('.replay-history-detail__score-body')).not.toBeVisible();

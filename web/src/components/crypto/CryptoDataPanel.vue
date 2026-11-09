@@ -1,4 +1,5 @@
 <script setup>
+import { vMotionDisclosure } from "../../directives/motion.js";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronDown, Database, RefreshCw } from 'lucide-vue-next';
 import { api } from '../../services/api.js';
@@ -44,6 +45,7 @@ onBeforeUnmount(() => {
 <template>
   <div ref="root" class="crypto-data-popover">
     <button ref="trigger" type="button" class="crypto-data-trigger" :class="{'crypto-data-trigger--warning':error || pool?.ready===false}" aria-label="合约行情数据" title="合约行情数据" :aria-expanded="open" aria-controls="crypto-data-panel" @click="emit('toggle')"><Database :size="17" /></button>
+    <Transition name="ql-popover" @before-enter="el => el.inert = false" @before-leave="el => el.inert = true">
     <section v-if="open" id="crypto-data-panel" class="crypto-data-panel" role="region" aria-labelledby="crypto-data-title">
       <header class="crypto-data-heading">
         <div><strong id="crypto-data-title">行情数据</strong><p>{{ busy ? '正在读取数据状态…' : name }}</p></div>
@@ -61,7 +63,7 @@ onBeforeUnmount(() => {
           <p v-if="pool.mode==='legacy-sample'">仅冻结小样；同一片段再次练习计为复练。</p>
           <p v-else-if="pool.mode!=='history-pool'">数据未就绪；已有练习仍可继续。</p>
         </section>
-        <details v-if="pool.coverage?.instruments?.length" class="crypto-data-details">
+        <details v-motion-disclosure="'auto'" v-if="pool.coverage?.instruments?.length" class="crypto-data-details">
           <summary>合约样本覆盖<ChevronDown :size="14" /></summary>
           <article v-for="item in pool.coverage.instruments" :key="item.instrumentId">
             <strong>{{ item.instrumentId }}</strong>
@@ -73,11 +75,11 @@ onBeforeUnmount(() => {
           </article>
         </details>
       </template>
-      <details class="crypto-data-details">
+      <details v-motion-disclosure="'auto'" class="crypto-data-details">
         <summary>数据来源与冻结版本<ChevronDown :size="14" /></summary>
         <p>OKX 历史归档：最新价、标记价和资金费分别校验。继续与复练沿用开局版本；本局日期在揭晓后显示。两种价格图下方均显示同时间段的真实成交量（张）。</p>
       </details>
-      <details class="crypto-data-details">
+      <details v-motion-disclosure="'auto'" class="crypto-data-details">
         <summary>训练规则与教学结算<ChevronDown :size="14" /></summary>
         <p>逐仓单向，按已展示分钟撮合，不还原盘口、排队或 ADL。手动计划只记录，止盈止损按委托参考价触发。</p>
         <p>教学强平全仓关闭，仓内保证金不返还、不向仓外追扣，费用不重复扣；实盘可能部分减仓或返还余额。追加保证金同样承担损失，仓外不自动补入；估算强平价不保证成交。</p>
@@ -85,6 +87,7 @@ onBeforeUnmount(() => {
       </details>
       <footer v-if="pool">版本 {{ pool.poolVersion??'冻结小样' }} · 已见及相关时段不再计为首次</footer>
     </section>
+    </Transition>
   </div>
 </template>
 
@@ -107,7 +110,7 @@ onBeforeUnmount(() => {
 .crypto-data-details { margin-top:11px;padding-top:9px;border-top:1px solid var(--ql-line); }
 .crypto-data-details summary { display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:30px;color:var(--ql-ink);font-size:12px;font-weight:600;list-style:none;cursor:pointer; }
 .crypto-data-details summary::-webkit-details-marker { display:none; }
-.crypto-data-details[open] summary svg { transform:rotate(180deg); }
+.crypto-data-details[data-motion-open="true"] summary svg { transform:rotate(180deg); }
 .crypto-data-details article { padding:10px 0;border-bottom:1px solid var(--ql-line); }
 .crypto-data-details article>strong { color:var(--ql-ink);font-size:12px; }
 .crypto-data-details article dl { margin-top:7px; }

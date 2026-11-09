@@ -1,5 +1,6 @@
 <script setup>
-import { computed, reactive, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { vMotionDisclosure, vMotionChange } from '../../directives/motion.js';
 import UiButton from '../ui/UiButton.vue';
 import UiTextarea from '../ui/UiTextarea.vue';
 import UiTooltip from '../ui/UiTooltip.vue';
@@ -13,16 +14,23 @@ const interesting = computed(() => props.traces.filter((e) => e.type !== 'fundin
 const metrics = computed(() => props.analysis?.analysis);
 const returnPercent = computed(() => metrics.value?.returnPercent ?? Number(props.session.summary.netPnl) / Number(props.session.config.startingCash) * 100);
 const disabled = computed(() => props.busy || props.blocked || props.readonly);
+const postObservation = ref(null);
+watch(() => props.session.revealed, async (revealed, previous) => {
+  if (revealed && !previous && !props.readonly) {
+    await nextTick();
+    postObservation.value?.$el?.focus();
+  }
+});
 </script>
 <template>
-  <section class="crypto-review" aria-label="合约复盘">
+  <section class="crypto-review" aria-label="合约复盘" v-motion-change="{scope:session.id,key:[Boolean(session.blindReview),session.revealed,Boolean(session.trainingJournal.postReview)].join(':'),kind:'phase'}">
     <header><h2>练习复盘</h2><span>{{ session.attemptInfo.kind === 'first' ? '首次练习' : `复练 #${session.attemptInfo.attemptNumber}` }}</span><small>USDT</small><UiTooltip clickable wide label="复盘结算口径" content="教学模拟结算，非实盘清算账单。接管后全仓关闭，该仓保证金不返还；实盘可能部分减仓或返还余额。净盈亏含浮动盈亏与教学结算；缺口豁免不计盈利。不向仓外追扣仅为教学约定。金额悬停可查看完整精度。" /></header>
     <div class="review-facts">
       <div><span>净盈亏</span><strong data-testid="crypto-net-pnl" :title="String(session.summary.netPnl)">{{ moneyAmount(session.summary.netPnl) }}</strong></div>
       <div><span>收益率</span><strong data-testid="crypto-return-percent">{{ amount(returnPercent, 4) }}%</strong></div>
       <div><span>最大回撤<UiTooltip clickable wide label="回撤采样说明" :content="metrics?`按 ${metrics.equitySamples} 个已执行分钟收盘及资金动作后权益采样，至 ${relativeTime(metrics.sampledThroughMinute)}；不是分钟内或逐笔最大回撤。`:'揭晓后按已执行分钟收盘及资金动作后的权益采样核对。'" /></span><strong data-testid="crypto-max-drawdown">{{ metrics ? amount(metrics.maxDrawdownPercent, 4) + '%' : '揭晓后核对' }}</strong></div>
     </div>
-    <details class="review-costs">
+    <details v-motion-disclosure="'auto'" class="review-costs">
 <summary>费用与结算<UiTooltip clickable wide label="费用口径说明" content="资金费负数表示净收入；滑点已体现在成交价中，不再次扣费。追加保证金只作内部划转，不计收入。" /></summary><div class="review-facts">
       <div><span>滑点归因（已含于成交价）</span><strong data-testid="crypto-slippage-attribution" :title="String(session.totals.slippageAttribution)">{{ moneyAmount(session.totals.slippageAttribution) }}</strong></div>
       <div><span>普通成交手续费</span><strong :title="String(session.totals.tradingFees)">{{ moneyAmount(session.totals.tradingFees) }}</strong></div>
@@ -42,7 +50,7 @@ const disabled = computed(() => props.busy || props.blocked || props.readonly);
 </li>
       </ol>
 </section>
-    <details v-for="event in liquidations" :key="event.sequence" class="settlement" data-testid="crypto-settlement">
+    <details v-motion-disclosure="'auto'" v-for="event in liquidations" :key="event.sequence" class="settlement" data-testid="crypto-settlement">
       <summary>教学接管 · {{ relativeTime(event.observedAtMinute) }} <span :title="String(event.settlement.aggregateSettlementPnl)">{{ moneyAmount(event.settlement.aggregateSettlementPnl) }} USDT</span></summary>
       <p class="muted">全仓教学接管<UiTooltip clickable wide label="接管明细说明" content="撤单并复核后风险仍达阈值，按教学模型全额接管；费用已含合计损失，参考拆分不再次入账。实盘可能部分减仓或返还余额。实际清算成交价及官方清算费未知。缺口豁免不算盈利。" /></p>
       <dl class="settlement-facts">
@@ -62,34 +70,40 @@ const disabled = computed(() => props.busy || props.blocked || props.readonly);
       <h3>揭晓前判断<UiTooltip clickable label="盲评说明" content="先记录判断与计划，再揭晓行情；提交后原记录保留。" /></h3>
       <label>我看到了什么？<UiTextarea v-model="draft.thesis" aria-label="盲评判断" required maxlength="4000" :disabled="disabled" /></label>
       <label>交易或不交易计划<UiTextarea v-model="draft.tradePlan" aria-label="盲评交易计划" required maxlength="4000" :disabled="disabled" /></label>
-      <UiButton type="submit" :disabled="disabled" variant="secondary">保存首次盲评</UiButton>
+      <UiButton type="submit" :disabled="disabled" class="crypto-review__primary">保存盲评</UiButton>
     </form>
-    <details v-else-if="session.blindReview" :open="!readonly && !session.revealed">
+    <details v-motion-disclosure="'auto'" v-else-if="session.blindReview" :open="!readonly && !session.revealed">
       <summary>揭晓前判断</summary><p class="preserve">{{ session.blindReview.thesis }}</p><p class="preserve">{{ session.blindReview.tradePlan }}</p>
-      <UiButton v-if="!session.revealed && !readonly" :disabled="disabled" @click="emit('reveal')">揭晓完整行情</UiButton>
+      <UiButton v-if="!session.revealed && !readonly" class="crypto-review__primary" :disabled="disabled" @click="emit('reveal')">揭晓完整行情</UiButton>
     </details>
     <p v-if="readonly && session.status==='completed' && !session.blindReview" class="muted">尚未填写揭晓前判断。</p>
     <template v-if="session.revealed">
 <form v-if="!session.trainingJournal.postReview && !readonly" @submit.prevent="emit('post', { observation: draft.observation, executionLesson: draft.executionLesson, nextAttempt: draft.nextAttempt })">
         <h3>事后复盘</h3>
-        <label>行情与原判断有什么差异？<UiTextarea v-model="draft.observation" aria-label="复盘观察" required maxlength="4000" :disabled="disabled" /></label>
+      <label>行情与原判断有什么差异？<UiTextarea ref="postObservation" v-model="draft.observation" aria-label="复盘观察" required maxlength="4000" :disabled="disabled" /></label>
         <label>计划与实际执行有什么偏差？<UiTextarea v-model="draft.executionLesson" aria-label="执行偏差" required maxlength="4000" :disabled="disabled" /></label>
         <label>下次只改哪一件事？<UiTextarea v-model="draft.nextAttempt" aria-label="下次行动" required maxlength="4000" :disabled="disabled" /></label>
-        <UiButton type="submit" variant="secondary" :disabled="disabled">保存事后复盘</UiButton>
+        <UiButton type="submit" class="crypto-review__primary" :disabled="disabled">保存事后复盘</UiButton>
       </form>
-      <details v-else-if="session.trainingJournal.postReview"><summary>事后复盘</summary><p v-for="(value, key) in session.trainingJournal.postReview" :key="key" class="preserve">{{ value }}</p></details>
-      <details v-if="session.firstAttempt" data-testid="crypto-first-comparison"><summary>与首次比较</summary><p>首次净盈亏 <span :title="String(session.firstAttempt.summary.netPnl)">{{ moneyAmount(session.firstAttempt.summary.netPnl) }}</span> USDT / 本次 <span :title="String(session.summary.netPnl)">{{ moneyAmount(session.summary.netPnl) }}</span> USDT</p><p v-if="analysis?.first" class="muted">首次 / 本次收益率 {{ amount(analysis.first.returnPercent, 4) }}% / {{ amount(metrics.returnPercent, 4) }}%；最大回撤 {{ amount(analysis.first.maxDrawdownPercent, 4) }}% / {{ amount(metrics.maxDrawdownPercent, 4) }}%。原资金结果不改写，参数不同不直接判定能力提升。</p><p class="preserve">首次判断：{{ session.firstAttempt.blindReview?.thesis }}</p><p class="muted">首次资金/杠杆/滑点：<span :title="String(session.firstAttempt.config.startingCash)">{{ moneyAmount(session.firstAttempt.config.startingCash) }}</span>/{{ session.firstAttempt.config.leverage }}/{{ session.firstAttempt.config.slippageBps }} bps；参数不同时只作条件对照。复练不计首次成绩。</p></details>
-      <UiButton v-if="!readonly" :disabled="disabled" @click="emit('retrain')">按原版本复练</UiButton>
+      <details v-motion-disclosure="'auto'" v-else-if="session.trainingJournal.postReview"><summary>事后复盘</summary><p v-for="(value, key) in session.trainingJournal.postReview" :key="key" class="preserve">{{ value }}</p></details>
+      <details v-motion-disclosure="'auto'" v-if="session.firstAttempt" data-testid="crypto-first-comparison"><summary>与首次比较</summary><p>首次净盈亏 <span :title="String(session.firstAttempt.summary.netPnl)">{{ moneyAmount(session.firstAttempt.summary.netPnl) }}</span> USDT / 本次 <span :title="String(session.summary.netPnl)">{{ moneyAmount(session.summary.netPnl) }}</span> USDT</p><p v-if="analysis?.first" class="muted">首次 / 本次收益率 {{ amount(analysis.first.returnPercent, 4) }}% / {{ amount(metrics.returnPercent, 4) }}%；最大回撤 {{ amount(analysis.first.maxDrawdownPercent, 4) }}% / {{ amount(metrics.maxDrawdownPercent, 4) }}%。原资金结果不改写，参数不同不直接判定能力提升。</p><p class="preserve">首次判断：{{ session.firstAttempt.blindReview?.thesis }}</p><p class="muted">首次资金/杠杆/滑点：<span :title="String(session.firstAttempt.config.startingCash)">{{ moneyAmount(session.firstAttempt.config.startingCash) }}</span>/{{ session.firstAttempt.config.leverage }}/{{ session.firstAttempt.config.slippageBps }} bps；参数不同时只作条件对照。复练不计首次成绩。</p></details>
+      <UiButton v-if="!readonly" :variant="session.trainingJournal.postReview ? 'primary' : 'ghost'" :class="{ 'crypto-review__primary': Boolean(session.trainingJournal.postReview) }" :disabled="disabled" @click="emit('retrain')">按原版本复练</UiButton>
     </template>
-    <details><summary>操作理由与计划记录（{{ session.trainingJournal.decisions.length }}）</summary><ol><li v-for="d in session.trainingJournal.decisions" :key="d.actionId"><strong>{{ relativeTime(d.cursorMinute) }}</strong> · {{ commandName(d.command.type) }}<p>{{ d.note || '未填写理由' }}</p><span class="muted">当时计划：{{ d.plan.mode === 'manual' ? `手动退出 ${d.plan.manualExitPrice}` : '未设手动退出价' }}</span></li></ol></details>
-    <details><summary>执行与风险事件（{{ interesting.length }}）</summary><ol class="timeline"><li v-for="e in interesting" :key="e.sequence"><span class="muted">{{ relativeTime(e.observedAtMinute) }}</span><strong>{{ eventName(e.type) }}</strong><span v-if="e.quote">{{ e.quote.contracts }} 张 @ {{ e.quote.fillPrice }} / {{ e.quote.liquidityRole }} / 费 <span :title="String(e.quote.fee)">{{ moneyAmount(e.quote.fee) }}</span></span><span v-if="e.payment">资金费 <span :title="String(e.payment)">{{ moneyAmount(e.payment) }}</span> / 结算率 {{ e.settledRate }}；mark 为事件前已完成分钟代理</span><span v-if="e.type === 'intraminute-ambiguity'">分钟内次序不明，执行冻结的较低权益路径，不宣称还原实盘先后。</span><span v-if="e.reason" class="muted">{{ eventReason(e.reason) }}</span></li></ol></details>
-    <details><summary>资金账本（{{ ledger.length }} 个动作）</summary><div class="table-scroll"><table><caption>每动作实际资金桶变动；参考拆分不重复入账，单位 USDT</caption><thead><tr><th>版本</th><th>分钟</th><th>可用变化</th><th>冻结变化</th><th>保证金变化</th><th>手续费</th><th>资金费</th><th>接管合计</th></tr></thead><tbody><tr v-for="entry in ledger" :key="entry.actionId"><td>{{ entry.revision }}</td><td>{{ entry.cursorMinute }}</td><td :title="String(entry.availableDelta)">{{ moneyAmount(entry.availableDelta) }}</td><td :title="String(entry.reservedDelta)">{{ moneyAmount(entry.reservedDelta) }}</td><td :title="String(entry.marginDelta)">{{ moneyAmount(entry.marginDelta) }}</td><td :title="String(entry.feesDelta)">{{ moneyAmount(entry.feesDelta) }}</td><td :title="String(entry.fundingDelta)">{{ moneyAmount(entry.fundingDelta) }}</td><td :title="String(entry.liquidationDelta)">{{ moneyAmount(entry.liquidationDelta) }}</td></tr></tbody></table></div></details>
-    <details><summary>数据与规则</summary>      <p v-if="session.revealed" class="muted">已揭晓：{{ new Date(session.reveal.replayStartMs).toISOString() }} 起；数据 {{ session.reveal.dataVersion }}。图表可读完整窗口，账户结果保持原样。</p><p>规则 {{ session.frozenRules.ruleVersion }}；执行 {{ session.executionModelVersion }}；接管 {{ session.frozenRules.liquidationModelVersion }}。固定 Maker {{ Number(session.frozenRules.makerRate)*100 }}% / Taker {{ Number(session.frozenRules.takerRate)*100 }}%；单边滑点 {{ session.frozenRules.slippageBps }} bps。</p><p>规则为冻结训练基线，不等同于当时或你的账户实际规则。分钟行情不能重建盘口/排队/逐笔接管、动态价格限制或 ADL；资金费 mark 为事件前已完成分钟代理。同一分钟多个可达事件采用明确的保守路径。</p></details>
+    <details v-motion-disclosure="'auto'"><summary>操作理由与计划记录（{{ session.trainingJournal.decisions.length }}）</summary><ol><li v-for="d in session.trainingJournal.decisions" :key="d.actionId"><strong>{{ relativeTime(d.cursorMinute) }}</strong> · {{ commandName(d.command.type) }}<p>{{ d.note || '未填写理由' }}</p><span class="muted">当时计划：{{ d.plan.mode === 'manual' ? `手动退出 ${d.plan.manualExitPrice}` : '未设手动退出价' }}</span></li></ol></details>
+    <details v-motion-disclosure="'auto'"><summary>执行与风险事件（{{ interesting.length }}）</summary><ol class="timeline"><li v-for="e in interesting" :key="e.sequence"><span class="muted">{{ relativeTime(e.observedAtMinute) }}</span><strong>{{ eventName(e.type) }}</strong><span v-if="e.quote">{{ e.quote.contracts }} 张 @ {{ e.quote.fillPrice }} / {{ e.quote.liquidityRole }} / 费 <span :title="String(e.quote.fee)">{{ moneyAmount(e.quote.fee) }}</span></span><span v-if="e.payment">资金费 <span :title="String(e.payment)">{{ moneyAmount(e.payment) }}</span> / 结算率 {{ e.settledRate }}；mark 为事件前已完成分钟代理</span><span v-if="e.type === 'intraminute-ambiguity'">分钟内次序不明，执行冻结的较低权益路径，不宣称还原实盘先后。</span><span v-if="e.reason" class="muted">{{ eventReason(e.reason) }}</span></li></ol></details>
+    <details v-motion-disclosure="'long'"><summary>资金账本（{{ ledger.length }} 个动作）</summary><div class="table-scroll"><table><caption>每动作实际资金桶变动；参考拆分不重复入账，单位 USDT</caption><thead><tr><th>版本</th><th>分钟</th><th>可用变化</th><th>冻结变化</th><th>保证金变化</th><th>手续费</th><th>资金费</th><th>接管合计</th></tr></thead><tbody><tr v-for="entry in ledger" :key="entry.actionId"><td>{{ entry.revision }}</td><td>{{ entry.cursorMinute }}</td><td :title="String(entry.availableDelta)">{{ moneyAmount(entry.availableDelta) }}</td><td :title="String(entry.reservedDelta)">{{ moneyAmount(entry.reservedDelta) }}</td><td :title="String(entry.marginDelta)">{{ moneyAmount(entry.marginDelta) }}</td><td :title="String(entry.feesDelta)">{{ moneyAmount(entry.feesDelta) }}</td><td :title="String(entry.fundingDelta)">{{ moneyAmount(entry.fundingDelta) }}</td><td :title="String(entry.liquidationDelta)">{{ moneyAmount(entry.liquidationDelta) }}</td></tr></tbody></table></div></details>
+    <details v-motion-disclosure="'auto'"><summary>数据与规则</summary>      <p v-if="session.revealed" class="muted">已揭晓：{{ new Date(session.reveal.replayStartMs).toISOString() }} 起；数据 {{ session.reveal.dataVersion }}。图表可读完整窗口，账户结果保持原样。</p><p>规则 {{ session.frozenRules.ruleVersion }}；执行 {{ session.executionModelVersion }}；接管 {{ session.frozenRules.liquidationModelVersion }}。固定 Maker {{ Number(session.frozenRules.makerRate)*100 }}% / Taker {{ Number(session.frozenRules.takerRate)*100 }}%；单边滑点 {{ session.frozenRules.slippageBps }} bps。</p><p>规则为冻结训练基线，不等同于当时或你的账户实际规则。分钟行情不能重建盘口/排队/逐笔接管、动态价格限制或 ADL；资金费 mark 为事件前已完成分钟代理。同一分钟多个可达事件采用明确的保守路径。</p></details>
   </section>
 </template>
 <style scoped>
+.crypto-review .crypto-review__primary { background: var(--ql-accent); border-color: var(--ql-accent); color: var(--ql-panel); border-radius: 8px; }
+.crypto-review .crypto-review__primary:hover:not(:disabled) { background: var(--ql-accent-hover); }
+.crypto-review > .review-facts > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.crypto-review > header { margin-bottom: 4px; }
+.crypto-review > .review-facts { gap: 8px; margin: 4px 0; }
+.crypto-review > .review-facts > div > span { margin-bottom: 4px; }
 .crypto-review { border: 1px solid var(--ql-line-strong); border-radius: 10px; padding: 16px; background: var(--ql-panel); min-width: 0; }header { display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px; }header small { margin-left:auto;color:var(--ql-color-text-muted);font-size:11px; }h2 { margin: 5px 0 8px; font-size: 16px; letter-spacing: -.03em; }h3 { display:flex;align-items:center;gap:6px;font-size:13px;margin:14px 0 8px; }.eyebrow { font-size: 11px; color: var(--ql-accent); font-weight: 700; }header > span { font-size: 12px; color: var(--ql-color-text-muted); }
-.review-facts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:12px;margin:12px 0; }.review-facts>div { min-width:0; }.review-facts>div>span { display:flex;align-items:center;gap:4px; color: var(--ql-color-text-muted); font-size: 12px; margin-bottom: 6px; }.review-facts strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.review-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:12px;margin:12px 0; }.review-facts>div { min-width:0; }.review-facts>div>span { display:flex;align-items:center;gap:4px; color: var(--ql-color-text-muted); font-size: 12px; margin-bottom: 6px; }.review-facts strong { font-size: 16px; font-variant-numeric: tabular-nums; }
 .muted { color: var(--ql-color-text-muted); font-size: 12px; line-height: 1.8; }label { display:block;font-size:12px;margin:10px 0; }textarea { margin-top: 8px; }.preserve { white-space: pre-wrap; font-size: 13px; line-height: 1.9; overflow-wrap: anywhere; }.settlement { border: 1px solid #d97706; padding: 15px; border-radius: 8px; margin:12px 0; } .settlement > p { font-size: 12px; line-height: 1.8; }.settlement-facts { font-size: 12px; }.settlement-facts > div { display: flex; justify-content: space-between; gap: 15px; padding: 5px 0; }dd { margin: 0; font-variant-numeric: tabular-nums; }.waiver { font-weight: 600; }
 details { margin-top: 12px; border-top: 1px solid var(--ql-line); padding-top: 10px; font-size: 12px; line-height: 1.8; }summary { cursor: pointer; font-weight: 650; }li { padding:6px 0; }li p { margin: 5px 0; }.timeline { padding-left: 20px; }.timeline li { border-bottom: 1px solid var(--ql-line); }.timeline li > * { display: block; }.timeline strong { margin: 3px 0; }.table-scroll { overflow: auto; }table { border-collapse: collapse; width: 100%; white-space: nowrap; font-variant-numeric: tabular-nums; }td,th { padding: 8px; border-bottom: 1px solid var(--ql-line); text-align: right; }caption { text-align: left; padding: 10px 0; color: var(--ql-color-text-muted); }
 @media(max-width:600px) { .crypto-review { padding: 14px; }.review-facts { grid-template-columns:1fr 1fr; }.review-facts strong { font-size:14px; } }

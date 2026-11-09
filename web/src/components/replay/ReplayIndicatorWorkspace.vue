@@ -9,6 +9,7 @@ import {
   evaluateReplayAdvancedIndicator,
   evaluateReplayIndicator,
 } from "../../utils/replayIndicatorEngine";
+import UiTooltip from "../ui/UiTooltip.vue";
 import ReplayIndicatorEditor from "./ReplayIndicatorEditor.vue";
 import ReplayIndicatorToolbar from "./ReplayIndicatorToolbar.vue";
 
@@ -130,10 +131,6 @@ function handleToggleCustom(id) {
 <template>
   <section class="replay-indicator-workspace" aria-label="行情指标">
     <div class="replay-indicator-workspace__heading">
-      <div>
-        <h2>行情指标</h2>
-        <p>仅根据当前已揭示的 {{ bars.length }} 根 K 线计算</p>
-      </div>
       <ReplayIndicatorToolbar
         :default-visibility="defaultVisibility"
         :custom-indicators="customIndicators"
@@ -145,6 +142,7 @@ function handleToggleCustom(id) {
         @remove-custom="removeCustomIndicator"
         @create="openCreateEditor"
       />
+      <UiTooltip clickable label="指标计算范围" :content="`仅根据当前已揭示的 ${bars.length} 根 K 线计算`" />
     </div>
 
     <p
@@ -180,24 +178,19 @@ function handleToggleCustom(id) {
   min-width: 0;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--ql-line);
-  background: var(--ql-paper-soft);
+  background: var(--ql-color-bg-surface-strong);
 }
 
 .replay-indicator-workspace__heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px;
 }
 
-.replay-indicator-workspace h2 {
-  margin: 0;
-  color: var(--ql-ink);
-  font-size: 13px;
-  font-weight: 740;
-}
+.replay-indicator-workspace__heading > :first-child { flex: 1; min-width: 0; }
 
 .replay-indicator-workspace p {
   margin: 3px 0 0;
@@ -228,12 +221,6 @@ function handleToggleCustom(id) {
 @media (max-width: 640px) {
   .replay-indicator-workspace {
     padding: 10px 6px;
-  }
-
-  .replay-indicator-workspace__heading {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 9px;
   }
 }
 </style>

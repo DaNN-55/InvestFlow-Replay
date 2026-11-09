@@ -2,6 +2,7 @@
 import { AlertCircle, RefreshCw, Settings2, X } from "lucide-vue-next";
 import {
   computed,
+  nextTick,
   onActivated,
   onBeforeUnmount,
   onDeactivated,
@@ -26,6 +27,7 @@ import ReplayTradingPanel from "../components/replay/ReplayTradingPanel.vue";
 import UiButton from "../components/ui/UiButton.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import UiDrawer from "../components/ui/UiDrawer.vue";
+import { vMotionEnter } from "../directives/motion.js";
 import { useReplayAttempt } from "../composables/useReplayAttempt.js";
 import { api } from "../services/api.js";
 import { moneyAmount } from "../utils/cryptoMoneyPresentation.js";
@@ -92,6 +94,16 @@ const reviewDialogOpen = shallowRef(false);
 const cancelRetrainOpen = shallowRef(false);
 const finishConfirmOpen = shallowRef(false);
 const settingsOpen = shallowRef(false);
+watch(
+  () => [session.value?.id, session.value?.status],
+  ([id, status], [previousId, previousStatus]) => {
+    if (id === previousId && status === 'completed' && previousStatus === 'active') {
+      finishConfirmOpen.value = false;
+      orderPanelOpen.value = false;
+      reviewDialogOpen.value = true;
+    }
+  },
+);
 const frozenCosts = computed(() => {
   const s = session.value, c = s?.costConfig ?? {};
   const percent = value => value == null ? '—' : `${(Number(value)*100).toLocaleString('en-US',{maximumFractionDigits:6})}%`;
@@ -218,16 +230,24 @@ function handleShortcut(event) {
   commands.advance();
 }
 
+const marketReplay = shallowRef(null);
+
 function openOrderDialog(side) {
   orderPanelSide.value = side;
   orderPanelOpen.value = true;
 }
 
+async function closeOrderDialog() {
+  orderPanelOpen.value = false;
+  await nextTick();
+  marketReplay.value?.querySelector(`.replay-trading__side--${orderPanelSide.value}`)?.focus({ preventScroll: true });
+}
+
 async function handleSubmitOrder(order) {
   const updated = await commands.submitOrder(order);
   if (updated) {
-    orderPanelOpen.value = false;
     orderDraftResetToken.value += 1;
+    await closeOrderDialog();
   }
 }
 
@@ -251,6 +271,10 @@ function requestFinish() {
 async function handleFinish() {
   const finished = await commands.finish();
   if (finished) finishConfirmOpen.value = false;
+}
+
+async function handleReveal() {
+  if (await commands.reveal()) reviewDialogOpen.value = true;
 }
 
 async function cancelRetrain() {
@@ -296,7 +320,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="market-replay">
+  <div ref="marketReplay" class="market-replay">
     <div v-if="attemptState.activity === 'restoring'" class="market-replay__loading">
       <RefreshCw :size="18" class="market-replay__spinner" />
       正在恢复上次行情演练…
@@ -305,6 +329,7 @@ onBeforeUnmount(() => {
     <template v-else>
       <div
         v-if="messages.primary"
+        v-motion-enter="!messages.error"
         class="market-replay__message"
         :class="{ 'market-replay__message--error': messages.error }"
         role="status"
@@ -336,7 +361,6 @@ onBeforeUnmount(() => {
       <template v-else>
         <header class="market-replay__header">
           <div>
-            <p class="market-replay__eyebrow">决策台 / 行情演练</p>
             <h1 class="market-replay__title">历史行情盲测</h1>
           </div>
           <UiButton class="market-replay__settings" variant="secondary" size="sm" icon-only aria-label="本局配置" title="本局配置" @click="settingsOpen=true"><Settings2 :size="17" /></UiButton>
@@ -375,6 +399,7 @@ onBeforeUnmount(() => {
               :step-minutes="session.stepMinutes"
             />
             <ReplayPlaybackControls
+              v-if="session.status !== 'completed' && !orderPanelOpen"
               :label="`已推进 ${session.revealedFutureBars} / ${session.gameLength} ${session.interval==='1m'?'分钟':'交易日'}`"
               :detail="session.status==='completed'?'本局已结束':session.interval==='hybrid'?`${session.stepMinutes ?? 1}分钟步进`:'历史盲测'"
               :playing="autoplay.playing" :speed="autoplay.speed" :speeds="REPLAY_AUTOPLAY_SPEEDS" :steps="playbackSteps"
@@ -401,7 +426,7 @@ onBeforeUnmount(() => {
               :step-minutes="session.stepMinutes"
               :reset-token="orderDraftResetToken"
               :submitting="attemptState.activity === 'submitting'"
-              @close="orderPanelOpen = false"
+              @close="closeOrderDialog"
               @submit="handleSubmitOrder"
             />
             <ReplayTradingPanel
@@ -414,21 +439,23 @@ onBeforeUnmount(() => {
               @open-order="openOrderDialog"
               @cancel-order="commands.cancelOrder"
               @open-review="reviewDialogOpen = true"
-              @reveal="commands.reveal"
+              @reveal="handleReveal"
+              @start-new="handleStartNewSession"
             />
           </aside>
         </div>
         <UiDrawer
           :open="reviewDialogOpen"
           overlay-tone="transparent"
-          title="两阶段复盘 · 决策记录与评分"
-          description="逐笔委托记录回答每次为什么操作；这里负责整局盲评、揭晓后复盘和评分。"
+          title="本次复盘"
           panel-class="market-replay-review-drawer"
           @close="reviewDialogOpen = false"
         >
           <ReplayReviewPanel
             modal
             :session="session"
+            :revealing="attemptState.activity === 'revealing'"
+            :reveal-error="messages.error"
             :playbooks="playbooks"
             :playbooks-loading="playbooksLoading"
             :playbooks-error="playbooksError"
@@ -444,6 +471,7 @@ onBeforeUnmount(() => {
             @confirm-final="commands.confirmReview"
             @save-blind="handleSaveBlind"
             @save-post="handleSavePost"
+            @reveal="handleReveal"
             @add-blind-correction="commands.addBlindCorrection"
             @add-post-correction="commands.addPostCorrection"
             @update-correction="commands.updateCorrection"
@@ -458,7 +486,7 @@ onBeforeUnmount(() => {
     </UiDrawer>
     <ConfirmDialog
       :open="finishConfirmOpen" title="结束本局？"
-      :message="`将保留当前持仓，取消 ${session?.pendingOrders?.length ?? 0} 笔未执行委托。结束后不能继续交易，可到演练记录复盘。`"
+      :message="`将保留当前持仓，取消 ${session?.pendingOrders?.length ?? 0} 笔未执行委托。结束后不能继续交易，将进入揭晓前盲评。`"
       confirm-text="确认结束" cancel-text="继续演练" :busy="attemptState.activity==='finishing'"
       @cancel="finishConfirmOpen=false" @confirm="handleFinish"
     />
@@ -505,16 +533,9 @@ onBeforeUnmount(() => {
   margin-top: 10px;
 }
 
-.market-replay__eyebrow {
-  margin: 0 0 4px;
-  color: var(--ql-color-text-muted);
-  font-size: 11px;
-  font-weight: 650;
-}
-
 .market-replay__title {
   margin: 0;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.035em;
 }
@@ -544,12 +565,7 @@ onBeforeUnmount(() => {
   top: 60px;
 }
 
-.market-replay__side--hybrid :deep(.replay-order-dialog) {
-  position: relative;
-  top: auto;
-  height: min(560px, calc(100vh - 390px));
-  min-height: 390px;
-}
+.market-replay__workspace--order-open .market-replay__side--hybrid { position: static; }
 
 .market-replay__workspace--order-open {
   grid-template-columns: minmax(0, 1fr) minmax(460px, 520px);

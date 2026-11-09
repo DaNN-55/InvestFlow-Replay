@@ -54,7 +54,7 @@ function formatScore(value) {
 <template>
   <section class="replay-history-list" aria-label="历史演练列表">
     <header>
-      <div>
+      <div class="replay-history-list__heading">
         <h2>演练记录</h2>
         <p>共 {{ total }} 局</p>
       </div>
@@ -70,6 +70,7 @@ function formatScore(value) {
           'replay-history-list__item',
           { 'replay-history-list__item--selected': item.id === selectedId },
         ]"
+        :aria-current="item.id === selectedId ? 'true' : undefined"
         @click="emit('select', item)"
       >
         <span class="replay-history-list__item-heading">
@@ -138,7 +139,7 @@ function formatScore(value) {
 
 <style scoped>
 .replay-history-list {
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--ql-line-strong);
   border-radius: 10px;
   background: var(--ql-color-bg-surface-strong);
   min-width: 0;
@@ -147,23 +148,26 @@ function formatScore(value) {
 
 .replay-history-list > header {
   align-items: center;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid var(--ql-line);
   display: flex;
   justify-content: space-between;
   padding: 0.875rem 1rem;
 }
 
+.replay-history-list__heading { display: flex; align-items: baseline; gap: 12px; }
+
 .replay-history-list h2 {
   color: var(--ql-color-text-strong);
   font-size: 0.9375rem;
-  font-weight: 800;
+  font-weight: 600;
+  margin: 0;
 }
 
 .replay-history-list header p,
 .replay-history-list__loading {
   color: var(--ql-color-text-muted);
   font-size: 0.75rem;
-  margin-top: 0.2rem;
+  margin: 0;
 }
 
 .replay-history-list__items {
@@ -171,8 +175,9 @@ function formatScore(value) {
 }
 
 .replay-history-list__item {
+  transition: background-color 140ms ease, color 140ms ease;
   border: 0;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+  border-bottom: 1px solid var(--ql-line);
   background: var(--ql-color-bg-surface-strong);
   color: inherit;
   cursor: pointer;
@@ -183,13 +188,15 @@ function formatScore(value) {
   text-align: left;
 }
 
+.replay-history-list__item:focus-visible { outline: 2px solid var(--ql-accent); outline-offset: -2px; }
+
 .replay-history-list__item:hover {
   background: var(--ql-color-bg-muted);
 }
 
 .replay-history-list__item--selected {
   background: var(--ql-color-primary-soft);
-  box-shadow: inset 3px 0 #2563eb;
+  box-shadow: inset 1px 0 var(--ql-accent);
 }
 
 .replay-history-list__item-heading,
@@ -213,23 +220,23 @@ function formatScore(value) {
   border-radius: 999px;
   flex: 0 0 auto;
   font-size: 0.6875rem;
-  font-weight: 800;
+  font-weight: 600;
   padding: 0.2rem 0.5rem;
 }
 
 .replay-history-list__state--active {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: var(--ql-color-primary-soft);
+  color: var(--ql-accent);
 }
 
 .replay-history-list__state--warning {
-  background: #ffedd5;
-  color: #9a3412;
+  background: var(--ql-color-warning-soft);
+  color: color-mix(in srgb, var(--ql-color-warning) 45%, var(--ql-ink));
 }
 
 .replay-history-list__state--success {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--ql-color-success-soft);
+  color: color-mix(in srgb, var(--ql-color-success) 45%, var(--ql-ink));
 }
 
 .replay-history-list__state--neutral {
@@ -246,17 +253,16 @@ function formatScore(value) {
 .replay-history-list__attempt {
   width: fit-content;
   max-width: 100%;
-  padding: 0.2rem 0.5rem;
-  border-radius: 999px;
-  color: #166534;
-  background: #dcfce7;
+  padding: 0;
+  color: var(--ql-color-text-muted);
+  background: transparent;
   font-size: 0.6875rem;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .replay-history-list__attempt--retrain {
-  color: #9a3412;
-  background: #ffedd5;
+  color: color-mix(in srgb, var(--ql-color-warning) 45%, var(--ql-ink));
+  background: transparent;
 }
 
 .replay-history-list__score {
@@ -271,7 +277,7 @@ function formatScore(value) {
 }
 
 .replay-history-list__footer strong {
-  color: #1d4ed8;
+  color: var(--ql-accent);
   font-size: 0.75rem;
 }
 

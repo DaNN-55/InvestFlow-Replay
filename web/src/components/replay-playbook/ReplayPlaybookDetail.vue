@@ -1,4 +1,5 @@
 <script setup>
+import { vMotionDisclosure, vMotionEnter } from "../../directives/motion.js";
 import { computed, reactive, shallowRef, watch } from "vue";
 
 import {
@@ -147,7 +148,7 @@ watch(
 </script>
 
 <template>
-  <article class="replay-playbook-detail">
+  <article v-motion-enter="'detail'" class="replay-playbook-detail">
     <div v-if="loading && !detail" class="replay-playbook-detail__empty">
       正在加载战法详情…
     </div>
@@ -203,7 +204,7 @@ watch(
             :key="version.id"
             class="replay-playbook-detail__version"
           >
-            <details>
+            <details v-motion-disclosure="'auto'">
               <summary>
                 <strong>v{{ version.versionNumber }}</strong>
                 <span>{{ version.changeSummary || "未填写变更说明" }}</span>

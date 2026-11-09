@@ -26,7 +26,7 @@ test('five-character inputs submit orders, original reviews and both correction 
     let saved = await current(); expect(saved.pendingOrders[0].decision.thesis).toBe(text);
     expect((await request.post(`${url}/finish`, { data: { actionId: crypto.randomUUID(), expectedRevision: saved.revision } })).status()).toBe(200);
     await page.reload(); await page.getByRole('button', { name: '填写揭晓前盲评', exact: true }).click();
-    let review = page.getByRole('dialog', { name: '两阶段复盘 · 决策记录与评分', exact: true });
+    let review = page.getByRole('dialog', { name: '本次复盘', exact: true });
     const blindFields = [review.getByPlaceholder('你看到了什么，为什么做出这个判断？'), review.getByPlaceholder('计划如何开仓、持有、减仓或空仓？'), review.getByPlaceholder('什么情况说明判断错误，如何控制损失？')];
     const blindSubmit = review.getByRole('button', { name: '保存并冻结整局盲评', exact: true });
     for (const field of blindFields) { await expect(field).toHaveAttribute('minlength', '5'); await field.fill(text); }
@@ -34,15 +34,16 @@ test('five-character inputs submit orders, original reviews and both correction 
     response = page.waitForResponse(response => response.url().endsWith('/reviews/blind') && response.request().method() === 'POST'); await blindSubmit.click(); expect((await response).status()).toBe(200);
     saved = await current(); expect(saved.review.blindReview.tradePlan).toBe(text);
     expect((await request.post(`${url}/reveal`, { data: { actionId: crypto.randomUUID(), expectedRevision: saved.revision } })).status()).toBe(200);
-    await page.reload(); await page.getByRole('button', { name: '查看复盘', exact: true }).click();
-    review = page.getByRole('dialog', { name: '两阶段复盘 · 决策记录与评分', exact: true });
-    const postFields = [review.getByLabel('执行复盘'), review.getByLabel('经验总结')], postSubmit = review.getByRole('button', { name: '保存原始复盘并评分', exact: true });
+    await page.reload(); await page.getByRole('button', { name: '继续事后复盘', exact: true }).click();
+    review = page.getByRole('dialog', { name: '本次复盘', exact: true });
+    const postFields = [review.getByLabel('执行复盘'), review.getByLabel('经验总结')], postSubmit = review.getByRole('button', { name: '提交复盘并评分', exact: true });
     await review.getByLabel('错误与不足').fill('无');
     for (const field of postFields) { await expect(field).toHaveAttribute('minlength', '5'); await field.fill(text); }
     for (const field of postFields) { await field.fill(short); await expect(postSubmit).toBeDisabled(); await field.fill(text); }
     await review.screenshot({ path: test.info().outputPath('five-character-review.png') });
     response = page.waitForResponse(response => response.url().endsWith('/reviews/post') && response.request().method() === 'POST'); await postSubmit.click(); expect((await response).status()).toBe(200);
     for (const [stage, label, indexes] of [['blind', '追加盲评修正', [0, 1, 2]], ['post', '追加事后复盘修正', [0, 2]]]) {
+      await review.locator('details.replay-review__completed-stage').nth(stage === 'blind' ? 0 : 1).locator('summary').click();
       await review.getByRole('button', { name: label, exact: true }).click();
       const form = review.locator('form.replay-correction'), save = form.getByRole('button', { name: '保存为新修正', exact: true });
       await form.getByLabel('修正说明（必填）').fill('修正');

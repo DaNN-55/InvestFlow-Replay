@@ -275,6 +275,7 @@ watch(
 }
 
 .replay-playbook-list__item {
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
   align-items: center;
   border: 1px solid transparent;
   border-radius: 8px;

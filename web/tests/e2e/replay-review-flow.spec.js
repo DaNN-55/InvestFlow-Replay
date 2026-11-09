@@ -30,8 +30,8 @@ async function openReview(page, request, { post = false, fault } = {}) {
       await route.fulfill({ response: await route.fetch({ url: `${fixture.url}${target.pathname}${target.search}` }) });
     });
     await page.goto(`${base}/decision/market-replay?session=${session.id}`);
-    await page.getByRole("button", { name: post ? "查看复盘" : "填写揭晓前盲评", exact: true }).click();
-    const review = page.getByRole("dialog", { name: "两阶段复盘 · 决策记录与评分", exact: true });
+    await page.getByRole("button", { name: post ? "继续事后复盘" : "填写揭晓前盲评", exact: true }).click();
+    const review = page.getByRole("dialog", { name: "本次复盘", exact: true });
     return { session, review, requests, read: async () => (await (await request.get(url)).json()).session,
       close: async () => { try { await page.unrouteAll({ behavior: "wait" }); } finally { await fixture.close(); } } };
   } catch (error) { await fixture.close(); throw error; }
@@ -120,7 +120,7 @@ for (const stage of ["blind", "post"]) for (const failRead of [false, true]) {
         await c.review.getByPlaceholder("没有明显错误时可填写“无”").fill("无");
         await c.review.getByPlaceholder("下一次遇到类似行情，你会保留或改变什么？").fill("完整经验总结");
       }
-      await c.review.getByRole("button", { name: stage === "blind" ? "保存并冻结整局盲评" : "保存原始复盘并评分", exact: true }).click();
+      await c.review.getByRole("button", { name: stage === "blind" ? "保存并冻结整局盲评" : "提交复盘并评分", exact: true }).click();
       if (failRead) {
         await expect(c.review.getByText("提交结果尚未确认，请重新核对后继续。", { exact: true })).toBeVisible();
         await expect(c.review.locator("textarea").first()).toBeDisabled();

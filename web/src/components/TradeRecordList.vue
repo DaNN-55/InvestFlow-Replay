@@ -75,6 +75,7 @@ const emit = defineEmits(["select", "page"]);
 }
 
 .trade-record-list__item {
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 0.625rem;
   background: var(--ql-color-bg-surface-strong);

@@ -1,0 +1,87 @@
+:root {
+  --ql-motion-ease: cubic-bezier(.23, 1, .32, 1);
+  --ql-motion-fast: 150ms;
+  --ql-motion-enter: 220ms;
+  --ql-motion-exit: 160ms;
+}
+
+.ql-motion-overlay {
+  opacity: 1;
+  overflow: clip;
+  transition: opacity 180ms ease;
+}
+
+.ql-motion-dialog,
+.ql-motion-drawer {
+  opacity: 1;
+  transform: none;
+  transition: opacity 180ms ease, transform var(--ql-motion-enter) var(--ql-motion-ease);
+}
+
+/* Reka Presence retains closing surfaces until this animation ends. Transitions
+   keep rapid reversals continuous rather than restarting a keyframe sequence. */
+.ql-motion-overlay[data-state="closed"],
+.ql-motion-dialog[data-state="closed"],
+.ql-motion-drawer[data-state="closed"] {
+  animation: ql-motion-exit var(--ql-motion-exit);
+  opacity: 0;
+  pointer-events: none !important;
+  transition-duration: var(--ql-motion-exit);
+}
+
+.ql-motion-dialog[data-state="closed"] { transform: translateY(4px) scale(.98); }
+.ql-motion-drawer[data-state="closed"] { transform: translateX(26px); }
+
+@starting-style {
+  .ql-motion-overlay[data-state="open"] { opacity: 0; }
+  .ql-motion-dialog[data-state="open"] { opacity: 0; transform: translateY(4px) scale(.98); }
+  .ql-motion-drawer[data-state="open"] { opacity: 0; transform: translateX(26px); }
+}
+
+@keyframes ql-motion-exit { to { visibility: visible; } }
+
+.ql-popover-enter-active,
+.ql-popover-leave-active {
+  transition: opacity 140ms ease, transform 160ms var(--ql-motion-ease);
+}
+.ql-popover-leave-active { transition-duration: 120ms, 150ms; pointer-events: none !important; }
+.ql-popover-enter-from,
+.ql-popover-leave-to { opacity: 0 !important; transform: translateY(var(--ql-popover-y, -4px)); }
+[data-placement="top"] { --ql-popover-y: 4px; }
+
+.ql-motion-tooltip {
+  opacity: 1;
+  transform: none;
+  transition: opacity 140ms ease, transform 160ms var(--ql-motion-ease);
+}
+.ql-motion-tooltip[data-side="top"] { --ql-popover-y: 4px; }
+.ql-motion-tooltip[data-state="closed"] {
+  animation: ql-motion-exit 150ms;
+  opacity: 0;
+  transform: translateY(var(--ql-popover-y, -4px));
+  transition-duration: 120ms, 150ms;
+  pointer-events: none !important;
+}
+@starting-style {
+  .ql-motion-tooltip[data-state="delayed-open"],
+  .ql-motion-tooltip[data-state="instant-open"] { opacity: 0; transform: translateY(var(--ql-popover-y, -4px)); }
+}
+
+.ql-motion-disclosure[data-motion-open="false"] > summary .lucide-chevron-down { transform: rotate(0deg); }
+.ql-motion-disclosure[data-motion-open="true"] > summary .lucide-chevron-down { transform: rotate(180deg); }
+.ql-motion-disclosure > summary .lucide-chevron-down { transition: transform 160ms ease; }
+
+.ql-motion-tabs { position: relative; }
+.ql-motion-tabs > button { transition: color 140ms ease, background-color 140ms ease; }
+.ql-motion-tabs [data-motion-active="true"] { border-bottom-color: transparent !important; }
+.ql-motion-tab-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: var(--ql-accent);
+  pointer-events: none;
+}
+.ql-motion-tab-indicator[data-ready="true"] {
+  transition: transform 170ms var(--ql-motion-ease), width 170ms var(--ql-motion-ease);
+}

@@ -103,7 +103,7 @@ test('crypto history opens its own market and the menu fits desktop and narrow s
     await page.screenshot({ path: test.info().outputPath(`menu-${width}.png`) });
     await page.keyboard.press('Escape'); await expect(menu).toBeHidden(); await expect(actions(page)).toBeFocused();
   }
-  await actions(page).click(); await menuItem(page, '打开演练').click();
+  await menuItem(page, '打开演练').click();
   await expect(page).toHaveURL(`${base}/decision/crypto-replay?session=${session.id}`);
   await expect(page.getByRole('region', { name: '回放控制', exact: true })).toBeVisible();
   expect(calls.filter(c => c.method === 'POST')).toHaveLength(0);
@@ -137,8 +137,8 @@ test('a lost retrain response can be recovered through the practice using the sa
   const session = await create(request, { revealed: true });
   const calls = await openHistory(page, session);
   // Return through SPA navigation so the practice controller stays cached.
-  await actions(page).click(); await menuItem(page, '打开演练').click();
-  await expect(page.getByRole('region', { name: '回放控制', exact: true })).toBeVisible();
+  await menuItem(page, '打开演练').click();
+  await expect(page.getByRole('region', { name: '合约复盘', exact: true })).toBeVisible();
   await page.getByRole('link', { name: '交易追踪', exact: true }).click();
   await page.getByLabel('交易追踪分类', { exact: true }).getByRole('button', { name: '演练记录', exact: true }).click();
   await expect(page.locator('.crypto-history-detail > header h2')).toHaveText(session.instrumentId);
@@ -155,7 +155,7 @@ test('a lost retrain response can be recovered through the practice using the sa
   expect(saved.pending.kind).toBe('retrain'); expect(saved.pending.id).toBe(session.id);
   expect(saved.pending.body).toEqual(calls.find(c => c.method === 'POST' && c.path.endsWith('/retrain')).body);
   await page.keyboard.press('Escape');
-  await actions(page).click(); await menuItem(page, '打开演练').click();
+  await menuItem(page, '打开演练').click();
   await expect(page.getByRole('button', { name: '重试原动作', exact: true })).toBeVisible({ timeout: 2000 });
   await page.getByRole('button', { name: '重试原动作', exact: true }).click();
   await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key))?.pending, storageKey)).toBeNull();
@@ -220,7 +220,7 @@ test('a committed retrain with a failed storage checkpoint stays recoverable thr
   expect(calls.filter(c => c.method === 'POST' && c.path.endsWith('/retrain'))).toHaveLength(1);
   await page.evaluate(() => { window.__cryptoCheckpointFault = false; });
   await page.keyboard.press('Escape');
-  await actions(page).click(); await menuItem(page, '打开演练').click();
+  await menuItem(page, '打开演练').click();
   await page.getByRole('button', { name: '重试原动作', exact: true }).click();
   await expect(page).toHaveURL(`${base}/decision/crypto-replay?session=${children[0]}`);
   await expect(page.getByRole('button', { name: '推进 1 分钟', exact: true })).toBeEnabled();
