@@ -169,6 +169,7 @@ defineExpose({ syncCrosshair: value=>commands.syncCrosshair(value), syncRange:(v
   display: flex;
   min-height: 36px;
   align-items: center;
+  justify-content: flex-end;
   gap: 5px;
   overflow-x: auto;
   padding: 4px 8px;
