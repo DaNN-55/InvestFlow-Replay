@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { runBrowserModule } from './helpers/browser-module.js';
 
 const base = process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5180';
 for (const period of ['day', 'minute']) for (const theme of ['light', 'dark']) {
@@ -16,7 +17,7 @@ for (const period of ['day', 'minute']) for (const theme of ['light', 'dark']) {
     await page.route('**/api/**', route => route.fulfill({ json: {} }));
     await page.goto(`${base}/decision/crypto-replay`);
     await expect(page.getByRole('heading', { name: '这次怎么练？', exact: true })).toBeVisible();
-    await page.evaluate(async ({ period, theme }) => {
+    await runBrowserModule(page, async ({ period, theme }) => {
       const vueUrl = performance.getEntriesByType('resource').find(entry => /\/vue\.js\?v=/.test(entry.name)).name;
       const { createApp, h } = await import(vueUrl), { default: Chart } = await import('/src/components/CandlestickChart.vue');
       const root = document.createElement('div'); root.id = 'candle-change-proof';
@@ -28,12 +29,14 @@ for (const period of ['day', 'minute']) for (const theme of ['light', 'dark']) {
       });
       window.candleChangeApp = createApp({ render: () => h(Chart, { bars, height: 500, compact: period === 'minute' }) });
       window.candleChangeApp.mount(root);
+      const url = performance.getEntriesByType('resource').find(entry => /\/klinecharts\.js\?v=/.test(entry.name)).name;
+      const { init } = await import(url);
+      window.candleChangeChart = init({ id: root.querySelector('[k-line-chart-id]').getAttribute('k-line-chart-id') });
     }, { period, theme });
     await expect(page.locator('#candle-change-proof [k-line-chart-id]')).toBeVisible();
     for (const [index, text, color] of [[77, '+10.00%', '#df7180'], [78, '-10.00%', '#38ae86'], [79, '0.00%', null], [0, '--', null]]) {
-      const point = await page.evaluate(async index => {
-        const url = performance.getEntriesByType('resource').find(entry => /\/klinecharts\.js\?v=/.test(entry.name)).name;
-        const { init } = await import(url), chart = init({ id: document.querySelector('#candle-change-proof [k-line-chart-id]').getAttribute('k-line-chart-id') });
+      const point = await page.evaluate(index => {
+        const chart = window.candleChangeChart;
         if (index === 0) { chart.setBarSpace(6); chart.scrollToRealTime(0); }
         const box = chart.getDom('candle_pane', 'main').getBoundingClientRect();
         const pixel = chart.convertToPixel({ dataIndex: index, value: chart.getDataList()[index].close }, { paneId: 'candle_pane' });

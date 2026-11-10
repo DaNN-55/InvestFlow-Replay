@@ -124,7 +124,9 @@ export const vMotionDisclosure = {
       }).filter(Boolean);
       const finish = () => {
         if (state.generation !== generation) return;
-        element.open = open;
+        // Opening already set the native attribute. Respect an external close
+        // even when its queued toggle event has not run yet.
+        if (!open) element.open = false;
         element.style.removeProperty('overflow');
         state.animations = [];
       };

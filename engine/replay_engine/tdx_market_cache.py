@@ -48,10 +48,10 @@ def _write_batch(connection, sql: str, rows: list[tuple], *, keys=(0, 1)) -> Non
     """Keep upsert/transaction semantics while crossing the Python/SQL boundary once."""
     frame = pd.DataFrame(rows).drop_duplicates(subset=list(keys), keep="last")
     connection.register("_tdx_write_batch", frame)
-    try:
-        connection.execute(sql)
-    finally:
-        connection.unregister("_tdx_write_batch")
+    connection.execute(sql)
+    # On failure the caller rolls back/closes; unregistering an aborted transaction
+    # would mask the original SQL error in DuckDB 2.
+    connection.unregister("_tdx_write_batch")
 
 
 class TdxMarketUnavailableError(RuntimeError):

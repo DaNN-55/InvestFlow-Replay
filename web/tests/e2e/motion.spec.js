@@ -275,6 +275,21 @@ test('motion 5: short details animate their actual height and reverse without le
   await summary.focus();
   await page.keyboard.press('Enter');
   await expect(details.locator('pre')).toBeVisible();
+  await expect.poll(() => details.evaluate(el => el.getAnimations().length)).toBe(0);
+  await details.evaluate(async el => {
+    // A successful submit may close details just before its opening animation ends.
+    el.open = false;
+    await new Promise(resolve => el.addEventListener('toggle', resolve, { once: true }));
+    el.querySelector('summary').click();
+    const animations = el.getAnimations();
+    animations.forEach(animation => animation.pause());
+    el.open = false;
+    animations.forEach(animation => animation.finish());
+    await Promise.allSettled(animations.map(animation => animation.finished));
+  });
+  await expect(details).not.toHaveAttribute('open');
+  await expect(summary).toHaveAttribute('aria-expanded', 'false');
+  expect(await details.locator('pre').evaluate(el => el.inert)).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
